@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, MessageCircle, SkipForward } from "lucide-react";
 import { useSupabase } from "@/app/providers";
@@ -252,19 +252,6 @@ export function ChatRoom({ roomId }: Props) {
     router.replace("/match");
   }, [client, roomId, router]);
 
-  const typingLabel = useMemo(() => {
-    if (!peerTyping) return null;
-    return (
-      <motion.p
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="px-4 pb-1 text-xs text-navy-500 dark:text-navy-400"
-      >
-        Stranger is typing…
-      </motion.p>
-    );
-  }, [peerTyping]);
-
   if (loading || !selfId) {
     return <PageLoader label="Opening your chat…" />;
   }
@@ -340,7 +327,7 @@ export function ChatRoom({ roomId }: Props) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !peerTyping ? (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
             <motion.div
               animate={{ y: [0, -6, 0] }}
@@ -354,13 +341,12 @@ export function ChatRoom({ roomId }: Props) {
             </motion.div>
           </div>
         ) : (
-          <MessageList messages={messages} selfId={selfId} />
+          <MessageList messages={messages} selfId={selfId} peerTyping={peerTyping} />
         )}
         <div ref={bottomRef} />
       </div>
 
       <div className="shrink-0 space-y-1 border-t border-navy-200/50 bg-[var(--page-bg)]/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10">
-        {typingLabel}
         <ChatComposer
           onSend={sendMessage}
           onTypingChange={(typing) => void sendTypingBroadcast(typing)}
