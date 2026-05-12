@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, MessageCircle } from "lucide-react";
+import { ArrowLeft, MessageCircle, SkipForward } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
@@ -21,10 +20,12 @@ export function ChatRoom({ roomId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingChannelRef = useRef<ReturnType<typeof client.channel> | null>(null);
   const selfIdRef = useRef<string | null>(null);
   const typingHide = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exitInFlightRef = useRef(false);
 
   useEffect(() => {
     selfIdRef.current = selfId;
@@ -181,9 +182,18 @@ export function ChatRoom({ roomId }: Props) {
     [client, roomId],
   );
 
-  const leaveChat = useCallback(async () => {
-    await client.rpc("end_active_room", { p_room_id: roomId });
-    router.push("/match");
+  const endRoomAndGoMatch = useCallback(async () => {
+    if (exitInFlightRef.current) return;
+    exitInFlightRef.current = true;
+    setExiting(true);
+    const { error } = await client.rpc("end_active_room", { p_room_id: roomId });
+    if (error) {
+      setError(error.message);
+      setExiting(false);
+      exitInFlightRef.current = false;
+      return;
+    }
+    router.replace("/match");
   }, [client, roomId, router]);
 
   const typingLabel = useMemo(() => {
@@ -208,12 +218,13 @@ export function ChatRoom({ roomId }: Props) {
       <div className="mx-auto flex max-w-lg flex-col items-center gap-6 px-4 py-20 text-center">
         <MessageCircle className="h-12 w-12 text-navy-400" />
         <p className="text-navy-700 dark:text-navy-200">{error}</p>
-        <Link
-          href="/match"
+        <button
+          type="button"
+          onClick={() => void router.replace("/match")}
           className="rounded-2xl bg-navy-900 px-6 py-3 text-sm font-semibold text-white dark:bg-navy-100 dark:text-navy-950"
         >
           Back to matching
-        </Link>
+        </button>
       </div>
     );
   }
@@ -221,13 +232,17 @@ export function ChatRoom({ roomId }: Props) {
   return (
     <div className="mx-auto flex h-[calc(100dvh-4rem)] max-w-3xl flex-col">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-navy-200/60 px-3 py-3 dark:border-white/10 sm:px-4">
-        <Link
-          href="/match"
-          className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-900/5 dark:text-navy-200 dark:hover:bg-white/5"
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          disabled={exiting}
+          onClick={() => void endRoomAndGoMatch()}
+          className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Match</span>
-        </Link>
+        </motion.button>
         <div className="text-center">
           <p className="text-sm font-semibold text-navy-950 dark:text-navy-50">Anonymous chat</p>
           <p className="text-xs text-navy-500 dark:text-navy-400">You are both strangers — stay kind.</p>
@@ -236,10 +251,12 @@ export function ChatRoom({ roomId }: Props) {
           type="button"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => void leaveChat()}
-          className="rounded-2xl border border-navy-200/80 bg-white/60 px-3 py-2 text-xs font-semibold text-navy-800 shadow-sm dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-100"
+          disabled={exiting}
+          onClick={() => void endRoomAndGoMatch()}
+          className="inline-flex items-center gap-1.5 rounded-2xl bg-navy-900 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-50 dark:bg-navy-100 dark:text-navy-950"
         >
-          End chat
+          <SkipForward className="h-3.5 w-3.5" aria-hidden />
+          Skip
         </motion.button>
       </div>
 
