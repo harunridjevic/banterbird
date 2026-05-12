@@ -119,8 +119,21 @@ create policy "messages_insert_if_room_member"
 -- REALTIME
 -- =========================================================
 
-alter publication supabase_realtime add table public.messages;
-alter publication supabase_realtime add table public.rooms;
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.messages;
+  exception
+    when duplicate_object then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.rooms;
+  exception
+    when duplicate_object then null;
+  end;
+end
+$$;
 
 -- =========================================================
 -- TRY MATCH FUNCTION
