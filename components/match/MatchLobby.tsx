@@ -19,11 +19,12 @@ export function MatchLobby() {
     if (!ready) return;
 
     let poll: ReturnType<typeof setInterval> | undefined;
-    const channels: ReturnType<typeof client.channel>[] = [];
+    let matchChannel: ReturnType<typeof client.channel> | null = null;
+    let alive = true;
 
     void (async () => {
       const first = await client.rpc("try_match");
-      if (cancelledRef.current) return;
+      if (!alive || cancelledRef.current) return;
       if (first.error) {
         setRpcError(first.error.message);
         return;
@@ -40,15 +41,20 @@ export function MatchLobby() {
         data: { session },
       } = await client.auth.getSession();
       const uid = session?.user?.id;
-      if (!uid || cancelledRef.current) return;
+      if (!uid || !alive || cancelledRef.current) return;
 
       const handleInsert = (payload: { new: Record<string, unknown> }) => {
         const id = typeof payload.new?.id === "string" ? payload.new.id : undefined;
-        if (id && !cancelledRef.current) router.replace(`/chat/${id}`);
+        if (id && alive && !cancelledRef.current) router.replace(`/chat/${id}`);
       };
 
-      const chA = client
-        .channel(`match-rooms-a:${uid}`)
+      const suffix =
+        typeof globalThis.crypto !== "undefined" && "randomUUID" in globalThis.crypto
+          ? globalThis.crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const ch = client
+        .channel(`match-rooms:${uid}:${suffix}`)
         .on(
           "postgres_changes",
           {
@@ -59,11 +65,6 @@ export function MatchLobby() {
           },
           handleInsert,
         )
-        .subscribe();
-      channels.push(chA);
-
-      const chB = client
-        .channel(`match-rooms-b:${uid}`)
         .on(
           "postgres_changes",
           {
@@ -73,24 +74,37 @@ export function MatchLobby() {
             filter: `user_b=eq.${uid}`,
           },
           handleInsert,
-        )
-        .subscribe();
-      channels.push(chB);
+        );
+
+      if (!alive || cancelledRef.current) {
+        void client.removeChannel(ch);
+        return;
+      }
+
+      ch.subscribe();
+      matchChannel = ch;
+
+      if (!alive || cancelledRef.current) {
+        void client.removeChannel(ch);
+        matchChannel = null;
+        return;
+      }
 
       poll = setInterval(async () => {
-        if (cancelledRef.current) return;
+        if (!alive || cancelledRef.current) return;
         const { data, error } = await client.rpc("try_match");
-        if (error || cancelledRef.current) return;
+        if (error || !alive || cancelledRef.current) return;
         const rid = data as string | null;
         if (rid) router.replace(`/chat/${rid}`);
       }, 2800);
     })();
 
     return () => {
+      alive = false;
       cancelledRef.current = true;
       if (poll) clearInterval(poll);
       void client.rpc("leave_match_queue");
-      for (const c of channels) void client.removeChannel(c);
+      if (matchChannel) void client.removeChannel(matchChannel);
     };
   }, [client, ready, router]);
 

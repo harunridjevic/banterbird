@@ -20,6 +20,8 @@ export function ChatRoom({ roomId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
+  const [peerId, setPeerId] = useState<string | null>(null);
+  const [peerPresence, setPeerPresence] = useState<"unknown" | "online" | "offline">("unknown");
   const [exiting, setExiting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingChannelRef = useRef<ReturnType<typeof client.channel> | null>(null);
@@ -58,19 +60,24 @@ export function ChatRoom({ roomId }: Props) {
       .maybeSingle();
 
     if (roomErr || !room) {
+      setPeerId(null);
       setError("This chat does not exist or you do not have access.");
       setLoading(false);
       return;
     }
     if (room.user_a !== session.user.id && room.user_b !== session.user.id) {
+      setPeerId(null);
       setError("You are not a participant in this chat.");
       setLoading(false);
       return;
     }
     if (room.ended_at) {
+      setPeerId(null);
       router.replace("/match");
       return;
     }
+
+    setPeerId(room.user_a === session.user.id ? room.user_b : room.user_a);
 
     const { data: msgs, error: msgErr } = await client
       .from("messages")
@@ -79,6 +86,7 @@ export function ChatRoom({ roomId }: Props) {
       .order("created_at", { ascending: true });
 
     if (msgErr) {
+      setPeerId(null);
       setError(msgErr.message);
       setLoading(false);
       return;
@@ -97,8 +105,13 @@ export function ChatRoom({ roomId }: Props) {
   useEffect(() => {
     if (!ready || !roomId) return;
 
+    const suffix =
+      typeof globalThis.crypto !== "undefined" && "randomUUID" in globalThis.crypto
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
     const channel = client
-      .channel(`room:${roomId}:msg`)
+      .channel(`room:${roomId}:live:${suffix}`)
       .on(
         "postgres_changes",
         {
@@ -112,12 +125,25 @@ export function ChatRoom({ roomId }: Props) {
           setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "rooms",
+          filter: `id=eq.${roomId}`,
+        },
+        (payload) => {
+          const next = payload.new as { ended_at?: string | null };
+          if (next.ended_at) router.replace("/match");
+        },
+      )
       .subscribe();
 
     return () => {
       void client.removeChannel(channel);
     };
-  }, [client, ready, roomId]);
+  }, [client, ready, roomId, router]);
 
   useEffect(() => {
     if (!ready || !roomId) return;
@@ -147,6 +173,36 @@ export function ChatRoom({ roomId }: Props) {
       void client.removeChannel(bc);
     };
   }, [client, ready, roomId]);
+
+  useEffect(() => {
+    if (!ready || !roomId || !selfId || !peerId) return;
+
+    const applyPeerPresence = (ch: ReturnType<typeof client.channel>) => {
+      const rows = ch.presenceState()[peerId];
+      const online = Array.isArray(rows) && rows.length > 0;
+      setPeerPresence(online ? "online" : "offline");
+    };
+
+    const presenceChannel = client.channel(`room:${roomId}:presence`, {
+      config: { presence: { key: selfId } },
+    });
+
+    presenceChannel
+      .on("presence", { event: "sync" }, () => applyPeerPresence(presenceChannel))
+      .on("presence", { event: "join" }, () => applyPeerPresence(presenceChannel))
+      .on("presence", { event: "leave" }, () => applyPeerPresence(presenceChannel));
+
+    presenceChannel.subscribe(async (status) => {
+      if (status !== "SUBSCRIBED") return;
+      await presenceChannel.track({ in_chat: true, room_id: roomId });
+    });
+
+    return () => {
+      setPeerPresence("unknown");
+      void presenceChannel.untrack();
+      void client.removeChannel(presenceChannel);
+    };
+  }, [client, ready, roomId, selfId, peerId]);
 
   const sendTypingBroadcast = useCallback(
     async (active: boolean) => {
@@ -243,9 +299,32 @@ export function ChatRoom({ roomId }: Props) {
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Match</span>
         </motion.button>
-        <div className="text-center">
-          <p className="text-sm font-semibold text-navy-950 dark:text-navy-50">Anonymous chat</p>
-          <p className="text-xs text-navy-500 dark:text-navy-400">You are both strangers — stay kind.</p>
+        <div className="min-w-0 flex-1 text-center">
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+            <p className="text-sm font-semibold text-navy-950 dark:text-navy-50">Anonymous chat</p>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-[11px] ${
+                peerPresence === "online"
+                  ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                  : peerPresence === "offline"
+                    ? "border-navy-200/70 bg-white/50 text-navy-500 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-400"
+                    : "border-navy-200/60 bg-white/40 text-navy-400 dark:border-white/10 dark:bg-navy-900/30 dark:text-navy-500"
+              }`}
+            >
+              <span
+                className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                  peerPresence === "online"
+                    ? "animate-pulse bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.45)]"
+                    : peerPresence === "offline"
+                      ? "bg-navy-300 dark:bg-navy-600"
+                      : "bg-navy-200 dark:bg-navy-700"
+                }`}
+                aria-hidden
+              />
+              {peerPresence === "unknown" ? "…" : peerPresence === "online" ? "Online" : "Offline"}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">You are both strangers — stay kind.</p>
         </div>
         <motion.button
           type="button"
