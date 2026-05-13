@@ -9,6 +9,7 @@ import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PageLoader } from "@/components/ui/Loading";
 import type { MessageRow } from "@/lib/types/chat";
+import { getSupabaseKey, getSupabaseUrl } from "@/utils/supabase/env";
 
 type Props = { roomId: string };
 
@@ -28,10 +29,51 @@ export function ChatRoom({ roomId }: Props) {
   const selfIdRef = useRef<string | null>(null);
   const typingHide = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitInFlightRef = useRef(false);
+  const roomEndedRef = useRef(false);
+  const accessTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     selfIdRef.current = selfId;
   }, [selfId]);
+
+  const endRoomBeacon = useCallback(() => {
+    const supabaseUrl = getSupabaseUrl();
+    const supabaseKey = getSupabaseKey();
+    if (!supabaseUrl || !supabaseKey) return;
+
+    if (roomEndedRef.current) return;
+    roomEndedRef.current = true;
+
+    const endpoint = `${supabaseUrl}/rest/v1/rpc/end_active_room`;
+    const token = accessTokenRef.current ?? undefined;
+
+    const payload = JSON.stringify({ p_room_id: roomId });
+    const headers: Record<string, string> = {
+      apikey: supabaseKey,
+      "Content-Type": "application/json",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    try {
+      // Best-effort during tab close / navigation.
+      if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon(endpoint, blob);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Fallback (may still succeed on SPA navs).
+    void fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: payload,
+      keepalive: true,
+      credentials: "omit",
+    });
+  }, [client, roomId]);
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -52,6 +94,7 @@ export function ChatRoom({ roomId }: Props) {
       return;
     }
     setSelfId(session.user.id);
+    accessTokenRef.current = session.access_token ?? null;
 
     const { data: room, error: roomErr } = await client
       .from("rooms")
@@ -135,15 +178,45 @@ export function ChatRoom({ roomId }: Props) {
         },
         (payload) => {
           const next = payload.new as { ended_at?: string | null };
-          if (next.ended_at) router.replace("/match");
+          if (next.ended_at) {
+            roomEndedRef.current = true;
+            router.replace("/match");
+          }
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "CLOSED") {
+          endRoomBeacon();
+        }
+      });
 
     return () => {
       void client.removeChannel(channel);
     };
-  }, [client, ready, roomId, router]);
+  }, [client, endRoomBeacon, ready, roomId, router]);
+
+  useEffect(() => {
+    if (!ready || !roomId) return;
+
+    const onPageHide = () => endRoomBeacon();
+    const onBeforeUnload = () => endRoomBeacon();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") endRoomBeacon();
+    };
+    const onOffline = () => endRoomBeacon();
+
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, [endRoomBeacon, ready, roomId]);
 
   useEffect(() => {
     if (!ready || !roomId) return;
@@ -249,6 +322,7 @@ export function ChatRoom({ roomId }: Props) {
       exitInFlightRef.current = false;
       return;
     }
+    roomEndedRef.current = true;
     router.replace("/match");
   }, [client, roomId, router]);
 

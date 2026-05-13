@@ -1,8 +1,9 @@
--- BanterBird: anonymous chat schema
+-- BanterBird: anonymous ephemeral chat schema
 -- Supabase Auth: enable Anonymous sign-ins in Dashboard
 -- Safe to rerun multiple times
 
 create extension if not exists "pgcrypto";
+create extension if not exists pg_cron;
 
 -- =========================================================
 -- MATCH QUEUE
@@ -12,6 +13,9 @@ create table if not exists public.match_queue (
   user_id uuid primary key references auth.users (id) on delete cascade,
   joined_at timestamptz not null default now()
 );
+
+create index if not exists match_queue_joined_idx
+  on public.match_queue (joined_at);
 
 alter table public.match_queue enable row level security;
 
@@ -136,7 +140,7 @@ end
 $$;
 
 -- =========================================================
--- TRY MATCH FUNCTION
+-- MATCHING FUNCTION
 -- =========================================================
 
 create or replace function public.try_match()
@@ -155,7 +159,7 @@ begin
     raise exception 'Not authenticated';
   end if;
 
-  -- Return existing active room if user already has one
+  -- Return existing active room
   select r.id
   into existing_id
   from public.rooms r
@@ -169,7 +173,7 @@ begin
     return existing_id;
   end if;
 
-  -- Remove self from queue before matching
+  -- Remove self from queue first
   delete from public.match_queue
   where user_id = me;
 
@@ -182,6 +186,7 @@ begin
   limit 1
   for update skip locked;
 
+  -- Match found
   if partner_id is not null then
     delete from public.match_queue
     where user_id = partner_id;
@@ -202,7 +207,7 @@ begin
     return new_room_id;
   end if;
 
-  -- No partner found, join queue
+  -- No match found, join queue
   insert into public.match_queue (user_id)
   values (me)
   on conflict (user_id)
@@ -213,7 +218,7 @@ end;
 $$;
 
 -- =========================================================
--- LEAVE MATCH QUEUE
+-- LEAVE QUEUE
 -- =========================================================
 
 create or replace function public.leave_match_queue()
@@ -233,7 +238,7 @@ end;
 $$;
 
 -- =========================================================
--- END ACTIVE ROOM
+-- END ROOM
 -- =========================================================
 
 create or replace function public.end_active_room(p_room_id uuid)
@@ -257,6 +262,61 @@ begin
       or r.user_b = auth.uid()
     );
 end;
+$$;
+
+-- =========================================================
+-- CLEANUP FUNCTIONS
+-- =========================================================
+
+-- Delete ended chats after 1 hour
+create or replace function public.cleanup_old_rooms()
+returns void
+language sql
+as $$
+  delete from public.rooms
+  where ended_at is not null
+    and ended_at < now() - interval '1 hour';
+$$;
+
+-- Delete stale queue users after 10 minutes
+create or replace function public.cleanup_match_queue()
+returns void
+language sql
+as $$
+  delete from public.match_queue
+  where joined_at < now() - interval '10 minutes';
+$$;
+
+-- =========================================================
+-- CRON JOBS
+-- =========================================================
+
+do $$
+begin
+  if not exists (
+    select 1
+    from cron.job
+    where jobname = 'cleanup-rooms'
+  ) then
+    perform cron.schedule(
+      'cleanup-rooms',
+      '*/10 * * * *',
+      $cron$select public.cleanup_old_rooms();$cron$
+    );
+  end if;
+
+  if not exists (
+    select 1
+    from cron.job
+    where jobname = 'cleanup-queue'
+  ) then
+    perform cron.schedule(
+      'cleanup-queue',
+      '*/5 * * * *',
+      $cron$select public.cleanup_match_queue();$cron$
+    );
+  end if;
+end
 $$;
 
 -- =========================================================
