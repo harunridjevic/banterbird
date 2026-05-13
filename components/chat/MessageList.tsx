@@ -7,9 +7,11 @@ type Props = {
   messages: MessageRow[];
   selfId: string;
   peerTyping?: boolean;
+  peerIsBot?: boolean;
+  peerLabel?: string;
 };
 
-function TypingBubble() {
+function TypingBubble({ label }: { label: string }) {
   return (
     <motion.div
       layout
@@ -19,11 +21,11 @@ function TypingBubble() {
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
       className="flex justify-start"
       aria-live="polite"
-      aria-label="Stranger is typing"
+      aria-label={`${label} is typing`}
     >
       <div className="relative max-w-[85%] rounded-3xl rounded-bl-lg bg-[var(--color-bubble-them)] px-4 py-3 shadow-sm sm:max-w-[70%]">
         <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
-          Stranger
+          {label}
         </span>
         <div className="flex items-center gap-1.5 px-0.5 py-0.5">
           {[0, 1, 2].map((i) => (
@@ -45,11 +47,17 @@ function TypingBubble() {
   );
 }
 
-export function MessageList({ messages, selfId, peerTyping = false }: Props) {
+export function MessageList({
+  messages,
+  selfId,
+  peerTyping = false,
+  peerIsBot = false,
+  peerLabel = "Stranger",
+}: Props) {
   return (
     <div className="flex flex-col gap-3 px-3 py-4 sm:px-4">
       {messages.map((m, i) => {
-        const mine = m.user_id === selfId;
+        const mine = !m.is_from_ai && m.user_id === selfId;
         return (
           <motion.div
             key={m.id}
@@ -63,12 +71,16 @@ export function MessageList({ messages, selfId, peerTyping = false }: Props) {
               className={`relative max-w-[85%] rounded-3xl px-4 py-2.5 text-[15px] leading-snug shadow-sm sm:max-w-[70%] ${
                 mine
                   ? "rounded-br-lg bg-[var(--color-bubble-me)] text-white"
-                  : "rounded-bl-lg bg-[var(--color-bubble-them)] text-navy-950 dark:text-navy-50"
+                  : `rounded-bl-lg text-navy-950 dark:text-navy-50 ${
+                      m.is_from_ai || peerIsBot
+                        ? "border border-violet-400/35 bg-violet-50/90 dark:border-violet-500/25 dark:bg-violet-950/35"
+                        : "bg-[var(--color-bubble-them)]"
+                    }`
               }`}
             >
               {!mine ? (
                 <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
-                  Stranger
+                  {m.is_from_ai ? `${peerLabel} · AI` : peerLabel}
                 </span>
               ) : null}
               <p className="whitespace-pre-wrap break-words">{m.content}</p>
@@ -76,7 +88,7 @@ export function MessageList({ messages, selfId, peerTyping = false }: Props) {
           </motion.div>
         );
       })}
-      <AnimatePresence>{peerTyping ? <TypingBubble key="typing" /> : null}</AnimatePresence>
+      <AnimatePresence>{peerTyping ? <TypingBubble key="typing" label={peerLabel} /> : null}</AnimatePresence>
     </div>
   );
 }
