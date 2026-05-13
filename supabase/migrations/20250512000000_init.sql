@@ -301,7 +301,7 @@ begin
     perform cron.schedule(
       'cleanup-rooms',
       '*/10 * * * *',
-      $$select public.cleanup_old_rooms();$$
+      $cron$select public.cleanup_old_rooms();$cron$
     );
   end if;
 
@@ -313,7 +313,7 @@ begin
     perform cron.schedule(
       'cleanup-queue',
       '*/5 * * * *',
-      $$select public.cleanup_match_queue();$$
+      $cron$select public.cleanup_match_queue();$cron$
     );
   end if;
 end
