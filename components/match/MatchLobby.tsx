@@ -3,27 +3,42 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { Mars, Sparkles, Users, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { PageLoader } from "@/components/ui/Loading";
+import type { SelfGender, WantsGender } from "@/lib/types/chat";
 
 export function MatchLobby() {
   const router = useRouter();
   const { client, ready } = useSupabase();
-  const [hint, setHint] = useState("Finding someone for you…");
+  const [selfGender, setSelfGender] = useState<SelfGender | null>(null);
+  const [wantsGender, setWantsGender] = useState<WantsGender | null>(null);
+  const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
   const [rpcError, setRpcError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
+  const canMatch = !!selfGender && !!wantsGender;
 
   useEffect(() => {
     cancelledRef.current = false;
-    if (!ready) return;
+    if (!ready || !selfGender || !wantsGender) return;
 
     let poll: ReturnType<typeof setInterval> | undefined;
     let matchChannel: ReturnType<typeof client.channel> | null = null;
     let alive = true;
 
+    setRpcError(null);
+    setHint("Finding your best match now…");
+
+    const attemptMatch = async () => {
+      const result = await client.rpc("try_match", {
+        p_self_gender: selfGender,
+        p_wants_gender: wantsGender,
+      });
+      return result;
+    };
+
     void (async () => {
-      const first = await client.rpc("try_match");
+      const first = await attemptMatch();
       if (!alive || cancelledRef.current) return;
       if (first.error) {
         setRpcError(first.error.message);
@@ -92,7 +107,7 @@ export function MatchLobby() {
 
       poll = setInterval(async () => {
         if (!alive || cancelledRef.current) return;
-        const { data, error } = await client.rpc("try_match");
+        const { data, error } = await attemptMatch();
         if (error || !alive || cancelledRef.current) return;
         const rid = data as string | null;
         if (rid) router.replace(`/chat/${rid}`);
@@ -106,7 +121,7 @@ export function MatchLobby() {
       void client.rpc("leave_match_queue");
       if (matchChannel) void client.removeChannel(matchChannel);
     };
-  }, [client, ready, router]);
+  }, [client, ready, router, selfGender, wantsGender]);
 
   if (!ready) {
     return <PageLoader label="Preparing your session…" />;
@@ -125,33 +140,104 @@ export function MatchLobby() {
   }
 
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-8 px-4">
+    <div className="mx-auto flex min-h-[62vh] w-full max-w-2xl flex-col items-center justify-center gap-7 px-2 sm:px-4">
       <motion.div
-        className="relative flex h-28 w-28 items-center justify-center rounded-[2rem] border border-navy-200/60 bg-white/50 shadow-lg dark:border-white/10 dark:bg-navy-900/40"
-        animate={{ scale: [1, 1.03, 1], rotate: [0, 1.5, -1.5, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-panel w-full rounded-[2rem] border border-navy-200/70 p-6 shadow-xl dark:border-white/10 sm:p-7"
       >
-        <Sparkles className="h-10 w-10 text-navy-800 dark:text-navy-100" />
-        <motion.span
-          className="absolute inset-0 rounded-[2rem] border-2 border-navy-900/20 dark:border-white/20"
-          animate={{ opacity: [0.4, 1, 0.4], scale: [1, 1.08, 1] }}
-          transition={{ duration: 2.2, repeat: Infinity }}
-        />
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold text-navy-950 dark:text-navy-50">Find your vibe</h1>
+          <p className="mt-2 text-sm text-navy-600 dark:text-navy-300">{hint}</p>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <section>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+              Your gender
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setSelfGender("male")}
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  selfGender === "male"
+                    ? "border-blue-500/45 bg-blue-500/10 text-blue-900 shadow-sm dark:text-blue-200"
+                    : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                }`}
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <Mars className="h-4 w-4" /> Male
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelfGender("female")}
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  selfGender === "female"
+                    ? "border-pink-500/45 bg-pink-500/10 text-pink-900 shadow-sm dark:text-pink-200"
+                    : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                }`}
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <Venus className="h-4 w-4" /> Female
+                </span>
+              </button>
+            </div>
+          </section>
+
+          <section>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+              You want to speak to
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {[
+                { value: "male" as const, label: "Men" },
+                { value: "female" as const, label: "Women" },
+                { value: "any" as const, label: "Regardless" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setWantsGender(option.value)}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                    wantsGender === option.value
+                      ? "border-emerald-500/45 bg-emerald-500/10 text-emerald-900 shadow-sm dark:text-emerald-200"
+                      : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
       </motion.div>
-      <div className="max-w-sm space-y-3 text-center">
-        <h1 className="text-xl font-semibold text-navy-950 dark:text-navy-50">Matching</h1>
-        <p className="text-sm leading-relaxed text-navy-600 dark:text-navy-300">{hint}</p>
-      </div>
-      <div className="flex gap-1.5">
-        {[0, 1, 2].map((i) => (
-          <motion.span
-            key={i}
-            className="h-2 w-2 rounded-full bg-navy-800 dark:bg-navy-200"
-            animate={{ opacity: [0.3, 1, 0.3], y: [0, -5, 0] }}
-            transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
-          />
-        ))}
-      </div>
+
+      {canMatch ? (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <motion.div
+            className="relative flex h-20 w-20 items-center justify-center rounded-[1.5rem] border border-navy-200/60 bg-white/50 shadow-lg dark:border-white/10 dark:bg-navy-900/40"
+            animate={{ scale: [1, 1.04, 1], rotate: [0, 1.5, -1.5, 0] }}
+            transition={{ duration: 3.8, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Sparkles className="h-8 w-8 text-navy-800 dark:text-navy-100" />
+            <motion.span
+              className="absolute inset-0 rounded-[1.5rem] border-2 border-navy-900/20 dark:border-white/20"
+              animate={{ opacity: [0.35, 1, 0.35], scale: [1, 1.08, 1] }}
+              transition={{ duration: 1.9, repeat: Infinity }}
+            />
+          </motion.div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-navy-200/70 bg-white/60 px-3 py-1.5 text-xs font-medium text-navy-700 shadow-sm dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-200">
+            <Users className="h-3.5 w-3.5" />
+            Matching now
+          </div>
+        </motion.div>
+      ) : null}
     </div>
   );
 }
