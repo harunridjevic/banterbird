@@ -1,0 +1,14 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseUrl } from "@/utils/supabase/env";
+
+/** Server-only Supabase client with the service role (bypasses RLS). */
+export function createServiceRoleClient(): SupabaseClient {
+  const url = getSupabaseUrl();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}

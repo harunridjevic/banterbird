@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import {
+  PRACTICE_BOT_OUTPUT_JSON_RULES,
+  PRACTICE_BOT_SYSTEM_INSTRUCTIONS,
+} from "@/lib/ai-practice-bot/instructions";
 import { createClient } from "@/utils/supabase/server";
 
 type ChatTurn = { role: "user" | "assistant"; content: string };
 
-const SYSTEM = `You are a random stranger in a minimal anonymous text chat (like Omegle). You are NOT an AI assistant — never mention models, policies, or being a bot.
-Rules:
-- Reply in 1–6 words almost always. Occasionally up to 12 words if it feels natural.
-- Lowercase often, casual, imperfect. No emojis unless rare (max one).
-- No lectures, no lists, no URLs.
-- Match the vibe of the last message; ask a tiny follow-up sometimes.
-- Never break character as a helpful assistant.`;
+type AiPracticeTurnResult =
+  | { action: "reply"; reply: string }
+  | { action: "skip"; parting: string | null };
+
+function baseSystemPrompt(): string {
+  const fromEnv = process.env.OPENAI_PRACTICE_BOT_SYSTEM_PROMPT?.trim();
+  if (fromEnv) return fromEnv;
+  return PRACTICE_BOT_SYSTEM_INSTRUCTIONS;
+}
+
+function fullSystemPrompt(): string {
+  return `${baseSystemPrompt()}\n\n${PRACTICE_BOT_OUTPUT_JSON_RULES}`.trim();
+}
 
 const FALLBACKS = [
   "hey",
@@ -33,11 +43,72 @@ function pickFallback(seed: string) {
   return FALLBACKS[h % FALLBACKS.length] ?? "hey";
 }
 
-async function callOpenAI(history: ChatTurn[]): Promise<string> {
+function parseModelTurn(raw: string, history: ChatTurn[]): AiPracticeTurnResult {
+  const seed = history.map((m) => m.content).join("|") || "open";
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        obj = JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  if (obj && typeof obj === "object" && obj !== null) {
+    const o = obj as Record<string, unknown>;
+    if (o.action === "skip") {
+      const p = o.parting;
+      if (typeof p === "string") {
+        const t = p.replace(/\s+/g, " ").trim().slice(0, 200);
+        return { action: "skip", parting: t.length > 0 ? t : null };
+      }
+      return { action: "skip", parting: null };
+    }
+    if (o.action === "reply" && typeof o.text === "string") {
+      const text = o.text.replace(/\s+/g, " ").trim().slice(0, 200);
+      if (text.length > 0) return { action: "reply", reply: text };
+    }
+  }
+
+  const flat = raw.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (flat.length > 0) return { action: "reply", reply: flat };
+  return { action: "reply", reply: pickFallback(seed) };
+}
+
+function decideFallbackTurn(history: ChatTurn[]): AiPracticeTurnResult {
+  const users = history.filter((m) => m.role === "user");
+  const seed = history.map((m) => m.content).join("|") || "open";
+
+  if (users.length === 0) {
+    return { action: "reply", reply: pickFallback(seed) };
+  }
+
+  const last = users[users.length - 1]?.content ?? "";
+  const coarseSensitive =
+    /\b(sex|nude|naked|porn|nsfw|suicid|kill you|murder|rape|pedo|cp\b|address\b|social security|ssn\b)\b/i.test(
+      last,
+    );
+  if (coarseSensitive) {
+    return { action: "skip", parting: "nah im out" };
+  }
+
+  if (users.length >= 3 && Math.random() < 0.07) {
+    return { action: "skip", parting: Math.random() < 0.55 ? "gotta go" : null };
+  }
+
+  return { action: "reply", reply: pickFallback(seed) };
+}
+
+async function callOpenAI(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) {
-    const seed = history.map((m) => m.content).join("|") || "open";
-    return pickFallback(seed);
+    return decideFallbackTurn(history);
   }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -49,27 +120,31 @@ async function callOpenAI(history: ChatTurn[]): Promise<string> {
     body: JSON.stringify({
       model: process.env.OPENAI_CHAT_MODEL ?? "gpt-4o-mini",
       temperature: 1.05,
-      max_tokens: 48,
-      messages: [{ role: "system", content: SYSTEM }, ...history],
+      max_tokens: 128,
+      response_format: { type: "json_object" },
+      messages: [{ role: "system", content: fullSystemPrompt() }, ...history],
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("OpenAI error:", res.status, errText);
-    const seed = history.map((m) => m.content).join("|") || "open";
-    return pickFallback(seed);
+    return decideFallbackTurn(history);
   }
 
   const json = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
   };
-  const raw = json.choices?.[0]?.message?.content?.trim();
-  if (!raw) {
-    const seed = history.map((m) => m.content).join("|") || "open";
-    return pickFallback(seed);
+  const raw = json.choices?.[0]?.message?.content?.trim() ?? "";
+  if (!raw) return decideFallbackTurn(history);
+  return parseModelTurn(raw, history);
+}
+
+function jsonBody(result: AiPracticeTurnResult) {
+  if (result.action === "reply") {
+    return { action: "reply" as const, reply: result.reply };
   }
-  return raw.replace(/\s+/g, " ").slice(0, 200);
+  return { action: "skip" as const, parting: result.parting };
 }
 
 export async function POST(req: Request) {
@@ -110,8 +185,13 @@ export async function POST(req: Request) {
     }
 
     const trimmedHistory = history.slice(-24);
-    const reply = await callOpenAI(trimmedHistory);
-    return NextResponse.json({ reply });
+    let result = await callOpenAI(trimmedHistory);
+    const hasUserTurn = trimmedHistory.some((m) => m.role === "user");
+    if (!hasUserTurn && result.action === "skip") {
+      result = { action: "reply", reply: pickFallback("open") };
+    }
+
+    return NextResponse.json(jsonBody(result));
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

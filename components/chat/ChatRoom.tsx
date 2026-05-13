@@ -13,6 +13,78 @@ import { getSupabaseKey, getSupabaseUrl } from "@/utils/supabase/env";
 
 type Props = { roomId: string };
 
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+/** Pause before we even ask the model — simulates reading what you wrote. */
+function readDelayBeforeReplyMs(userMessageLen: number) {
+  const base = 520 + Math.random() * 2200;
+  const perChar = userMessageLen * (10 + Math.random() * 24);
+  return clamp(Math.round(base + perChar), 320, 4800);
+}
+
+function readDelayOpenerMs() {
+  return clamp(Math.round(480 + Math.random() * 1700), 350, 2600);
+}
+
+/** After the reply is known — sometimes a short think before fingers move. */
+async function preTypingHesitation() {
+  if (Math.random() < 0.45) {
+    await sleep(Math.round(80 + Math.random() * 420));
+    return;
+  }
+  await sleep(Math.round(280 + Math.random() * 900));
+  if (Math.random() < 0.22) {
+    await sleep(Math.round(650 + Math.random() * 1400));
+  }
+}
+
+/** How long to show "typing" — scales with length, with jitter. */
+function typingDurationForReply(reply: string) {
+  const len = reply.length;
+  const msPerChar = 28 + Math.random() * 64;
+  const wave = Math.sin(len * 0.13) * 180;
+  return clamp(Math.round(len * msPerChar + wave + Math.random() * 520), 550, 15500);
+}
+
+async function runHumanlikeTyping(
+  setTyping: (v: boolean) => void,
+  totalMs: number,
+  replyLen: number,
+) {
+  setTyping(true);
+  const longEnough = totalMs >= 1400 && replyLen >= 14;
+  const breaks =
+    longEnough && Math.random() < 0.5 ? 1 + (Math.random() < 0.28 ? 1 : 0) : 0;
+
+  if (breaks === 0) {
+    await sleep(totalMs);
+    setTyping(false);
+    return;
+  }
+
+  let remaining = totalMs;
+  for (let b = 0; b <= breaks; b++) {
+    const isLast = b === breaks;
+    const seg = isLast
+      ? Math.max(0, remaining)
+      : Math.max(380, Math.floor(remaining * (0.28 + Math.random() * 0.42)));
+    remaining -= seg;
+    await sleep(seg);
+    if (!isLast) {
+      setTyping(false);
+      await sleep(Math.round(140 + Math.random() * 760));
+      setTyping(true);
+    }
+  }
+  setTyping(false);
+}
+
 export function ChatRoom({ roomId }: Props) {
   const router = useRouter();
   const { client, ready } = useSupabase();
@@ -346,7 +418,20 @@ export function ChatRoom({ roomId }: Props) {
     [client],
   );
 
-  const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+  const endRoomAndGoMatch = useCallback(async () => {
+    if (exitInFlightRef.current) return;
+    exitInFlightRef.current = true;
+    setExiting(true);
+    const { error } = await client.rpc("end_active_room", { p_room_id: roomId });
+    if (error) {
+      setError(error.message);
+      setExiting(false);
+      exitInFlightRef.current = false;
+      return;
+    }
+    roomEndedRef.current = true;
+    router.replace("/match");
+  }, [client, roomId, router]);
 
   const flushReplyQueue = useCallback(async () => {
     if (flushLockRef.current) return;
@@ -362,19 +447,52 @@ export function ChatRoom({ roomId }: Props) {
         role: (m.is_from_ai ? "assistant" : "user") as "user" | "assistant",
         content: m.content,
       }));
+      const triggeringLen = slice[slice.length - 1]?.content.length ?? 0;
 
-      setPeerTyping(true);
-      await sleep(450 + Math.random() * 950);
+      await sleep(readDelayBeforeReplyMs(triggeringLen));
+
       const res = await fetch("/api/chat/ai-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId, messages: transcript }),
       });
       if (!res.ok) return;
-      const body = (await res.json()) as { reply?: string };
+      const body = (await res.json()) as {
+        action?: string;
+        reply?: string;
+        parting?: string | null;
+      };
+
+      if (body.action === "skip") {
+        replyQueueRef.current = [];
+        const parting =
+          typeof body.parting === "string" && body.parting.trim().length > 0
+            ? body.parting.trim()
+            : null;
+        if (parting) {
+          await preTypingHesitation();
+          await runHumanlikeTyping(setPeerTyping, typingDurationForReply(parting), parting.length);
+          const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
+            p_room_id: roomId,
+            p_content: parting,
+          });
+          if (rpcErr) setError(rpcErr.message);
+        } else {
+          await sleep(500 + Math.random() * 1400);
+          setPeerTyping(true);
+          await sleep(650 + Math.random() * 1700);
+          setPeerTyping(false);
+        }
+        await endRoomAndGoMatch();
+        return;
+      }
+
       const reply = body.reply?.trim();
       if (!reply) return;
-      await sleep(280 + Math.random() * 700);
+
+      await preTypingHesitation();
+      await runHumanlikeTyping(setPeerTyping, typingDurationForReply(reply), reply.length);
+
       const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
         p_room_id: roomId,
         p_content: reply,
@@ -389,7 +507,7 @@ export function ChatRoom({ roomId }: Props) {
         });
       }
     }
-  }, [client, roomId]);
+  }, [client, endRoomAndGoMatch, roomId]);
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading) return;
@@ -399,8 +517,7 @@ export function ChatRoom({ roomId }: Props) {
       if (openerDoneRef.current) return;
       openerDoneRef.current = true;
       try {
-        setPeerTyping(true);
-        await sleep(500 + Math.random() * 900);
+        await sleep(readDelayOpenerMs());
         const res = await fetch("/api/chat/ai-reply", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -410,10 +527,41 @@ export function ChatRoom({ roomId }: Props) {
           }),
         });
         if (!res.ok) return;
-        const body = (await res.json()) as { reply?: string };
+        const body = (await res.json()) as {
+          action?: string;
+          reply?: string;
+          parting?: string | null;
+        };
+
+        if (body.action === "skip") {
+          const parting =
+            typeof body.parting === "string" && body.parting.trim().length > 0
+              ? body.parting.trim()
+              : null;
+          if (parting) {
+            await preTypingHesitation();
+            await runHumanlikeTyping(setPeerTyping, typingDurationForReply(parting), parting.length);
+            const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
+              p_room_id: roomId,
+              p_content: parting,
+            });
+            if (rpcErr) setError(rpcErr.message);
+          } else {
+            await sleep(500 + Math.random() * 1400);
+            setPeerTyping(true);
+            await sleep(650 + Math.random() * 1700);
+            setPeerTyping(false);
+          }
+          await endRoomAndGoMatch();
+          return;
+        }
+
         const reply = body.reply?.trim();
         if (!reply) return;
-        await sleep(320 + Math.random() * 620);
+
+        await preTypingHesitation();
+        await runHumanlikeTyping(setPeerTyping, typingDurationForReply(reply), reply.length);
+
         const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
           p_room_id: roomId,
           p_content: reply,
@@ -424,7 +572,7 @@ export function ChatRoom({ roomId }: Props) {
       }
     }, 1100);
     return () => window.clearTimeout(t);
-  }, [ready, isAiRoom, loading, roomId, client]);
+  }, [ready, isAiRoom, loading, roomId, client, endRoomAndGoMatch]);
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading || !selfId) return;
@@ -453,21 +601,6 @@ export function ChatRoom({ roomId }: Props) {
     },
     [client, roomId],
   );
-
-  const endRoomAndGoMatch = useCallback(async () => {
-    if (exitInFlightRef.current) return;
-    exitInFlightRef.current = true;
-    setExiting(true);
-    const { error } = await client.rpc("end_active_room", { p_room_id: roomId });
-    if (error) {
-      setError(error.message);
-      setExiting(false);
-      exitInFlightRef.current = false;
-      return;
-    }
-    roomEndedRef.current = true;
-    router.replace("/match");
-  }, [client, roomId, router]);
 
   if (loading || !selfId) {
     return <PageLoader label="Opening your chat…" />;
