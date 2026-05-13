@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
+import { ArrowLeft, Bot, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
@@ -32,10 +32,32 @@ export function ChatRoom({ roomId }: Props) {
   const exitInFlightRef = useRef(false);
   const roomEndedRef = useRef(false);
   const accessTokenRef = useRef<string | null>(null);
+  const [isAiRoom, setIsAiRoom] = useState(false);
+  const isAiRoomRef = useRef(false);
+  const messagesRef = useRef<MessageRow[]>([]);
+  const replyQueueRef = useRef<string[]>([]);
+  const flushLockRef = useRef(false);
+  const answeredHumanIdsRef = useRef<Set<string>>(new Set());
+  const openerDoneRef = useRef(false);
 
   useEffect(() => {
     selfIdRef.current = selfId;
   }, [selfId]);
+
+  useEffect(() => {
+    isAiRoomRef.current = isAiRoom;
+  }, [isAiRoom]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    openerDoneRef.current = false;
+    answeredHumanIdsRef.current = new Set();
+    replyQueueRef.current = [];
+    flushLockRef.current = false;
+  }, [roomId]);
 
   const endRoomBeacon = useCallback(() => {
     const supabaseUrl = getSupabaseUrl();
@@ -99,17 +121,20 @@ export function ChatRoom({ roomId }: Props) {
 
     const { data: room, error: roomErr } = await client
       .from("rooms")
-      .select("id,user_a,user_b,user_a_gender,user_b_gender,ended_at")
+      .select("id,user_a,user_b,user_a_gender,user_b_gender,is_ai_room,bot_gender,ended_at")
       .eq("id", roomId)
       .maybeSingle();
 
     if (roomErr || !room) {
       setPeerId(null);
       setPeerGender(null);
+      setIsAiRoom(false);
       setError("This chat does not exist or you do not have access.");
       setLoading(false);
       return;
     }
+    const isAi = Boolean(room.is_ai_room);
+    setIsAiRoom(isAi);
     if (room.user_a !== session.user.id && room.user_b !== session.user.id) {
       setPeerId(null);
       setPeerGender(null);
@@ -126,17 +151,22 @@ export function ChatRoom({ roomId }: Props) {
 
     const meIsUserA = room.user_a === session.user.id;
     setPeerId(meIsUserA ? room.user_b : room.user_a);
-    setPeerGender((meIsUserA ? room.user_b_gender : room.user_a_gender) ?? null);
+    if (isAi && meIsUserA) {
+      setPeerGender((room.user_b_gender as SelfGender | null) ?? (room.bot_gender as SelfGender | null) ?? null);
+    } else {
+      setPeerGender((meIsUserA ? room.user_b_gender : room.user_a_gender) ?? null);
+    }
 
     const { data: msgs, error: msgErr } = await client
       .from("messages")
-      .select("id,room_id,user_id,content,created_at")
+      .select("id,room_id,user_id,content,created_at,is_from_ai")
       .eq("room_id", roomId)
       .order("created_at", { ascending: true });
 
     if (msgErr) {
       setPeerId(null);
       setPeerGender(null);
+      setIsAiRoom(false);
       setError(msgErr.message);
       setLoading(false);
       return;
@@ -172,7 +202,14 @@ export function ChatRoom({ roomId }: Props) {
         },
         (payload) => {
           const row = payload.new as MessageRow;
-          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === row.id)) return prev;
+            const merged: MessageRow = {
+              ...row,
+              is_from_ai: Boolean(row.is_from_ai),
+            };
+            return [...prev, merged];
+          });
         },
       )
       .on(
@@ -231,6 +268,7 @@ export function ChatRoom({ roomId }: Props) {
     const bc = client
       .channel(`room:${roomId}:typing`, { config: { broadcast: { self: true } } })
       .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (isAiRoomRef.current) return;
         const p = payload as { userId?: string; active?: boolean };
         if (!p?.userId || p.userId === selfIdRef.current) return;
         if (p.active) {
@@ -255,7 +293,14 @@ export function ChatRoom({ roomId }: Props) {
   }, [client, ready, roomId]);
 
   useEffect(() => {
-    if (!ready || !roomId || !selfId || !peerId) return;
+    if (!ready || !roomId || !selfId) return;
+
+    if (isAiRoom) {
+      setPeerPresence("online");
+      return;
+    }
+
+    if (!peerId) return;
 
     const applyPeerPresence = (ch: ReturnType<typeof client.channel>) => {
       const rows = ch.presenceState()[peerId];
@@ -282,10 +327,11 @@ export function ChatRoom({ roomId }: Props) {
       void presenceChannel.untrack();
       void client.removeChannel(presenceChannel);
     };
-  }, [client, ready, roomId, selfId, peerId]);
+  }, [client, ready, roomId, selfId, peerId, isAiRoom]);
 
   const sendTypingBroadcast = useCallback(
     async (active: boolean) => {
+      if (isAiRoomRef.current) return;
       const ch = typingChannelRef.current;
       const {
         data: { session },
@@ -299,6 +345,96 @@ export function ChatRoom({ roomId }: Props) {
     },
     [client],
   );
+
+  const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+  const flushReplyQueue = useCallback(async () => {
+    if (flushLockRef.current) return;
+    const targetId = replyQueueRef.current.shift();
+    if (!targetId) return;
+    flushLockRef.current = true;
+    try {
+      const snapshot = messagesRef.current;
+      const idx = snapshot.findIndex((m) => m.id === targetId);
+      if (idx < 0) return;
+      const slice = snapshot.slice(0, idx + 1);
+      const transcript = slice.map((m) => ({
+        role: (m.is_from_ai ? "assistant" : "user") as "user" | "assistant",
+        content: m.content,
+      }));
+
+      setPeerTyping(true);
+      await sleep(450 + Math.random() * 950);
+      const res = await fetch("/api/chat/ai-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, messages: transcript }),
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { reply?: string };
+      const reply = body.reply?.trim();
+      if (!reply) return;
+      await sleep(280 + Math.random() * 700);
+      const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
+        p_room_id: roomId,
+        p_content: reply,
+      });
+      if (rpcErr) setError(rpcErr.message);
+    } finally {
+      flushLockRef.current = false;
+      setPeerTyping(false);
+      if (replyQueueRef.current.length > 0) {
+        queueMicrotask(() => {
+          void flushReplyQueue();
+        });
+      }
+    }
+  }, [client, roomId]);
+
+  useEffect(() => {
+    if (!ready || !isAiRoom || loading) return;
+    const t = window.setTimeout(async () => {
+      if (messagesRef.current.some((m) => m.is_from_ai)) return;
+      if (messagesRef.current.length > 0) return;
+      if (openerDoneRef.current) return;
+      openerDoneRef.current = true;
+      try {
+        setPeerTyping(true);
+        await sleep(500 + Math.random() * 900);
+        const res = await fetch("/api/chat/ai-reply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomId,
+            messages: [] as { role: "user" | "assistant"; content: string }[],
+          }),
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as { reply?: string };
+        const reply = body.reply?.trim();
+        if (!reply) return;
+        await sleep(320 + Math.random() * 620);
+        const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
+          p_room_id: roomId,
+          p_content: reply,
+        });
+        if (rpcErr) setError(rpcErr.message);
+      } finally {
+        setPeerTyping(false);
+      }
+    }, 1100);
+    return () => window.clearTimeout(t);
+  }, [ready, isAiRoom, loading, roomId, client]);
+
+  useEffect(() => {
+    if (!ready || !isAiRoom || loading || !selfId) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.is_from_ai || last.user_id !== selfId) return;
+    if (answeredHumanIdsRef.current.has(last.id)) return;
+    answeredHumanIdsRef.current.add(last.id);
+    replyQueueRef.current.push(last.id);
+    void flushReplyQueue();
+  }, [messages, ready, isAiRoom, loading, selfId, flushReplyQueue]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -370,6 +506,12 @@ export function ChatRoom({ roomId }: Props) {
         <div className="min-w-0 flex-1 text-center">
           <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
             <p className="text-sm font-semibold text-navy-950 dark:text-navy-50">Anonymous chat</p>
+            {isAiRoom ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/40 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-900 dark:text-violet-100 sm:text-[11px]">
+                <Bot className="h-3 w-3" aria-hidden />
+                Practice bot
+              </span>
+            ) : null}
             <span
               className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-[11px] ${
                 peerPresence === "online"
@@ -399,10 +541,14 @@ export function ChatRoom({ roomId }: Props) {
               ) : (
                 <span className="inline-block h-2 w-2 rounded-full bg-navy-300 dark:bg-navy-600" aria-hidden />
               )}
-              {peerGender === "male" ? "Man" : peerGender === "female" ? "Woman" : "Unknown"}
+              {isAiRoom ? "Bot persona" : peerGender === "male" ? "Man" : peerGender === "female" ? "Woman" : "Unknown"}
             </span>
           </div>
-          <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">You are both strangers — stay kind.</p>
+          <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
+            {isAiRoom
+              ? "Labeled practice partner — not a real person. Still be kind to yourself."
+              : "You are both strangers — stay kind."}
+          </p>
         </div>
         <motion.button
           type="button"
@@ -427,12 +573,20 @@ export function ChatRoom({ roomId }: Props) {
             >
               <p className="text-sm font-medium text-navy-800 dark:text-navy-100">No messages yet</p>
               <p className="mt-2 max-w-xs text-xs text-navy-500 dark:text-navy-400">
-                Say hi — your match is on the other side of this glassy little bubble.
+                {isAiRoom
+                  ? "The practice bot will type like a human — short, imperfect lines. Say hi when you are ready."
+                  : "Say hi — your match is on the other side of this glassy little bubble."}
               </p>
             </motion.div>
           </div>
         ) : (
-          <MessageList messages={messages} selfId={selfId} peerTyping={peerTyping} />
+          <MessageList
+            messages={messages}
+            selfId={selfId}
+            peerTyping={peerTyping}
+            peerIsBot={isAiRoom}
+            peerLabel={isAiRoom ? "Bot" : "Stranger"}
+          />
         )}
         <div ref={bottomRef} />
       </div>

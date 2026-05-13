@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Mars, Sparkles, Users, Venus } from "lucide-react";
+import { Bot, Mars, Sparkles, Users, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { PageLoader } from "@/components/ui/Loading";
 import type { SelfGender, WantsGender } from "@/lib/types/chat";
@@ -15,11 +15,14 @@ export function MatchLobby() {
   const [wantsGender, setWantsGender] = useState<WantsGender | null>(null);
   const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
   const [rpcError, setRpcError] = useState<string | null>(null);
+  const [includeAiMatch, setIncludeAiMatch] = useState(true);
+  const navigatedRef = useRef(false);
   const cancelledRef = useRef(false);
   const canMatch = !!selfGender && !!wantsGender;
 
   useEffect(() => {
     cancelledRef.current = false;
+    navigatedRef.current = false;
     if (!ready || !selfGender || !wantsGender) return;
 
     let poll: ReturnType<typeof setInterval> | undefined;
@@ -46,6 +49,7 @@ export function MatchLobby() {
       }
       const firstRoom = first.data as string | null;
       if (firstRoom) {
+        navigatedRef.current = true;
         router.replace(`/chat/${firstRoom}`);
         return;
       }
@@ -60,7 +64,10 @@ export function MatchLobby() {
 
       const handleInsert = (payload: { new: Record<string, unknown> }) => {
         const id = typeof payload.new?.id === "string" ? payload.new.id : undefined;
-        if (id && alive && !cancelledRef.current) router.replace(`/chat/${id}`);
+        if (id && alive && !cancelledRef.current) {
+          navigatedRef.current = true;
+          router.replace(`/chat/${id}`);
+        }
       };
 
       const suffix =
@@ -110,7 +117,10 @@ export function MatchLobby() {
         const { data, error } = await attemptMatch();
         if (error || !alive || cancelledRef.current) return;
         const rid = data as string | null;
-        if (rid) router.replace(`/chat/${rid}`);
+        if (rid) {
+          navigatedRef.current = true;
+          router.replace(`/chat/${rid}`);
+        }
       }, 2800);
     })();
 
@@ -122,6 +132,29 @@ export function MatchLobby() {
       if (matchChannel) void client.removeChannel(matchChannel);
     };
   }, [client, ready, router, selfGender, wantsGender]);
+
+  useEffect(() => {
+    if (!ready || !selfGender || !wantsGender || !includeAiMatch) return;
+    let alive = true;
+    const delayMs = 3600 + Math.floor(Math.random() * 1600);
+    const t = window.setTimeout(async () => {
+      if (!alive || cancelledRef.current || navigatedRef.current) return;
+      const { data, error } = await client.rpc("try_match_ai_practice", {
+        p_self_gender: selfGender,
+        p_wants_gender: wantsGender,
+      });
+      if (error || !alive || cancelledRef.current || navigatedRef.current) return;
+      const rid = data as string | null;
+      if (rid) {
+        navigatedRef.current = true;
+        router.replace(`/chat/${rid}`);
+      }
+    }, delayMs);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [client, ready, router, selfGender, wantsGender, includeAiMatch]);
 
   if (!ready) {
     return <PageLoader label="Preparing your session…" />;
@@ -152,6 +185,48 @@ export function MatchLobby() {
         </div>
 
         <div className="mt-6 space-y-6">
+          <section>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+              Match mode
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setIncludeAiMatch(true)}
+                className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                  includeAiMatch
+                    ? "border-violet-500/45 bg-violet-500/10 text-violet-950 shadow-sm dark:text-violet-100"
+                    : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                }`}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Bot className="h-4 w-4 shrink-0" />
+                  Humans + practice bot
+                </span>
+                <span className="mt-1 block text-xs font-normal text-navy-500 dark:text-navy-400">
+                  If no one appears after a few seconds, you may get a labeled AI partner.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncludeAiMatch(false)}
+                className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                  !includeAiMatch
+                    ? "border-amber-500/45 bg-amber-500/10 text-amber-950 shadow-sm dark:text-amber-100"
+                    : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                }`}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Users className="h-4 w-4 shrink-0" />
+                  Humans only
+                </span>
+                <span className="mt-1 block text-xs font-normal text-navy-500 dark:text-navy-400">
+                  Wait as long as it takes for a real person.
+                </span>
+              </button>
+            </div>
+          </section>
+
           <section>
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
               Your gender
