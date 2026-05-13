@@ -3,12 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, MessageCircle, SkipForward } from "lucide-react";
+import { ArrowLeft, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PageLoader } from "@/components/ui/Loading";
-import type { MessageRow } from "@/lib/types/chat";
+import type { MessageRow, SelfGender } from "@/lib/types/chat";
 import { getSupabaseKey, getSupabaseUrl } from "@/utils/supabase/env";
 
 type Props = { roomId: string };
@@ -22,6 +22,7 @@ export function ChatRoom({ roomId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
   const [peerId, setPeerId] = useState<string | null>(null);
+  const [peerGender, setPeerGender] = useState<SelfGender | null>(null);
   const [peerPresence, setPeerPresence] = useState<"unknown" | "online" | "offline">("unknown");
   const [exiting, setExiting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -98,29 +99,34 @@ export function ChatRoom({ roomId }: Props) {
 
     const { data: room, error: roomErr } = await client
       .from("rooms")
-      .select("id,user_a,user_b,ended_at")
+      .select("id,user_a,user_b,user_a_gender,user_b_gender,ended_at")
       .eq("id", roomId)
       .maybeSingle();
 
     if (roomErr || !room) {
       setPeerId(null);
+      setPeerGender(null);
       setError("This chat does not exist or you do not have access.");
       setLoading(false);
       return;
     }
     if (room.user_a !== session.user.id && room.user_b !== session.user.id) {
       setPeerId(null);
+      setPeerGender(null);
       setError("You are not a participant in this chat.");
       setLoading(false);
       return;
     }
     if (room.ended_at) {
       setPeerId(null);
+      setPeerGender(null);
       router.replace("/match");
       return;
     }
 
-    setPeerId(room.user_a === session.user.id ? room.user_b : room.user_a);
+    const meIsUserA = room.user_a === session.user.id;
+    setPeerId(meIsUserA ? room.user_b : room.user_a);
+    setPeerGender((meIsUserA ? room.user_b_gender : room.user_a_gender) ?? null);
 
     const { data: msgs, error: msgErr } = await client
       .from("messages")
@@ -130,6 +136,7 @@ export function ChatRoom({ roomId }: Props) {
 
     if (msgErr) {
       setPeerId(null);
+      setPeerGender(null);
       setError(msgErr.message);
       setLoading(false);
       return;
@@ -383,6 +390,16 @@ export function ChatRoom({ roomId }: Props) {
                 aria-hidden
               />
               {peerPresence === "unknown" ? "…" : peerPresence === "online" ? "Online" : "Offline"}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-navy-200/70 bg-white/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy-600 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-300 sm:text-[11px]">
+              {peerGender === "male" ? (
+                <Mars className="h-3 w-3 text-blue-500" aria-hidden />
+              ) : peerGender === "female" ? (
+                <Venus className="h-3 w-3 text-pink-500" aria-hidden />
+              ) : (
+                <span className="inline-block h-2 w-2 rounded-full bg-navy-300 dark:bg-navy-600" aria-hidden />
+              )}
+              {peerGender === "male" ? "Man" : peerGender === "female" ? "Woman" : "Unknown"}
             </span>
           </div>
           <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">You are both strangers — stay kind.</p>
