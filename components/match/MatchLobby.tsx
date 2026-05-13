@@ -3,16 +3,25 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Bot, Mars, Sparkles, Users, Venus } from "lucide-react";
+import { Bot, Mars, Users, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { PageLoader } from "@/components/ui/Loading";
 import type { SelfGender, WantsGender } from "@/lib/types/chat";
+import { MatchingLoader } from "./MatchingLoader";
+import { useCallback } from "react";
 
 export function MatchLobby() {
   const router = useRouter();
   const { client, ready } = useSupabase();
-  const [selfGender, setSelfGender] = useState<SelfGender | null>(null);
-  const [wantsGender, setWantsGender] = useState<WantsGender | null>(null);
+  const [selfGender, setSelfGender] = useState<SelfGender | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("banterbird:selfGender") as SelfGender | null;
+  });
+  const [wantsGender, setWantsGender] = useState<WantsGender | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("banterbird:wantsGender") as WantsGender | null;
+  });
+  const [isMatching, setIsMatching] = useState(false);
   const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
   const [rpcError, setRpcError] = useState<string | null>(null);
   const [includeAiMatch, setIncludeAiMatch] = useState(true);
@@ -21,16 +30,35 @@ export function MatchLobby() {
   const canMatch = !!selfGender && !!wantsGender;
 
   useEffect(() => {
+    if (!isMatching) {
+      setHint("Pick who you are and who you want to talk to.");
+      return;
+    }
+    setRpcError(null);
+    setHint("Finding your best match now…");
+  }, [isMatching]);
+
+  useEffect(() => {
+    if (selfGender) localStorage.setItem("banterbird:selfGender", selfGender);
+  }, [selfGender]);
+
+  useEffect(() => {
+    if (wantsGender) localStorage.setItem("banterbird:wantsGender", wantsGender);
+  }, [wantsGender]);
+
+  useEffect(() => {
     cancelledRef.current = false;
     navigatedRef.current = false;
-    if (!ready || !selfGender || !wantsGender) return;
+    if (!ready || !canMatch) {
+      setIsMatching(false);
+      return;
+    }
+
+    setIsMatching(true);
 
     let poll: ReturnType<typeof setInterval> | undefined;
     let matchChannel: ReturnType<typeof client.channel> | null = null;
     let alive = true;
-
-    setRpcError(null);
-    setHint("Finding your best match now…");
 
     const attemptMatch = async () => {
       const result = await client.rpc("try_match", {
@@ -128,13 +156,22 @@ export function MatchLobby() {
       alive = false;
       cancelledRef.current = true;
       if (poll) clearInterval(poll);
+      setIsMatching(false);
       void client.rpc("leave_match_queue");
       if (matchChannel) void client.removeChannel(matchChannel);
     };
-  }, [client, ready, router, selfGender, wantsGender]);
+  }, [client, ready, router, selfGender, wantsGender, canMatch]);
+
+  const handleCancelMatching = useCallback(async () => {
+    cancelledRef.current = true;
+    if (client) {
+      await client.rpc("leave_match_queue");
+    }
+    setIsMatching(false);
+  }, [client]);
 
   useEffect(() => {
-    if (!ready || !selfGender || !wantsGender || !includeAiMatch) return;
+    if (!ready || !canMatch || !includeAiMatch) return;
     let alive = true;
     const delayMs = 3600 + Math.floor(Math.random() * 1600);
     const t = window.setTimeout(async () => {
@@ -154,7 +191,7 @@ export function MatchLobby() {
       alive = false;
       window.clearTimeout(t);
     };
-  }, [client, ready, router, selfGender, wantsGender, includeAiMatch]);
+  }, [client, ready, router, selfGender, wantsGender, includeAiMatch, canMatch]);
 
   if (!ready) {
     return <PageLoader label="Preparing your session…" />;
@@ -172,15 +209,19 @@ export function MatchLobby() {
     );
   }
 
+  if (isMatching) {
+    return <MatchingLoader onCancel={handleCancelMatching} />;
+  }
+
   return (
-    <div className="mx-auto flex min-h-[62vh] w-full max-w-2xl flex-col items-center justify-center gap-7 px-2 sm:px-4">
+    <div className="mx-auto flex min-h-[62vh] w-full max-w-2xl flex-col items-center justify-center gap-4 px-2 sm:px-4 md:gap-7">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         className="glass-panel w-full rounded-[2rem] border border-navy-200/70 p-6 shadow-xl dark:border-white/10 sm:p-7"
       >
         <div className="text-center">
-          <h1 className="text-2xl font-semibold text-navy-950 dark:text-navy-50">Find your vibe</h1>
+          <h1 className="text-xl font-semibold text-navy-950 dark:text-navy-50 sm:text-2xl">Find your vibe</h1>
           <p className="mt-2 text-sm text-navy-600 dark:text-navy-300">{hint}</p>
         </div>
 
@@ -265,7 +306,7 @@ export function MatchLobby() {
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
               You want to speak to
             </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {[
                 { value: "male" as const, label: "Men" },
                 { value: "female" as const, label: "Women" },
@@ -288,31 +329,6 @@ export function MatchLobby() {
           </section>
         </div>
       </motion.div>
-
-      {canMatch ? (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <motion.div
-            className="relative flex h-20 w-20 items-center justify-center rounded-[1.5rem] border border-navy-200/60 bg-white/50 shadow-lg dark:border-white/10 dark:bg-navy-900/40"
-            animate={{ scale: [1, 1.04, 1], rotate: [0, 1.5, -1.5, 0] }}
-            transition={{ duration: 3.8, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <Sparkles className="h-8 w-8 text-navy-800 dark:text-navy-100" />
-            <motion.span
-              className="absolute inset-0 rounded-[1.5rem] border-2 border-navy-900/20 dark:border-white/20"
-              animate={{ opacity: [0.35, 1, 0.35], scale: [1, 1.08, 1] }}
-              transition={{ duration: 1.9, repeat: Infinity }}
-            />
-          </motion.div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-navy-200/70 bg-white/60 px-3 py-1.5 text-xs font-medium text-navy-700 shadow-sm dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-200">
-            <Users className="h-3.5 w-3.5" />
-            Matching now
-          </div>
-        </motion.div>
-      ) : null}
     </div>
   );
 }
