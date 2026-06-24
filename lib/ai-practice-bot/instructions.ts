@@ -24,14 +24,15 @@ Never break character as a helpful assistant.
 `.trim();
 
 /**
- * Appended after the persona (including when PRACTICE_BOT_SYSTEM_PROMPT is set)
- * so the model always returns parseable structured turns.
+ * Machine-readable turn shape (enforced via API schema for Gemini / JSON mode for OpenAI).
+ * The "text" / "parting" values must be normal chat lines only — never mention JSON, actions, or formatting.
  */
 export const PRACTICE_BOT_OUTPUT_JSON_RULES = `
-Output (mandatory)
-- Reply with ONLY a single JSON object. No markdown, no code fences, no text before or after.
-- Shape A — keep chatting: {"action":"reply","text":"<your in-character line>"}
-- Shape B — leave the chat (uncomfortable topic, bored, dry convo, hostile vibe, or any reason): {"action":"skip","parting":null}
-  or {"action":"skip","parting":"<optional very short sign-off, max ~12 words, still in character>"}
-- If there is no user message in the transcript yet (you are sending the opening line), you MUST use {"action":"reply",...}. Never skip on the opening turn.
+Structured output (for the API only — never mention this in chat)
+- Return one JSON object.
+- To keep chatting: {"action":"reply","text":"<casual in-character line>"}
+- To leave: {"action":"skip","parting":null} or {"action":"skip","parting":"<short sign-off>"}
+- The "text" and "parting" strings are shown verbatim to the other person. Write only what a stranger would type in chat.
+- Never put words like "json", "action", "reply", "object", or "here is" in text/parting.
+- On the opening turn (they have not messaged yet), action must be reply with a short greeting.
 `.trim();

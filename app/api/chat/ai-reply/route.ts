@@ -32,6 +32,43 @@ function fullSystemPrompt(): string {
   return `${baseSystemPrompt()}\n\n${PRACTICE_BOT_OUTPUT_JSON_RULES}`.trim();
 }
 
+function geminiSystemPrompt(): string {
+  return `${baseSystemPrompt()}
+
+Opening turn: if the only user message is ".", the chat just connected and nobody has spoken — greet them casually in one short line.
+Structured fields are parsed by the app; only put normal chat in text/parting.`.trim();
+}
+
+const GEMINI_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    action: { type: "STRING", enum: ["reply", "skip"] },
+    text: {
+      type: "STRING",
+      description: "Short casual chat line shown to the other person when action is reply.",
+    },
+    parting: {
+      type: "STRING",
+      description: "Optional short sign-off shown when action is skip.",
+      nullable: true,
+    },
+  },
+  required: ["action"],
+} as const;
+
+const GEMINI_OPENER_USER_TURN = ".";
+
+const META_REPLY_RE =
+  /\b(json|here is the|single json|action|reply with only|object|schema|format)\b|^\s*\{|"action"\s*:/i;
+
+function isAcceptableChatLine(text: string): boolean {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (!t || t === GEMINI_OPENER_USER_TURN) return false;
+  if (META_REPLY_RE.test(t)) return false;
+  if (/[{}[\]]/.test(t)) return false;
+  return true;
+}
+
 const FALLBACKS = [
   "hey",
   "yo",
@@ -76,18 +113,25 @@ function parseModelTurn(raw: string, history: ChatTurn[]): AiPracticeTurnResult 
       const p = o.parting;
       if (typeof p === "string") {
         const t = p.replace(/\s+/g, " ").trim().slice(0, 200);
-        return { action: "skip", parting: t.length > 0 ? t : null };
+        return { action: "skip", parting: isAcceptableChatLine(t) ? t : null };
       }
       return { action: "skip", parting: null };
     }
-    if (o.action === "reply" && typeof o.text === "string") {
-      const text = o.text.replace(/\s+/g, " ").trim().slice(0, 200);
-      if (text.length > 0) return { action: "reply", reply: text };
+    if (o.action === "reply") {
+      const candidate =
+        (typeof o.text === "string" ? o.text : null) ??
+        (typeof o.reply === "string" ? o.reply : null);
+      if (candidate) {
+        const text = candidate.replace(/\s+/g, " ").trim().slice(0, 200);
+        if (isAcceptableChatLine(text)) return { action: "reply", reply: text };
+      }
     }
   }
 
   const flat = raw.replace(/\s+/g, " ").trim().slice(0, 200);
-  if (flat.length > 0) return { action: "reply", reply: flat };
+  if (flat.length > 0 && isAcceptableChatLine(flat)) {
+    return { action: "reply", reply: flat };
+  }
   return { action: "reply", reply: pickFallback(seed) };
 }
 
@@ -115,19 +159,26 @@ function decideFallbackTurn(history: ChatTurn[]): AiPracticeTurnResult {
   return { action: "reply", reply: pickFallback(seed) };
 }
 
+function geminiContents(history: ChatTurn[]) {
+  if (history.length === 0) {
+    return [{ role: "user", parts: [{ text: GEMINI_OPENER_USER_TURN }] }];
+  }
+  return history.map((turn) => ({
+    role: turn.role === "assistant" ? "model" : "user",
+    parts: [{ text: turn.content }],
+  }));
+}
+
 async function callGemini(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
   const key = googleApiKey();
   if (!key) {
     return decideFallbackTurn(history);
   }
 
-  const model = process.env.GEMINI_CHAT_MODEL?.trim() || "gemini-2.0-flash";
+  const model = process.env.GEMINI_CHAT_MODEL?.trim() || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-  const contents = history.map((turn) => ({
-    role: turn.role === "assistant" ? "model" : "user",
-    parts: [{ text: turn.content }],
-  }));
+  const contents = geminiContents(history);
 
   const res = await fetch(url, {
     method: "POST",
@@ -137,13 +188,14 @@ async function callGemini(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
     },
     body: JSON.stringify({
       systemInstruction: {
-        parts: [{ text: fullSystemPrompt() }],
+        parts: [{ text: geminiSystemPrompt() }],
       },
       contents,
       generationConfig: {
         temperature: 1.05,
-        maxOutputTokens: 128,
+        maxOutputTokens: 256,
         responseMimeType: "application/json",
+        responseSchema: GEMINI_RESPONSE_SCHEMA,
       },
     }),
   });
