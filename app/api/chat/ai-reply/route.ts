@@ -12,8 +12,18 @@ type AiPracticeTurnResult =
   | { action: "reply"; reply: string }
   | { action: "skip"; parting: string | null };
 
+function googleApiKey(): string | undefined {
+  return (
+    process.env.GOOGLE_API_KEY?.trim() ||
+    process.env.GEMINI_API_KEY?.trim() ||
+    undefined
+  );
+}
+
 function baseSystemPrompt(): string {
-  const fromEnv = process.env.OPENAI_PRACTICE_BOT_SYSTEM_PROMPT?.trim();
+  const fromEnv =
+    process.env.PRACTICE_BOT_SYSTEM_PROMPT?.trim() ||
+    process.env.OPENAI_PRACTICE_BOT_SYSTEM_PROMPT?.trim();
   if (fromEnv) return fromEnv;
   return PRACTICE_BOT_SYSTEM_INSTRUCTIONS;
 }
@@ -105,6 +115,57 @@ function decideFallbackTurn(history: ChatTurn[]): AiPracticeTurnResult {
   return { action: "reply", reply: pickFallback(seed) };
 }
 
+async function callGemini(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
+  const key = googleApiKey();
+  if (!key) {
+    return decideFallbackTurn(history);
+  }
+
+  const model = process.env.GEMINI_CHAT_MODEL?.trim() || "gemini-2.0-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+  const contents = history.map((turn) => ({
+    role: turn.role === "assistant" ? "model" : "user",
+    parts: [{ text: turn.content }],
+  }));
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": key,
+    },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: fullSystemPrompt() }],
+      },
+      contents,
+      generationConfig: {
+        temperature: 1.05,
+        maxOutputTokens: 128,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.error("Gemini error:", res.status, errText);
+    return decideFallbackTurn(history);
+  }
+
+  const json = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const raw =
+    json.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
+      .join("")
+      .trim() ?? "";
+  if (!raw) return decideFallbackTurn(history);
+  return parseModelTurn(raw, history);
+}
+
 async function callOpenAI(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) {
@@ -185,7 +246,9 @@ export async function POST(req: Request) {
     }
 
     const trimmedHistory = history.slice(-24);
-    let result = await callOpenAI(trimmedHistory);
+    let result = googleApiKey()
+      ? await callGemini(trimmedHistory)
+      : await callOpenAI(trimmedHistory);
     const hasUserTurn = trimmedHistory.some((m) => m.role === "user");
     if (!hasUserTurn && result.action === "skip") {
       result = { action: "reply", reply: pickFallback("open") };

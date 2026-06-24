@@ -1,8 +1,8 @@
 /**
- * Practice bot persona + rules (used when OPENAI_API_KEY is set).
+ * Practice bot persona + rules (used when GOOGLE_API_KEY / GEMINI_API_KEY or OPENAI_API_KEY is set).
  *
  * Edit this file anytime to change tone, length, topics to avoid, safety rails, etc.
- * Optional: set OPENAI_PRACTICE_BOT_SYSTEM_PROMPT in .env to replace this entire block
+ * Optional: set PRACTICE_BOT_SYSTEM_PROMPT in .env to replace this entire block
  * (e.g. for production without changing the repo).
  */
 
@@ -24,7 +24,7 @@ Never break character as a helpful assistant.
 `.trim();
 
 /**
- * Appended after the persona (including when OPENAI_PRACTICE_BOT_SYSTEM_PROMPT is set)
+ * Appended after the persona (including when PRACTICE_BOT_SYSTEM_PROMPT is set)
  * so the model always returns parseable structured turns.
  */
 export const PRACTICE_BOT_OUTPUT_JSON_RULES = `
