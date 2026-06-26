@@ -1,0 +1,257 @@
+import type { BotPersona } from "@/lib/ai-practice-bot/persona";
+import { personaAllowsSexualChat } from "@/lib/ai-practice-bot/persona";
+
+type ChatTurn = { role: "user" | "assistant"; content: string };
+
+export type UserMemory = {
+  age?: number;
+  ageTag?: string;
+  country?: string;
+  name?: string;
+  sexualVibe: boolean;
+  userTurnCount: number;
+  assistantTurnCount: number;
+};
+
+const SEXUAL_RE =
+  /\b(horny|sexy|nude|naked|dick|cock|pussy|fuck|fucking|cum|orgasm|kink|bdsm|daddy|mommy|slut|dirty|sext|nudes|turn me on|roleplay|rp\b|sub\b|dom\b)\b/i;
+
+const BORING_RE = /^(k|ok|okay|yeah|yea|yep|mhm|hm+|lol|haha|idk|sure|nice|cool|same|true|wow|omg|ah+|uh+|\?+)$/i;
+
+export function detectSexualVibe(text: string): boolean {
+  return SEXUAL_RE.test(text);
+}
+
+function lastUserLines(history: ChatTurn[]): string[] {
+  return history.filter((m) => m.role === "user").map((m) => m.content);
+}
+
+function extractAge(line: string): { age?: number; tag?: string } {
+  const tag = line.match(/\b(\d{2})\s*([fm])\b/i);
+  if (tag) {
+    const age = Number.parseInt(tag[1]!, 10);
+    if (age >= 15 && age <= 99) {
+      return { age, tag: `${age}${tag[2]!.toLowerCase()}` };
+    }
+  }
+  const im = line.match(/\b(?:i'?m|im|i am)\s*(\d{1,2})\b/i);
+  if (im) {
+    const age = Number.parseInt(im[1]!, 10);
+    if (age >= 15 && age <= 99) return { age };
+  }
+  const years = line.match(/\b(\d{1,2})\s*(?:years?\s*old|yo)\b/i);
+  if (years) {
+    const age = Number.parseInt(years[1]!, 10);
+    if (age >= 15 && age <= 99) return { age };
+  }
+  const bare = line.match(/\bage\s*(?:is\s*)?(\d{1,2})\b/i);
+  if (bare) {
+    const age = Number.parseInt(bare[1]!, 10);
+    if (age >= 15 && age <= 99) return { age };
+  }
+  return {};
+}
+
+function extractCountry(line: string): string | undefined {
+  const from = line.match(/\b(?:i'?m\s*from|from|live in|im in)\s+([a-z][a-z\s]{2,28})/i);
+  if (from) return from[1]!.trim().replace(/\s+/g, " ").slice(0, 40);
+  return undefined;
+}
+
+function extractName(line: string): string | undefined {
+  const call = line.match(/\bcall me\s+([a-z]{2,16})\b/i);
+  if (call) return call[1]!;
+  const name = line.match(/\b(?:my name is|name'?s)\s+([a-z]{2,16})\b/i);
+  if (name) return name[1]!;
+  const im = line.match(/\b(?:i'?m|im)\s+([A-Z][a-z]{1,14})\b/);
+  if (im && !/^(From|Here|Good|Fine|Ok|Just)$/i.test(im[1]!)) return im[1]!;
+  return undefined;
+}
+
+export function buildUserMemory(history: ChatTurn[]): UserMemory {
+  const userLines = lastUserLines(history);
+  const mem: UserMemory = {
+    sexualVibe: userLines.some((l) => detectSexualVibe(l)),
+    userTurnCount: userLines.length,
+    assistantTurnCount: history.filter((m) => m.role === "assistant").length,
+  };
+
+  for (const line of userLines) {
+    const ageInfo = extractAge(line);
+    if (ageInfo.age) mem.age = ageInfo.age;
+    if (ageInfo.tag) mem.ageTag = ageInfo.tag;
+    const country = extractCountry(line);
+    if (country) mem.country = country;
+    const name = extractName(line);
+    if (name) mem.name = name;
+    if (detectSexualVibe(line)) mem.sexualVibe = true;
+  }
+
+  return mem;
+}
+
+export function formatUserMemoryBlock(mem: UserMemory, persona?: BotPersona): string {
+  const parts: string[] = [];
+  if (mem.ageTag) parts.push(`age tag they used: ${mem.ageTag}`);
+  else if (mem.age) parts.push(`age: ${mem.age}`);
+  if (mem.country) parts.push(`from: ${mem.country}`);
+  if (mem.name) parts.push(`name/call them: ${mem.name}`);
+  if (mem.sexualVibe) {
+    if (persona && personaAllowsSexualChat(persona, true)) {
+      parts.push("vibe: flirty/sexual — match with explicit dirty text chat");
+    } else {
+      parts.push("vibe: they got sexual — you are NOT into it; deflect or skip");
+    }
+  }
+
+  if (parts.length === 0) {
+    return "Known about them so far: nothing solid yet — ask age/location if curious.";
+  }
+
+  return `Known about them (they already told you — DO NOT forget):\n- ${parts.join("\n- ")}`;
+}
+
+export function isDryConversation(history: ChatTurn[]): boolean {
+  const userLines = lastUserLines(history);
+  if (userLines.length < 3) return false;
+  const recent = userLines.slice(-3);
+  const boring = recent.filter((l) => BORING_RE.test(l.trim()) || l.trim().length <= 3).length;
+  return boring >= 2;
+}
+
+const AGGRESSIVE_RE =
+  /\b(fuck you|fuck off|stfu|shut up|bitch|asshole|idiot|dumbass|moron|kill yourself|kys|hate you|you suck)\b/i;
+
+export function isAggressiveConversation(history: ChatTurn[]): boolean {
+  const userLines = lastUserLines(history);
+  const recent = userLines.slice(-3);
+  return recent.some((l) => AGGRESSIVE_RE.test(l));
+}
+
+const LEAVING_RE =
+  /\b(wait.*(gtg|gotta go|go do|do something)|gtg|g2g|gotta go|got to go|have to go|need to go|brb|be right back|i'?m leaving|im leaving|leaving now|something came up|do something|busy now|afk|talk later|ttyl|cya|see ya)\b/i;
+
+export function isUserLeavingConversation(history: ChatTurn[]): boolean {
+  const last = lastUserLines(history).pop() ?? "";
+  return LEAVING_RE.test(last);
+}
+
+export function isAnnoyingConversation(history: ChatTurn[]): boolean {
+  if (isAggressiveConversation(history)) return true;
+  const userLines = lastUserLines(history);
+  if (userLines.length >= 3 && isDryConversation(history)) return true;
+  const recent = userLines.slice(-4).map((l) => l.trim().toLowerCase());
+  if (recent.length >= 3 && new Set(recent).size === 1) return true;
+  return false;
+}
+
+export function countSexualUserTurns(history: ChatTurn[]): number {
+  return lastUserLines(history).filter((l) => detectSexualVibe(l)).length;
+}
+
+export const SKIP_PARTINGS = [
+  "maybe ill catch u here again im on this site alot",
+  "gotta go but im often on here lol",
+  "bored ngl imma hop — catch u on here sometime",
+  "ok im bouncing im on here a lot tho",
+  "chat dying lol bye im usually on here",
+];
+
+export function pickSkipParting(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return SKIP_PARTINGS[h % SKIP_PARTINGS.length] ?? SKIP_PARTINGS[0]!;
+}
+
+export const GHOST_PINGS = ["hello??", "u there??", "hello?", "you there??", "??"];
+
+export const GHOST_SKIP_PARTINGS = [
+  "bye",
+  "if u dont wanna talk bye",
+  "if you dont wanna talk bye",
+  "alright bye",
+  "ok bye",
+];
+
+export const BORING_SKIP_PARTINGS = [
+  "ur boring bye",
+  "you're boring bye",
+  "ur annoying bye",
+  "this is boring bye",
+];
+
+export const LEAVING_SKIP_PARTINGS = [
+  "aight bye",
+  "ok bye",
+  "alright cya",
+  "bye",
+];
+
+export const STRICT_SEXUAL_SKIP_PARTINGS = [
+  "i dont wanna talk about that stuff bye",
+  "nah not into that bye",
+  "idk about that stuff bye",
+];
+
+export function pickGhostPing(): string {
+  return GHOST_PINGS[Math.floor(Math.random() * GHOST_PINGS.length)] ?? "hello??";
+}
+
+export function pickGhostSkipParting(): string {
+  return GHOST_SKIP_PARTINGS[Math.floor(Math.random() * GHOST_SKIP_PARTINGS.length)] ?? "bye";
+}
+
+export function pickBoringSkipParting(seed = "boring"): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return BORING_SKIP_PARTINGS[h % BORING_SKIP_PARTINGS.length] ?? BORING_SKIP_PARTINGS[0]!;
+}
+
+export function pickLeavingSkipParting(): string {
+  return LEAVING_SKIP_PARTINGS[Math.floor(Math.random() * LEAVING_SKIP_PARTINGS.length)] ?? "bye";
+}
+
+export function pickStrictSexualSkipParting(seed = "sexual"): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return STRICT_SEXUAL_SKIP_PARTINGS[h % STRICT_SEXUAL_SKIP_PARTINGS.length] ?? STRICT_SEXUAL_SKIP_PARTINGS[0]!;
+}
+
+const HEATED_FALLBACKS = [
+  "mm tell me more",
+  "omg yes",
+  "damn ok",
+  "keep going",
+  "u like that?",
+  "lol ur bold",
+  "mhm yes",
+  "dont stop",
+];
+
+export function isGenericCannedLine(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return (
+    ["hey", "yo", "sup", "heyy", "lol fair", "same honestly", "wild", "mhm", "nice", "damn", "fr?", "lowkey yeah"].includes(t)
+  );
+}
+
+export function contextualFallbackReply(
+  history: ChatTurn[],
+  memory: UserMemory,
+  allowSexual: boolean,
+): string[] {
+  const seed = history.map((m) => m.content).join("|") || "open";
+  const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
+  const heated = allowSexual && (memory.sexualVibe || detectSexualVibe(lastUser));
+
+  if (heated) {
+    let h = 0;
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    return [HEATED_FALLBACKS[h % HEATED_FALLBACKS.length] ?? "mm tell me more"];
+  }
+
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const casual = ["hey", "yo", "heyy", "wild", "damn", "fr?", "nice", "mhm"];
+  return [casual[h % casual.length] ?? "hey"];
+}

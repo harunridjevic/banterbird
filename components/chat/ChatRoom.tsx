@@ -5,18 +5,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Bot, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
+import { executeBotTurn, type BotApiBody } from "@/components/chat/bot-turn";
+import {
+  armGhostSchedule,
+  createGhostSchedule,
+  disarmGhostSchedule,
+  isBotMessage,
+} from "@/components/chat/ghost-watch";
+import { shouldClientSkipChat } from "@/lib/ai-practice-bot/client-skip";
+import { buildBotPersona, type BotPersona } from "@/lib/ai-practice-bot/persona";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PageLoader } from "@/components/ui/Loading";
 import type { MessageRow, SelfGender } from "@/lib/types/chat";
 import { getSupabaseKey, getSupabaseUrl } from "@/utils/supabase/env";
-import {
-  preTypingHesitation,
-  readDelayBeforeReplyMs,
-  readDelayOpenerMs,
-  runHumanlikeTyping,
-  typingDurationForReply,
-} from "./typing";
 
 type Props = { roomId: string };
 
@@ -38,6 +40,7 @@ export function ChatRoom({ roomId }: Props) {
   const typingHide = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitInFlightRef = useRef(false);
   const roomEndedRef = useRef(false);
+  const unloadBeaconSentRef = useRef(false);
   const accessTokenRef = useRef<string | null>(null);
   const [isAiRoom, setIsAiRoom] = useState(false);
   const isAiRoomRef = useRef(false);
@@ -46,6 +49,12 @@ export function ChatRoom({ roomId }: Props) {
   const flushLockRef = useRef(false);
   const answeredHumanIdsRef = useRef<Set<string>>(new Set());
   const openerDoneRef = useRef(false);
+  const ghostSchedule = useRef(createGhostSchedule());
+  const botPersonaRef = useRef<BotPersona | null>(null);
+  const botTimingRef = useRef<BotApiBody["timing"]>({});
+
+  const aiBusyRef = useRef(false);
+  const skipEndingRef = useRef(false);
 
   useEffect(() => {
     selfIdRef.current = selfId;
@@ -64,6 +73,12 @@ export function ChatRoom({ roomId }: Props) {
     answeredHumanIdsRef.current = new Set();
     replyQueueRef.current = [];
     flushLockRef.current = false;
+    disarmGhostSchedule(ghostSchedule.current);
+    botTimingRef.current = {};
+    botPersonaRef.current = null;
+    unloadBeaconSentRef.current = false;
+    roomEndedRef.current = false;
+    skipEndingRef.current = false;
   }, [roomId]);
 
   const endRoomBeacon = useCallback(() => {
@@ -71,8 +86,8 @@ export function ChatRoom({ roomId }: Props) {
     const supabaseKey = getSupabaseKey();
     if (!supabaseUrl || !supabaseKey) return;
 
-    if (roomEndedRef.current) return;
-    roomEndedRef.current = true;
+    if (unloadBeaconSentRef.current) return;
+    unloadBeaconSentRef.current = true;
 
     const endpoint = `${supabaseUrl}/rest/v1/rpc/end_active_room`;
     const token = accessTokenRef.current ?? undefined;
@@ -142,6 +157,13 @@ export function ChatRoom({ roomId }: Props) {
     }
     const isAi = Boolean(room.is_ai_room);
     setIsAiRoom(isAi);
+    if (isAi) {
+      const botG = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
+      const userG = (room.user_a_gender ?? "male") as SelfGender;
+      botPersonaRef.current = buildBotPersona(roomId, botG, userG);
+    } else {
+      botPersonaRef.current = null;
+    }
     if (room.user_a !== session.user.id && room.user_b !== session.user.id) {
       setPeerId(null);
       setPeerGender(null);
@@ -213,7 +235,7 @@ export function ChatRoom({ roomId }: Props) {
             if (prev.some((m) => m.id === row.id)) return prev;
             const merged: MessageRow = {
               ...row,
-              is_from_ai: Boolean(row.is_from_ai),
+              is_from_ai: Boolean(row.is_from_ai) || row.user_id == null,
             };
             return [...prev, merged];
           });
@@ -235,11 +257,7 @@ export function ChatRoom({ roomId }: Props) {
           }
         },
       )
-      .subscribe((status) => {
-        if (status === "CHANNEL_ERROR" || status === "CLOSED") {
-          endRoomBeacon();
-        }
-      });
+      .subscribe();
 
     return () => {
       void client.removeChannel(channel);
@@ -355,6 +373,7 @@ export function ChatRoom({ roomId }: Props) {
   );
 
   const endRoomAndGoMatch = useCallback(async (clearFilters: boolean) => {
+    disarmGhostSchedule(ghostSchedule.current);
     if (exitInFlightRef.current) return;
     exitInFlightRef.current = true;
     setExiting(true);
@@ -369,6 +388,7 @@ export function ChatRoom({ roomId }: Props) {
       setError(error.message);
       setExiting(false);
       exitInFlightRef.current = false;
+      skipEndingRef.current = false;
       return;
     }
 
@@ -381,27 +401,82 @@ export function ChatRoom({ roomId }: Props) {
     router.replace("/match");
   }, [client, roomId, router]);
 
+  const transcriptFromSnapshot = useCallback((snapshot: MessageRow[]) => {
+    return snapshot.map((m) => ({
+      role: (isBotMessage(m) ? "assistant" : "user") as "user" | "assistant",
+      content: m.content,
+    }));
+  }, []);
+
+  const finishSkipAndLeave = useCallback(async () => {
+    skipEndingRef.current = true;
+    disarmGhostSchedule(ghostSchedule.current);
+    replyQueueRef.current = [];
+    await endRoomAndGoMatch(false);
+  }, [endRoomAndGoMatch]);
+
+  const ghostCtx = useCallback(
+    (botMessageId?: string | null) => ({
+      schedule: ghostSchedule.current,
+      getMessages: () => messagesRef.current,
+      selfId: selfIdRef.current ?? "",
+      client,
+      roomId,
+      setPeerTyping,
+      onError: setError,
+      endRoom: () => finishSkipAndLeave(),
+      isActive: () => isAiRoomRef.current && !exitInFlightRef.current && !skipEndingRef.current,
+      botMessageId,
+    }),
+    [client, roomId, finishSkipAndLeave],
+  );
+
+  const armGhostAfterBot = useCallback(
+    (botMessageId?: string | null) => {
+      const self = selfIdRef.current;
+      if (!self || !isAiRoomRef.current || exitInFlightRef.current || skipEndingRef.current) return;
+
+      armGhostSchedule({
+        ...ghostCtx(botMessageId),
+        selfId: self,
+      });
+    },
+    [ghostCtx],
+  );
+
   const flushReplyQueue = useCallback(async () => {
     if (flushLockRef.current) return;
     const targetId = replyQueueRef.current.shift();
     if (!targetId) return;
     flushLockRef.current = true;
+    aiBusyRef.current = true;
     try {
       const snapshot = messagesRef.current;
       const idx = snapshot.findIndex((m) => m.id === targetId);
       if (idx < 0) return;
       const slice = snapshot.slice(0, idx + 1);
-      const transcript = slice.map((m) => ({
-        role: (m.is_from_ai ? "assistant" : "user") as "user" | "assistant",
-        content: m.content,
-      }));
+      const transcript = transcriptFromSnapshot(slice);
       const triggeringLen = slice[slice.length - 1]?.content.length ?? 0;
 
-      const sleep = (ms: number) => {
-        return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-      };
-
-      await sleep(readDelayBeforeReplyMs(triggeringLen));
+      const clientSkip = shouldClientSkipChat(transcript, botPersonaRef.current ?? undefined);
+      if (clientSkip.skip) {
+        const outcome = await executeBotTurn({
+          body: {
+            action: "skip",
+            parting: clientSkip.parting,
+            timing: botTimingRef.current,
+          },
+          client,
+          roomId,
+          setPeerTyping,
+          onError: setError,
+          userMessageLen: triggeringLen,
+        });
+        if (outcome === "skip") {
+          await finishSkipAndLeave();
+        }
+        return;
+      }
 
       const res = await fetch("/api/chat/ai-reply", {
         method: "POST",
@@ -409,49 +484,26 @@ export function ChatRoom({ roomId }: Props) {
         body: JSON.stringify({ roomId, messages: transcript }),
       });
       if (!res.ok) return;
-      const body = (await res.json()) as {
-        action?: string;
-        reply?: string;
-        parting?: string | null;
-      };
+      const body = (await res.json()) as BotApiBody;
+      if (body.timing) botTimingRef.current = body.timing;
 
-      if (body.action === "skip") {
-        replyQueueRef.current = [];
-        const parting =
-          typeof body.parting === "string" && body.parting.trim().length > 0
-            ? body.parting.trim()
-            : null;
-        if (parting) {
-          await preTypingHesitation();
-          await runHumanlikeTyping(setPeerTyping, typingDurationForReply(parting), parting.length);
-          const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
-            p_room_id: roomId,
-            p_content: parting,
-          });
-          if (rpcErr) setError(rpcErr.message);
-        } else {
-          await sleep(500 + Math.random() * 1400);
-          setPeerTyping(true);
-          await sleep(650 + Math.random() * 1700);
-          setPeerTyping(false);
-        }
-        await endRoomAndGoMatch(false);
+      const outcome = await executeBotTurn({
+        body,
+        client,
+        roomId,
+        setPeerTyping,
+        onError: setError,
+        userMessageLen: triggeringLen,
+      });
+
+      if (outcome === "skip") {
+        await finishSkipAndLeave();
         return;
       }
-
-      const reply = body.reply?.trim();
-      if (!reply) return;
-
-      await preTypingHesitation();
-      await runHumanlikeTyping(setPeerTyping, typingDurationForReply(reply), reply.length);
-
-      const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
-        p_room_id: roomId,
-        p_content: reply,
-      });
-      if (rpcErr) setError(rpcErr.message);
+      armGhostAfterBot(messagesRef.current[messagesRef.current.length - 1]?.id ?? null);
     } finally {
       flushLockRef.current = false;
+      aiBusyRef.current = false;
       setPeerTyping(false);
       if (replyQueueRef.current.length > 0) {
         queueMicrotask(() => {
@@ -459,21 +511,18 @@ export function ChatRoom({ roomId }: Props) {
         });
       }
     }
-  }, [client, endRoomAndGoMatch, roomId]);
+  }, [client, roomId, transcriptFromSnapshot, armGhostAfterBot, finishSkipAndLeave]);
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading) return;
     const t = window.setTimeout(async () => {
-      if (messagesRef.current.some((m) => m.is_from_ai)) return;
+      if (messagesRef.current.some((m) => isBotMessage(m))) return;
       if (messagesRef.current.length > 0) return;
       if (openerDoneRef.current) return;
       openerDoneRef.current = true;
-      const sleep = (ms: number) => {
-        return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-      };
+      aiBusyRef.current = true;
 
       try {
-        await sleep(readDelayOpenerMs());
         const res = await fetch("/api/chat/ai-reply", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -483,57 +532,53 @@ export function ChatRoom({ roomId }: Props) {
           }),
         });
         if (!res.ok) return;
-        const body = (await res.json()) as {
-          action?: string;
-          reply?: string;
-          parting?: string | null;
-        };
+        const body = (await res.json()) as BotApiBody;
+        if (body.timing) botTimingRef.current = body.timing;
 
-        if (body.action === "skip") {
-          const parting =
-            typeof body.parting === "string" && body.parting.trim().length > 0
-              ? body.parting.trim()
-              : null;
-          if (parting) {
-            await preTypingHesitation();
-            await runHumanlikeTyping(setPeerTyping, typingDurationForReply(parting), parting.length);
-            const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
-              p_room_id: roomId,
-              p_content: parting,
-            });
-            if (rpcErr) setError(rpcErr.message);
-          } else {
-            await sleep(500 + Math.random() * 1400);
-            setPeerTyping(true);
-            await sleep(650 + Math.random() * 1700);
-            setPeerTyping(false);
-          }
-          await endRoomAndGoMatch(false);
+        const outcome = await executeBotTurn({
+          body,
+          client,
+          roomId,
+          setPeerTyping,
+          onError: setError,
+          isOpener: true,
+        });
+        if (outcome === "skip") {
+          await finishSkipAndLeave();
           return;
         }
-
-        const reply = body.reply?.trim();
-        if (!reply) return;
-
-        await preTypingHesitation();
-        await runHumanlikeTyping(setPeerTyping, typingDurationForReply(reply), reply.length);
-
-        const { error: rpcErr } = await client.rpc("insert_ai_chat_message", {
-          p_room_id: roomId,
-          p_content: reply,
-        });
-        if (rpcErr) setError(rpcErr.message);
+        armGhostAfterBot(messagesRef.current[messagesRef.current.length - 1]?.id ?? null);
       } finally {
+        aiBusyRef.current = false;
         setPeerTyping(false);
       }
-    }, 1100); // Small delay before bot opener
+    }, 1100);
     return () => window.clearTimeout(t);
-  }, [ready, isAiRoom, loading, roomId, client, endRoomAndGoMatch]);
+  }, [ready, isAiRoom, loading, roomId, client, finishSkipAndLeave, armGhostAfterBot]);
+
+  // Re-arm ghost when bot message lands (covers missed arms + page reload mid-wait).
+  useEffect(() => {
+    if (!ready || !isAiRoom || loading || !selfId || exitInFlightRef.current || skipEndingRef.current) return;
+    if (aiBusyRef.current || flushLockRef.current) return;
+    if (ghostSchedule.current.pingSentAt !== null || ghostSchedule.current.skipTimer !== null) return;
+
+    const last = messages[messages.length - 1];
+    if (!last || !isBotMessage(last)) return;
+
+    const lastIdx = messages.findIndex((m) => m.id === last.id);
+    const userReplied = messages
+      .slice(lastIdx + 1)
+      .some((m) => !isBotMessage(m) && m.user_id === selfId);
+    if (userReplied) return;
+
+    armGhostAfterBot(last.id);
+  }, [messages, ready, isAiRoom, loading, selfId, armGhostAfterBot]);
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading || !selfId) return;
     const last = messages[messages.length - 1];
-    if (!last || last.is_from_ai || last.user_id !== selfId) return;
+    if (!last || isBotMessage(last) || last.user_id !== selfId) return;
+    disarmGhostSchedule(ghostSchedule.current);
     if (answeredHumanIdsRef.current.has(last.id)) return;
     answeredHumanIdsRef.current.add(last.id);
     replyQueueRef.current.push(last.id);
@@ -542,6 +587,7 @@ export function ChatRoom({ roomId }: Props) {
 
   const sendMessage = useCallback(
     async (text: string) => {
+      disarmGhostSchedule(ghostSchedule.current);
       const {
         data: { session },
       } = await client.auth.getSession();
@@ -663,7 +709,7 @@ export function ChatRoom({ roomId }: Props) {
               <p className="text-sm font-medium text-navy-800 dark:text-navy-100">No messages yet</p>
               <p className="mt-2 max-w-xs text-xs text-navy-500 dark:text-navy-400">
                 {isAiRoom
-                  ? "The practice bot will type like a human — short, imperfect lines. Say hi when you are ready."
+                  ? "Practice stranger v0.2 — imperfect typing, random vibe each match. Say hi when ready."
                   : "Say hi — your match is on the other side of this glassy little bubble."}
               </p>
             </motion.div>}
