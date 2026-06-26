@@ -6,35 +6,48 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
-/** Pause before we even ask the model — simulates reading what you wrote. */
-export function readDelayBeforeReplyMs(userMessageLen: number) {
-  const base = 520 + Math.random() * 2200;
-  const perChar = userMessageLen * (10 + Math.random() * 24);
-  return clamp(Math.round(base + perChar), 320, 4800);
+export type TimingScale = {
+  readScale?: number;
+  typingScale?: number;
+};
+
+function scale(n: number, s: number) {
+  return Math.round(n * (s > 0 ? s : 1));
 }
 
-export function readDelayOpenerMs() {
-  return clamp(Math.round(480 + Math.random() * 1700), 350, 2600);
+/** Pause before we even ask the model — simulates reading what you wrote. */
+export function readDelayBeforeReplyMs(userMessageLen: number, timing: TimingScale = {}) {
+  const s = timing.readScale ?? 1;
+  const base = 520 + Math.random() * 2200;
+  const perChar = userMessageLen * (10 + Math.random() * 24);
+  return clamp(scale(base + perChar, s), 280, 7200);
+}
+
+export function readDelayOpenerMs(timing: TimingScale = {}) {
+  const s = timing.readScale ?? 1;
+  return clamp(scale(480 + Math.random() * 1700, s), 300, 3800);
 }
 
 /** After the reply is known — sometimes a short think before fingers move. */
-export async function preTypingHesitation() {
+export async function preTypingHesitation(timing: TimingScale = {}) {
+  const s = timing.typingScale ?? 1;
   if (Math.random() < 0.45) {
-    await sleep(Math.round(80 + Math.random() * 420));
+    await sleep(scale(80 + Math.random() * 420, s));
     return;
   }
-  await sleep(Math.round(280 + Math.random() * 900));
+  await sleep(scale(280 + Math.random() * 900, s));
   if (Math.random() < 0.22) {
-    await sleep(Math.round(650 + Math.random() * 1400));
+    await sleep(scale(650 + Math.random() * 1400, s));
   }
 }
 
 /** How long to show "typing" — scales with length, with jitter. */
-export function typingDurationForReply(reply: string) {
+export function typingDurationForReply(reply: string, timing: TimingScale = {}) {
+  const s = timing.typingScale ?? 1;
   const len = reply.length;
   const msPerChar = 28 + Math.random() * 64;
   const wave = Math.sin(len * 0.13) * 180;
-  return clamp(Math.round(len * msPerChar + wave + Math.random() * 520), 550, 15500);
+  return clamp(scale(len * msPerChar + wave + Math.random() * 520, s), 400, 18_000);
 }
 
 export async function runHumanlikeTyping(

@@ -4,13 +4,21 @@ import {
   PRACTICE_BOT_OUTPUT_JSON_RULES,
   PRACTICE_BOT_SYSTEM_INSTRUCTIONS,
 } from "@/lib/ai-practice-bot/instructions";
+import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock } from "@/lib/ai-practice-bot/memory";
+import { buildBotPersona, formatPersonaPrompt, personaAllowsSexualChat, personaTiming, type SelfGender } from "@/lib/ai-practice-bot/persona";
+import {
+  applySessionPolicy,
+  decideFallbackTurn,
+  GEMINI_OPENER_USER_TURN,
+  jsonBody,
+  parseModelTurn,
+  sessionContextOverlay,
+  triggerOverlay,
+  type AiPracticeTurnResult,
+  type AiReplyTrigger,
+  type ChatTurn,
+} from "@/lib/ai-practice-bot/turn";
 import { createClient } from "@/utils/supabase/server";
-
-type ChatTurn = { role: "user" | "assistant"; content: string };
-
-type AiPracticeTurnResult =
-  | { action: "reply"; reply: string }
-  | { action: "skip"; parting: string | null };
 
 function googleApiKey(): string | undefined {
   return (
@@ -28,136 +36,68 @@ function baseSystemPrompt(): string {
   return PRACTICE_BOT_SYSTEM_INSTRUCTIONS;
 }
 
-function fullSystemPrompt(): string {
-  return `${baseSystemPrompt()}\n\n${PRACTICE_BOT_OUTPUT_JSON_RULES}`.trim();
+function buildSystemPrompt(
+  personaBlock: string,
+  memoryBlock: string,
+  sessionBlock: string,
+  trigger: AiReplyTrigger,
+): string {
+  const triggerLine = triggerOverlay(trigger);
+  return [
+    baseSystemPrompt(),
+    personaBlock,
+    memoryBlock,
+    sessionBlock,
+    PRACTICE_BOT_OUTPUT_JSON_RULES,
+    triggerLine,
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
 }
 
-function geminiSystemPrompt(): string {
-  return `${baseSystemPrompt()}
-
-Opening turn: if the only user message is ".", the chat just connected and nobody has spoken — greet them casually in one short line.
-Structured fields are parsed by the app; only put normal chat in text/parting.`.trim();
+function geminiSystemPrompt(
+  personaBlock: string,
+  memoryBlock: string,
+  sessionBlock: string,
+  trigger: AiReplyTrigger,
+  flirtyStarter: boolean,
+  chatMode: "friendly" | "flirty",
+): string {
+  const opener =
+    flirtyStarter && chatMode === "flirty"
+      ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi — messages array.'
+      : 'Opening turn (user msg is only "."): casual friendly hi — messages array.';
+  return `${buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger)}\n\n${opener}`;
 }
 
 const GEMINI_RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
-    action: { type: "STRING", enum: ["reply", "skip"] },
-    text: {
-      type: "STRING",
-      description: "Short casual chat line shown to the other person when action is reply.",
+    action: { type: "STRING", enum: ["reply", "skip", "away"] },
+    messages: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+      description: "Chat bubbles shown to the other person when action is reply or away.",
     },
+    text: { type: "STRING", description: "Legacy single line if messages omitted." },
     parting: {
       type: "STRING",
-      description: "Optional short sign-off shown when action is skip.",
+      description: "Optional sign-off when action is skip.",
       nullable: true,
+    },
+    awaySeconds: {
+      type: "NUMBER",
+      description: "Seconds away when action is away (20-120).",
+    },
+    returnMessages: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+      description: "Lines sent after coming back from away.",
     },
   },
   required: ["action"],
 } as const;
-
-const GEMINI_OPENER_USER_TURN = ".";
-
-const META_REPLY_RE =
-  /\b(json|here is the|single json|action|reply with only|object|schema|format)\b|^\s*\{|"action"\s*:/i;
-
-function isAcceptableChatLine(text: string): boolean {
-  const t = text.replace(/\s+/g, " ").trim();
-  if (!t || t === GEMINI_OPENER_USER_TURN) return false;
-  if (META_REPLY_RE.test(t)) return false;
-  if (/[{}[\]]/.test(t)) return false;
-  return true;
-}
-
-const FALLBACKS = [
-  "hey",
-  "yo",
-  "sup",
-  "hmm interesting",
-  "lol fair",
-  "same honestly",
-  "wild",
-  "mhm",
-  "nice",
-  "damn",
-  "fr?",
-  "lowkey yeah",
-];
-
-function pickFallback(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return FALLBACKS[h % FALLBACKS.length] ?? "hey";
-}
-
-function parseModelTurn(raw: string, history: ChatTurn[]): AiPracticeTurnResult {
-  const seed = history.map((m) => m.content).join("|") || "open";
-  let obj: unknown;
-  try {
-    obj = JSON.parse(raw);
-  } catch {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try {
-        obj = JSON.parse(raw.slice(start, end + 1));
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  if (obj && typeof obj === "object" && obj !== null) {
-    const o = obj as Record<string, unknown>;
-    if (o.action === "skip") {
-      const p = o.parting;
-      if (typeof p === "string") {
-        const t = p.replace(/\s+/g, " ").trim().slice(0, 200);
-        return { action: "skip", parting: isAcceptableChatLine(t) ? t : null };
-      }
-      return { action: "skip", parting: null };
-    }
-    if (o.action === "reply") {
-      const candidate =
-        (typeof o.text === "string" ? o.text : null) ??
-        (typeof o.reply === "string" ? o.reply : null);
-      if (candidate) {
-        const text = candidate.replace(/\s+/g, " ").trim().slice(0, 200);
-        if (isAcceptableChatLine(text)) return { action: "reply", reply: text };
-      }
-    }
-  }
-
-  const flat = raw.replace(/\s+/g, " ").trim().slice(0, 200);
-  if (flat.length > 0 && isAcceptableChatLine(flat)) {
-    return { action: "reply", reply: flat };
-  }
-  return { action: "reply", reply: pickFallback(seed) };
-}
-
-function decideFallbackTurn(history: ChatTurn[]): AiPracticeTurnResult {
-  const users = history.filter((m) => m.role === "user");
-  const seed = history.map((m) => m.content).join("|") || "open";
-
-  if (users.length === 0) {
-    return { action: "reply", reply: pickFallback(seed) };
-  }
-
-  const last = users[users.length - 1]?.content ?? "";
-  const coarseSensitive =
-    /\b(sex|nude|naked|porn|nsfw|suicid|kill you|murder|rape|pedo|cp\b|address\b|social security|ssn\b)\b/i.test(
-      last,
-    );
-  if (coarseSensitive) {
-    return { action: "skip", parting: "nah im out" };
-  }
-
-  if (users.length >= 3 && Math.random() < 0.07) {
-    return { action: "skip", parting: Math.random() < 0.55 ? "gotta go" : null };
-  }
-
-  return { action: "reply", reply: pickFallback(seed) };
-}
 
 function geminiContents(history: ChatTurn[]) {
   if (history.length === 0) {
@@ -169,16 +109,16 @@ function geminiContents(history: ChatTurn[]) {
   }));
 }
 
-async function callGemini(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
+async function fetchGeminiRaw(
+  history: ChatTurn[],
+  systemPrompt: string,
+  maxOutputTokens: number,
+): Promise<string | null> {
   const key = googleApiKey();
-  if (!key) {
-    return decideFallbackTurn(history);
-  }
+  if (!key) return null;
 
   const model = process.env.GEMINI_CHAT_MODEL?.trim() || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-  const contents = geminiContents(history);
 
   const res = await fetch(url, {
     method: "POST",
@@ -187,13 +127,11 @@ async function callGemini(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
       "x-goog-api-key": key,
     },
     body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: geminiSystemPrompt() }],
-      },
-      contents,
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: geminiContents(history),
       generationConfig: {
-        temperature: 1.05,
-        maxOutputTokens: 256,
+        temperature: 1.08,
+        maxOutputTokens,
         responseMimeType: "application/json",
         responseSchema: GEMINI_RESPONSE_SCHEMA,
       },
@@ -203,26 +141,27 @@ async function callGemini(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("Gemini error:", res.status, errText);
-    return decideFallbackTurn(history);
+    return null;
   }
 
   const json = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
   };
-  const raw =
+  return (
     json.candidates?.[0]?.content?.parts
       ?.map((part) => part.text ?? "")
       .join("")
-      .trim() ?? "";
-  if (!raw) return decideFallbackTurn(history);
-  return parseModelTurn(raw, history);
+      .trim() ?? null
+  );
 }
 
-async function callOpenAI(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
+async function fetchOpenAIRaw(
+  history: ChatTurn[],
+  systemPrompt: string,
+  maxOutputTokens: number,
+): Promise<string | null> {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) {
-    return decideFallbackTurn(history);
-  }
+  if (!key) return null;
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -232,32 +171,50 @@ async function callOpenAI(history: ChatTurn[]): Promise<AiPracticeTurnResult> {
     },
     body: JSON.stringify({
       model: process.env.OPENAI_CHAT_MODEL ?? "gpt-4o-mini",
-      temperature: 1.05,
-      max_tokens: 128,
+      temperature: 1.08,
+      max_tokens: maxOutputTokens,
       response_format: { type: "json_object" },
-      messages: [{ role: "system", content: fullSystemPrompt() }, ...history],
+      messages: [{ role: "system", content: systemPrompt }, ...history],
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("OpenAI error:", res.status, errText);
-    return decideFallbackTurn(history);
+    return null;
   }
 
   const json = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
   };
-  const raw = json.choices?.[0]?.message?.content?.trim() ?? "";
-  if (!raw) return decideFallbackTurn(history);
-  return parseModelTurn(raw, history);
+  return json.choices?.[0]?.message?.content?.trim() ?? null;
 }
 
-function jsonBody(result: AiPracticeTurnResult) {
-  if (result.action === "reply") {
-    return { action: "reply" as const, reply: result.reply };
+async function callLlm(
+  history: ChatTurn[],
+  systemPrompt: string,
+  persona: ReturnType<typeof buildBotPersona>,
+  memory: ReturnType<typeof buildUserMemory>,
+): Promise<AiPracticeTurnResult> {
+  const maxOutputTokens = memory.sexualVibe ? 768 : 512;
+  const fetchRaw = googleApiKey() ? fetchGeminiRaw : fetchOpenAIRaw;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await fetchRaw(history, systemPrompt, maxOutputTokens);
+    if (!raw) continue;
+    const parsed = parseModelTurn(raw, history, persona, memory);
+    if (parsed) return parsed;
   }
-  return { action: "skip" as const, parting: result.parting };
+
+  return {
+    action: "reply",
+    messages: contextualFallbackReply(
+      history,
+      memory,
+      personaAllowsSexualChat(persona, memory.sexualVibe),
+    ),
+    timing: personaTiming(persona),
+  };
 }
 
 export async function POST(req: Request) {
@@ -274,16 +231,20 @@ export async function POST(req: Request) {
     const body = (await req.json()) as {
       roomId?: string;
       messages?: ChatTurn[];
+      trigger?: AiReplyTrigger;
     };
     const roomId = body.roomId;
     const history = Array.isArray(body.messages) ? body.messages : [];
+    const trigger: AiReplyTrigger =
+      body.trigger === "idle_ping" || body.trigger === "idle_skip" ? body.trigger : "normal";
+
     if (!roomId) {
       return NextResponse.json({ error: "roomId required" }, { status: 400 });
     }
 
     const { data: room, error: roomErr } = await supabase
       .from("rooms")
-      .select("id,is_ai_room,user_a,user_b,ended_at")
+      .select("id,is_ai_room,user_a,user_b,user_a_gender,user_b_gender,bot_gender,ended_at")
       .eq("id", roomId)
       .maybeSingle();
 
@@ -297,16 +258,49 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const trimmedHistory = history.slice(-24);
-    let result = googleApiKey()
-      ? await callGemini(trimmedHistory)
-      : await callOpenAI(trimmedHistory);
-    const hasUserTurn = trimmedHistory.some((m) => m.role === "user");
-    if (!hasUserTurn && result.action === "skip") {
-      result = { action: "reply", reply: pickFallback("open") };
+    const botGender = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
+    const userGender = (room.user_a_gender ?? "male") as SelfGender;
+    const persona = buildBotPersona(roomId, botGender, userGender);
+    const trimmedHistory = history.slice(-28);
+    const memory = buildUserMemory(trimmedHistory);
+    const memoryBlock = formatUserMemoryBlock(memory, persona);
+    const sessionBlock = sessionContextOverlay(memory, persona);
+    const personaBlock = formatPersonaPrompt(persona);
+
+    if (trigger === "idle_ping" || trigger === "idle_skip") {
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory);
+      return NextResponse.json({
+        ...jsonBody(result),
+        persona: {
+          version: persona.version,
+          genderTag: persona.genderTag,
+          country: persona.country,
+        },
+      });
     }
 
-    return NextResponse.json(jsonBody(result));
+    const systemPrompt = googleApiKey()
+      ? geminiSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, persona.flirtyStarter, persona.chatMode)
+      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger);
+
+    let result = await callLlm(trimmedHistory, systemPrompt, persona, memory);
+
+    result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger);
+
+    const hasUserTurn = trimmedHistory.some((m) => m.role === "user");
+    if (!hasUserTurn && result.action === "skip") {
+      result = decideFallbackTurn(trimmedHistory, persona, "normal", memory);
+    }
+
+    return NextResponse.json({
+      ...jsonBody(result),
+      persona: {
+        version: persona.version,
+        genderTag: persona.genderTag,
+        country: persona.country,
+        sexualDisposition: persona.sexualDisposition,
+      },
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
