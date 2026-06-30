@@ -28,7 +28,7 @@ export function MetricCard({
   label: string;
   value: string;
   tooltip: string;
-  accent?: "violet" | "emerald" | "sky" | "amber";
+  accent?: "violet" | "emerald" | "sky" | "amber" | "rose";
 }) {
   const accentClass =
     accent === "emerald"
@@ -37,7 +37,9 @@ export function MetricCard({
         ? "border-sky-500/20"
         : accent === "amber"
           ? "border-amber-500/20"
-          : "border-violet-500/20";
+          : accent === "rose"
+            ? "border-rose-500/20"
+            : "border-violet-500/20";
 
   return (
     <div className={`rounded-xl border bg-black/20 p-4 ${accentClass}`}>

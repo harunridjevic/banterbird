@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ApiUsageChart, RoomsChart, UniqueUsersChart } from "@/components/ops/AnalyticsCharts";
+import { ApiUsageChart, ApiCostChart, RoomsChart, UniqueUsersChart } from "@/components/ops/AnalyticsCharts";
 import { MetricCard } from "@/components/ops/MetricCard";
 import {
   type AnalyticsPeriod,
@@ -11,7 +11,7 @@ import {
   periodLabel,
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
-import { useSupabase } from "@/app/providers";
+import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 function fmtNum(n: number | null | undefined, suffix = ""): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
@@ -23,6 +23,19 @@ function fmtPct(n: number | null | undefined): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+function fmtUsd(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n < 0.01 && n > 0) return "<$0.01";
+  return `$${n.toFixed(2)}`;
+}
+
+function fmtTokens(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
 const PERIODS: { id: AnalyticsPeriod; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "week", label: "7 days" },
@@ -32,7 +45,7 @@ const PERIODS: { id: AnalyticsPeriod; label: string }[] = [
 ];
 
 export default function OpsAnalyticsPage() {
-  const { client, ready } = useSupabase();
+  const liveOnlineCount = useOnlineCount();
   const [password, setPassword] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -153,18 +166,6 @@ export default function OpsAnalyticsPage() {
     const id = setInterval(() => void load(), 60_000);
     return () => clearInterval(id);
   }, [unlocked, load]);
-
-  // Send heartbeat to count analytics viewers as online
-  useEffect(() => {
-    if (!ready) return;
-    const sendHeartbeat = async () => {
-      const { error } = await client.rpc("heartbeat_presence");
-      if (error) console.error("Heartbeat error in analytics:", error);
-    };
-    void sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 60_000);
-    return () => clearInterval(interval);
-  }, [client, ready]);
 
   const providerEntries = snapshot
     ? Object.entries(snapshot.apiUsage.byProvider).sort((a, b) => b[1] - a[1])
@@ -320,7 +321,7 @@ export default function OpsAnalyticsPage() {
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <MetricCard
                       label="Online now"
-                      value={fmtNum(snapshot.onlineUsersNow)}
+                      value={fmtNum(liveOnlineCount)}
                       tooltip={METRIC_TOOLTIPS.onlineUsersNow}
                       accent="emerald"
                     />
@@ -339,6 +340,18 @@ export default function OpsAnalyticsPage() {
                       label="Avg time per user"
                       value={`${fmtNum(snapshot.avgUserSessionMinutes)} min`}
                       tooltip={METRIC_TOOLTIPS.avgUserSessionMinutes}
+                    />
+                    <MetricCard
+                      label="Total time (all users)"
+                      value={`${fmtNum(snapshot.totalUserSessionMinutes)} min`}
+                      tooltip={METRIC_TOOLTIPS.totalUserSessionMinutes}
+                      accent="violet"
+                    />
+                    <MetricCard
+                      label="Bounce rate"
+                      value={fmtPct(snapshot.bounceRate)}
+                      tooltip={METRIC_TOOLTIPS.bounceRate}
+                      accent="rose"
                     />
                   </dl>
                 </section>
@@ -415,6 +428,29 @@ export default function OpsAnalyticsPage() {
                       value={fmtNum(snapshot.apiUsage.errorCalls)}
                       tooltip="AI API calls that returned an error or fell back to local responses."
                     />
+                    <MetricCard
+                      label="Total tokens"
+                      value={fmtTokens(snapshot.apiUsage.totalTokens)}
+                      tooltip={METRIC_TOOLTIPS.apiTotalTokens}
+                      accent="amber"
+                    />
+                    <MetricCard
+                      label="Est. API cost"
+                      value={fmtUsd(snapshot.apiUsage.estimatedCostUsd)}
+                      tooltip={METRIC_TOOLTIPS.apiEstimatedCost}
+                      accent="amber"
+                    />
+                    <MetricCard
+                      label="Tokens per user"
+                      value={fmtTokens(snapshot.apiUsage.avgTokensPerUser)}
+                      tooltip={METRIC_TOOLTIPS.apiAvgTokensPerUser}
+                      accent="amber"
+                    />
+                    <MetricCard
+                      label="Users with API calls"
+                      value={fmtNum(snapshot.apiUsage.usersWithApiCalls)}
+                      tooltip="Distinct users who triggered at least one Gemini/OpenAI call in the window."
+                    />
                   </dl>
                   {providerEntries.length > 0 ? (
                     <ul className="mt-3 flex flex-wrap gap-3 text-sm text-navy-300">
@@ -440,6 +476,9 @@ export default function OpsAnalyticsPage() {
                     <RoomsChart snapshot={snapshot} />
                     <div className="lg:col-span-2">
                       <ApiUsageChart snapshot={snapshot} />
+                    </div>
+                    <div className="lg:col-span-2">
+                      <ApiCostChart snapshot={snapshot} />
                     </div>
                   </div>
                 </section>

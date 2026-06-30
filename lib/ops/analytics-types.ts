@@ -10,6 +10,7 @@ export const PERIOD_DAYS: Record<Exclude<AnalyticsPeriod, "custom">, number> = {
 export type DayPoint = { date: string; value: number };
 export type RoomsDayPoint = { date: string; human: number; bot: number; total: number };
 export type ApiDayPoint = { date: string; calls: number; errors: number };
+export type ApiCostDayPoint = { date: string; costUsd: number; tokens: number };
 
 export type AnalyticsSnapshot = {
   windowDays: number;
@@ -17,6 +18,7 @@ export type AnalyticsSnapshot = {
   computedAtUtc: string;
   uniqueUsers: number;
   avgUserSessionMinutes: number | null;
+  totalUserSessionMinutes: number;
   humanChats: number;
   botChats: number;
   totalRooms: number;
@@ -24,17 +26,27 @@ export type AnalyticsSnapshot = {
   avgBotRoomMinutes: number | null;
   onlineUsersNow: number;
   recurringUsers: number;
+  bounceRate: number | null;
+  bouncedRooms: number;
+  endedHumanRooms: number;
   apiUsage: {
     totalCalls: number;
     errorCalls: number;
     successRate: number | null;
     avgLatencyMs: number | null;
     byProvider: Record<string, number>;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalTokens: number;
+    estimatedCostUsd: number;
+    usersWithApiCalls: number;
+    avgTokensPerUser: number | null;
   };
   series: {
     uniqueUsersByDay: DayPoint[];
     roomsByDay: RoomsDayPoint[];
     apiCallsByDay: ApiDayPoint[];
+    apiCostByDay: ApiCostDayPoint[];
   };
 };
 
@@ -51,12 +63,19 @@ export const METRIC_TOOLTIPS = {
   avgBotRoomMinutes:
     "Average duration of AI practice rooms — from created_at to ended_at (or now if still open).",
   onlineUsersNow:
-    "Users with an active app tab who sent a heartbeat in the last 2 minutes.",
+    "Live count from Supabase Realtime presence — same source as the main app navbar.",
   recurringUsers:
-    "Users who were active on 2 or more different calendar days (UTC) in the window.",
+    "Users who visited or chatted on 2 or more different calendar days (UTC) in the window.",
+  totalUserSessionMinutes:
+    "Combined time all users spent in rooms during the window — sum of every room session.",
+  bounceRate:
+    "Share of ended human-human chats where the user left within 30 seconds or sent no messages.",
   apiTotalCalls: "Total AI reply API calls (Gemini/OpenAI) during the window.",
   apiSuccessRate: "Share of AI API calls that completed without an error response.",
   apiAvgLatency: "Average round-trip time for AI API calls in milliseconds.",
+  apiTotalTokens: "Total input + output tokens consumed by Gemini/OpenAI calls in the window.",
+  apiEstimatedCost: "Estimated API spend in USD based on token counts and configured per-model rates.",
+  apiAvgTokensPerUser: "Average tokens used per user who triggered at least one AI API call.",
 } as const;
 
 export function resolvePeriodDays(period: AnalyticsPeriod, customDays: number): number {

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { BarChart3, Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useSupabase } from "@/app/providers";
 
 const cards = [
   {
@@ -21,7 +20,6 @@ const cards = [
 ] as const;
 
 export default function OpsDashboardPage() {
-  const { client, ready } = useSupabase();
   const [password, setPassword] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,17 +65,6 @@ export default function OpsDashboardPage() {
     })();
   }, []);
 
-  // Send heartbeat to count dashboard viewers as online
-  useEffect(() => {
-    if (!ready) return;
-    const sendHeartbeat = async () => {
-      const { error } = await client.rpc("heartbeat_presence");
-      if (error) console.error("Heartbeat error in dashboard:", error);
-    };
-    void sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 60_000);
-    return () => clearInterval(interval);
-  }, [client, ready]);
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-3xl">

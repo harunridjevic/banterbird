@@ -4,11 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type BotSettings } from "@/lib/ops/bot-settings";
 import { useBotSettings } from "@/lib/ops/use-bot-settings";
-import { useSupabase } from "@/app/providers";
 
 export default function OpsBotSettingsPage() {
   const { settings, save, reset } = useBotSettings();
-  const { client, ready } = useSupabase();
   const [password, setPassword] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,18 +51,6 @@ export default function OpsBotSettingsPage() {
       }
     })();
   }, []);
-
-  // Send heartbeat to count settings viewers as online
-  useEffect(() => {
-    if (!ready) return;
-    const sendHeartbeat = async () => {
-      const { error } = await client.rpc("heartbeat_presence");
-      if (error) console.error("Heartbeat error in settings:", error);
-    };
-    void sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 60_000);
-    return () => clearInterval(interval);
-  }, [client, ready]);
 
   const patch = useCallback(
     (partial: Partial<BotSettings>) => {

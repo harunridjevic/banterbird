@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -80,6 +81,76 @@ export function RoomsChart({ snapshot }: ChartProps) {
         </BarChart>
       </ResponsiveContainer>
     </ChartShell>
+  );
+}
+
+export function ApiCostChart({ snapshot }: ChartProps) {
+  const data = (snapshot.series.apiCostByDay ?? []).map((p) => ({
+    date: shortDate(p.date),
+    Cost: p.costUsd,
+    Tokens: p.tokens,
+  }));
+
+  if (data.length === 0) {
+    return <EmptyChart message="No Gemini/OpenAI cost logged yet." />;
+  }
+
+  return (
+    <ChartShell title="Gemini API cost per day">
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+          <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 11 }} tickLine={false} />
+          <YAxis
+            yAxisId="cost"
+            tick={{ fill: "#94a3b8", fontSize: 11 }}
+            tickLine={false}
+            tickFormatter={(v: number) => `$${v}`}
+          />
+          <YAxis
+            yAxisId="tokens"
+            orientation="right"
+            tick={{ fill: "#64748b", fontSize: 11 }}
+            tickLine={false}
+            tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))}
+          />
+          <Tooltip content={<CostChartTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
+          <Bar yAxisId="cost" dataKey="Cost" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+          <Line
+            yAxisId="tokens"
+            type="monotone"
+            dataKey="Tokens"
+            name="Tokens"
+            stroke="#a78bfa"
+            strokeWidth={2}
+            dot={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </ChartShell>
+  );
+}
+
+function CostChartTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { name: string; value: number; color: string }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border border-white/10 bg-navy-950 px-3 py-2 text-xs shadow-xl">
+      <p className="mb-1 font-medium text-navy-300">{label}</p>
+      {payload.map((p) => (
+        <p key={p.name} style={{ color: p.color }}>
+          {p.name}: {p.name === "Cost" ? `$${p.value.toFixed(4)}` : p.value.toLocaleString()}
+        </p>
+      ))}
+    </div>
   );
 }
 
