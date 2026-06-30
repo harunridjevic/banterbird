@@ -53,6 +53,7 @@ export function ChatRoom({ roomId }: Props) {
   const flushLockRef = useRef(false);
   const answeredHumanIdsRef = useRef<Set<string>>(new Set());
   const openerDoneRef = useRef(false);
+  const openerTimerRef = useRef<number | null>(null);
   const ghostSchedule = useRef(createGhostSchedule());
   const botPersonaRef = useRef<BotPersona | null>(null);
   const botTimingRef = useRef<BotApiBody["timing"]>({});
@@ -60,6 +61,28 @@ export function ChatRoom({ roomId }: Props) {
 
   const aiBusyRef = useRef(false);
   const skipEndingRef = useRef(false);
+
+  const [hideBotUi, setHideBotUi] = useState(
+    () => loadBotSettings().matchMode === "hidden_bots",
+  );
+  const [hideGenderFilters, setHideGenderFilters] = useState(
+    () => loadBotSettings().hideGenderFilters,
+  );
+
+  const cancelOpener = useCallback(() => {
+    if (openerTimerRef.current !== null) {
+      window.clearTimeout(openerTimerRef.current);
+      openerTimerRef.current = null;
+    }
+    openerDoneRef.current = true;
+  }, []);
+
+  const userHasSpoken = useCallback((snapshot?: MessageRow[]) => {
+    const msgs = snapshot ?? messagesRef.current;
+    const self = selfIdRef.current;
+    if (!self) return msgs.some((m) => !isBotMessage(m));
+    return msgs.some((m) => !isBotMessage(m) && m.user_id === self);
+  }, []);
 
   useEffect(() => {
     selfIdRef.current = selfId;
@@ -76,6 +99,8 @@ export function ChatRoom({ roomId }: Props) {
   useEffect(() => {
     const refresh = () => {
       botSettingsRef.current = loadBotSettings();
+      setHideBotUi(botSettingsRef.current.matchMode === "hidden_bots");
+      setHideGenderFilters(botSettingsRef.current.hideGenderFilters);
       if (isAiRoomRef.current && botPersonaRef.current) {
         const p = botPersonaRef.current;
         botPersonaRef.current = buildBotPersona(roomId, p.botGender, p.userGender, botSettingsRef.current);
@@ -88,6 +113,10 @@ export function ChatRoom({ roomId }: Props) {
 
   useEffect(() => {
     openerDoneRef.current = false;
+    if (openerTimerRef.current !== null) {
+      window.clearTimeout(openerTimerRef.current);
+      openerTimerRef.current = null;
+    }
     answeredHumanIdsRef.current = new Set();
     replyQueueRef.current = [];
     flushLockRef.current = false;
@@ -242,6 +271,19 @@ export function ChatRoom({ roomId }: Props) {
           }
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "rooms",
+          filter: `id=eq.${roomId}`,
+        },
+        () => {
+          roomEndedRef.current = true;
+          router.replace("/match");
+        },
+      )
       .subscribe();
 
     return () => {
@@ -369,10 +411,15 @@ export function ChatRoom({ roomId }: Props) {
       return;
     }
 
-    // Fire-and-forget cleanup
+    // Fire-and-forget cleanup (room may already be deleted by end_active_room RPC).
     if (typeof window !== "undefined") {
       const url = `${window.location.origin}/api/chat/cleanup-room`;
-      fetch(url, { method: "POST", body: JSON.stringify({ roomId }), keepalive: true, headers: { "Content-Type": "application/json" } });
+      fetch(url, {
+        method: "POST",
+        body: JSON.stringify({ roomId }),
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+      }).catch(() => undefined);
     }
     roomEndedRef.current = true;
     router.replace("/match");
@@ -506,10 +553,11 @@ export function ChatRoom({ roomId }: Props) {
   useEffect(() => {
     if (!ready || !isAiRoom || loading) return;
     const openerDelay = botSettingsRef.current.openerDelayMs;
-    const t = window.setTimeout(async () => {
-      if (messagesRef.current.some((m) => isBotMessage(m))) return;
-      if (messagesRef.current.length > 0) return;
+    openerTimerRef.current = window.setTimeout(async () => {
+      openerTimerRef.current = null;
       if (openerDoneRef.current) return;
+      if (messagesRef.current.some((m) => isBotMessage(m))) return;
+      if (userHasSpoken()) return;
       openerDoneRef.current = true;
       aiBusyRef.current = true;
 
@@ -524,8 +572,10 @@ export function ChatRoom({ roomId }: Props) {
           }),
         });
         if (!res.ok) return;
+        if (userHasSpoken()) return;
         const body = (await res.json()) as BotApiBody;
         if (body.timing) botTimingRef.current = body.timing;
+        if (userHasSpoken()) return;
 
         const outcome = await executeBotTurn({
           body,
@@ -545,8 +595,13 @@ export function ChatRoom({ roomId }: Props) {
         setPeerTyping(false);
       }
     }, openerDelay);
-    return () => window.clearTimeout(t);
-  }, [ready, isAiRoom, loading, roomId, client, finishSkipAndLeave, armGhostAfterBot]);
+    return () => {
+      if (openerTimerRef.current !== null) {
+        window.clearTimeout(openerTimerRef.current);
+        openerTimerRef.current = null;
+      }
+    };
+  }, [ready, isAiRoom, loading, roomId, client, finishSkipAndLeave, armGhostAfterBot, userHasSpoken]);
 
   // Re-arm ghost when bot message lands (covers missed arms + page reload mid-wait).
   useEffect(() => {
@@ -570,15 +625,17 @@ export function ChatRoom({ roomId }: Props) {
     if (!ready || !isAiRoom || loading || !selfId) return;
     const last = messages[messages.length - 1];
     if (!last || isBotMessage(last) || last.user_id !== selfId) return;
+    cancelOpener();
     disarmGhostSchedule(ghostSchedule.current);
     if (answeredHumanIdsRef.current.has(last.id)) return;
     answeredHumanIdsRef.current.add(last.id);
     replyQueueRef.current.push(last.id);
     void flushReplyQueue();
-  }, [messages, ready, isAiRoom, loading, selfId, flushReplyQueue]);
+  }, [messages, ready, isAiRoom, loading, selfId, flushReplyQueue, cancelOpener]);
 
   const sendMessage = useCallback(
     async (text: string) => {
+      if (isAiRoomRef.current) cancelOpener();
       disarmGhostSchedule(ghostSchedule.current);
       const {
         data: { session },
@@ -593,8 +650,11 @@ export function ChatRoom({ roomId }: Props) {
         setError(insErr.message);
       }
     },
-    [client, roomId],
+    [client, roomId, cancelOpener],
   );
+
+  const displayAsHuman = isAiRoom && hideBotUi;
+  const showPeerGender = !hideGenderFilters && !displayAsHuman;
 
   if (loading || !selfId) {
     return <PageLoader label="Opening your chat…" />;
@@ -633,7 +693,7 @@ export function ChatRoom({ roomId }: Props) {
         <div className="min-w-0 flex-1 text-center">
           <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
             <p className="text-sm font-semibold text-navy-950 dark:text-navy-50">Anonymous chat</p>
-            {isAiRoom ? (
+            {!displayAsHuman && isAiRoom ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/40 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-900 dark:text-violet-100 sm:text-[11px]">
                 <Bot className="h-3 w-3" aria-hidden />
                 Practice bot
@@ -660,21 +720,27 @@ export function ChatRoom({ roomId }: Props) {
               />
               {peerPresence === "unknown" ? "…" : peerPresence === "online" ? "Online" : "Offline"}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-navy-200/70 bg-white/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy-600 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-300 sm:text-[11px]">
-              {peerGender === "male" ? (
-                <Mars className="h-3 w-3 text-blue-500" aria-hidden />
-              ) : peerGender === "female" ? (
-                <Venus className="h-3 w-3 text-pink-500" aria-hidden />
-              ) : (
-                <span className="inline-block h-2 w-2 rounded-full bg-navy-300 dark:bg-navy-600" aria-hidden />
-              )}
-              {isAiRoom ? "Bot persona" : peerGender === "male" ? "Man" : peerGender === "female" ? "Woman" : "Unknown"}
-            </span>
+            {showPeerGender ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-navy-200/70 bg-white/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy-600 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-300 sm:text-[11px]">
+                {peerGender === "male" ? (
+                  <Mars className="h-3 w-3 text-blue-500" aria-hidden />
+                ) : peerGender === "female" ? (
+                  <Venus className="h-3 w-3 text-pink-500" aria-hidden />
+                ) : (
+                  <span className="inline-block h-2 w-2 rounded-full bg-navy-300 dark:bg-navy-600" aria-hidden />
+                )}
+                {isAiRoom
+                  ? "Bot persona"
+                  : peerGender === "male"
+                    ? "Man"
+                    : peerGender === "female"
+                      ? "Woman"
+                      : "Unknown"}
+              </span>
+            ) : null}
           </div>
           <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
-            {isAiRoom
-              ? "Labeled practice partner — not a real person. Still be kind to yourself."
-              : "You are both strangers — stay kind."}
+            You are both strangers — stay kind.
           </p>
         </div>
         <motion.button
@@ -700,9 +766,7 @@ export function ChatRoom({ roomId }: Props) {
             >
               <p className="text-sm font-medium text-navy-800 dark:text-navy-100">No messages yet</p>
               <p className="mt-2 max-w-xs text-xs text-navy-500 dark:text-navy-400">
-                {isAiRoom
-                  ? "Practice stranger v0.2 — imperfect typing, random vibe each match. Say hi when ready."
-                  : "Say hi — your match is on the other side of this glassy little bubble."}
+                Say hi — your match is on the other side of this glassy little bubble.
               </p>
             </motion.div>}
           </div>
@@ -711,8 +775,8 @@ export function ChatRoom({ roomId }: Props) {
             messages={messages}
             selfId={selfId}
             peerTyping={peerTyping}
-            peerIsBot={isAiRoom}
-            peerLabel={isAiRoom ? "Bot" : "Stranger"}
+            peerIsBot={isAiRoom && !hideBotUi}
+            peerLabel="Stranger"
           />
         )}
         <div ref={bottomRef} />

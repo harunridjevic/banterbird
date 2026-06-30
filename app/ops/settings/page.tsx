@@ -114,6 +114,37 @@ export default function OpsBotSettingsPage() {
             </div>
 
         <div className="mt-10 space-y-8">
+          <Section title="Match page">
+            <SelectField
+              label="Partner matching"
+              value={settings.matchMode}
+              onChange={(v) => patch({ matchMode: v as BotSettings["matchMode"] })}
+              options={[
+                { value: "user_choice", label: "User chooses (humans only vs humans + bot)" },
+                { value: "hidden_bots", label: "Hidden bots (always humans + bot, no bot labels in chat)" },
+                { value: "humans_only", label: "Humans only (never offer bot matches)" },
+              ]}
+            />
+            <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={settings.hideGenderFilters}
+                onChange={(e) => patch({ hideGenderFilters: e.target.checked })}
+                className="mt-1 accent-violet-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-navy-100">Hide gender filters</span>
+                <span className="mt-1 block text-xs text-navy-400">
+                  Show a single &quot;Start matching&quot; button instead of gender pickers. Users match anyone
+                  online; gender is not shown in chat.
+                </span>
+              </span>
+            </label>
+            <p className="mt-2 text-xs text-navy-400">
+              Hidden bots keeps practice partners available after a short wait but makes chat look identical to a human match.
+            </p>
+          </Section>
+
           <Section title="Sexual vibe">
             <SelectField
               label="Disposition"
@@ -238,7 +269,7 @@ export default function OpsBotSettingsPage() {
                 onChange={(ghostSkipMs) => patch({ ghostSkipMs })}
               />
               <NumberField
-                label="Opener delay"
+                label="Opener delay (wait before bot speaks first)"
                 value={settings.openerDelayMs}
                 min={0}
                 max={30000}
@@ -328,7 +359,7 @@ export default function OpsBotSettingsPage() {
                 value={settings.maxOutputTokens}
                 min={64}
                 max={4096}
-                step={64}
+                step={32}
                 onChange={(maxOutputTokens) => patch({ maxOutputTokens })}
               />
               <NumberField
@@ -336,8 +367,23 @@ export default function OpsBotSettingsPage() {
                 value={settings.maxOutputTokensSexual}
                 min={64}
                 max={4096}
-                step={64}
+                step={32}
                 onChange={(maxOutputTokensSexual) => patch({ maxOutputTokensSexual })}
+              />
+              <NumberField
+                label="Max tokens (opener only)"
+                value={settings.maxOutputTokensOpener}
+                min={32}
+                max={512}
+                step={16}
+                onChange={(maxOutputTokensOpener) => patch({ maxOutputTokensOpener })}
+              />
+              <NumberField
+                label="History turns sent to LLM"
+                value={settings.llmHistoryTurns}
+                min={4}
+                max={40}
+                onChange={(llmHistoryTurns) => patch({ llmHistoryTurns })}
               />
             </div>
           </Section>

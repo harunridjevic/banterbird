@@ -72,7 +72,7 @@ export function MessageList({
                 mine
                   ? "rounded-br-lg bg-[var(--color-bubble-me)] text-white"
                   : `rounded-bl-lg text-navy-950 dark:text-navy-50 ${
-                      m.is_from_ai || peerIsBot
+                      peerIsBot && m.is_from_ai
                         ? "border border-violet-400/35 bg-violet-50/90 dark:border-violet-500/25 dark:bg-violet-950/35"
                         : "bg-[var(--color-bubble-them)]"
                     }`
@@ -80,7 +80,7 @@ export function MessageList({
             >
               {!mine ? (
                 <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
-                  {m.is_from_ai ? `${peerLabel} · AI` : peerLabel}
+                  {peerIsBot && m.is_from_ai ? `${peerLabel} · AI` : peerLabel}
                 </span>
               ) : null}
               <p className="whitespace-pre-wrap break-words">{m.content}</p>

@@ -8,7 +8,23 @@ import type {
 export const BOT_SETTINGS_STORAGE_KEY = "banterbird:bot-settings";
 export const BOT_SETTINGS_CHANGED_EVENT = "banterbird:bot-settings-changed";
 
+/** How match page handles human vs bot matching. */
+export type MatchMode = "user_choice" | "hidden_bots" | "humans_only";
+
 export type BotSettings = {
+  /**
+   * user_choice — user picks humans-only vs humans+bot on /match.
+   * hidden_bots — always match humans+bot; chat UI hides bot indicators.
+   * humans_only — never offer bot matches; user cannot toggle.
+   */
+  matchMode: MatchMode;
+
+  /**
+   * When true, /match shows a single start button — no gender pickers.
+   * Users match anyone online; gender is assigned internally for the queue only.
+   */
+  hideGenderFilters: boolean;
+
   /** Sexual vibe: random uses weights below; otherwise forces every bot. */
   sexualDisposition: "random" | SexualDisposition;
   strictWeight: number;
@@ -39,9 +55,14 @@ export type BotSettings = {
   llmTemperature: number;
   maxOutputTokens: number;
   maxOutputTokensSexual: number;
+  llmHistoryTurns: number;
+  maxOutputTokensOpener: number;
 };
 
 export const DEFAULT_BOT_SETTINGS: BotSettings = {
+  matchMode: "user_choice",
+  hideGenderFilters: false,
+
   sexualDisposition: "random",
   strictWeight: 50,
   persuadableWeight: 30,
@@ -56,7 +77,7 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
 
   ghostPingMs: 10_000,
   ghostSkipMs: 6_000,
-  openerDelayMs: 1100,
+  openerDelayMs: 5000,
   aiMatchDelayMinMs: 3600,
   aiMatchDelayMaxMs: 5200,
 
@@ -68,8 +89,11 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   sessionHintAt: 5,
 
   llmTemperature: 1.08,
-  maxOutputTokens: 512,
-  maxOutputTokensSexual: 768,
+  maxOutputTokens: 256,
+  maxOutputTokensSexual: 384,
+  /** Max chat turns sent to the LLM per request. */
+  llmHistoryTurns: 16,
+  maxOutputTokensOpener: 128,
 };
 
 export type SessionPolicy = Pick<
@@ -98,10 +122,18 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+const MATCH_MODES: MatchMode[] = ["user_choice", "hidden_bots", "humans_only"];
+
+function normalizeMatchMode(v: unknown): MatchMode {
+  return MATCH_MODES.includes(v as MatchMode) ? (v as MatchMode) : DEFAULT_BOT_SETTINGS.matchMode;
+}
+
 function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
   const merged = { ...DEFAULT_BOT_SETTINGS, ...partial };
   return {
     ...merged,
+    matchMode: normalizeMatchMode(merged.matchMode),
+    hideGenderFilters: Boolean(merged.hideGenderFilters),
     strictWeight: clamp(merged.strictWeight, 0, 100),
     persuadableWeight: clamp(merged.persuadableWeight, 0, 100),
     hornyWeight: clamp(merged.hornyWeight, 0, 100),
@@ -120,6 +152,16 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     llmTemperature: clamp(merged.llmTemperature, 0, 2),
     maxOutputTokens: clamp(Math.round(merged.maxOutputTokens), 64, 4096),
     maxOutputTokensSexual: clamp(Math.round(merged.maxOutputTokensSexual), 64, 4096),
+    llmHistoryTurns: clamp(Math.round(merged.llmHistoryTurns), 4, 40),
+    maxOutputTokensOpener: clamp(Math.round(merged.maxOutputTokensOpener), 32, 512),
+  };
+}
+
+/** Internal queue genders when gender filters are hidden from the user. */
+export function anonymousMatchGenders(): { self: "male" | "female"; wants: "any" } {
+  return {
+    self: Math.random() < 0.5 ? "male" : "female",
+    wants: "any",
   };
 }
 
