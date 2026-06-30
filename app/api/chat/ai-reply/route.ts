@@ -7,6 +7,7 @@ import {
 import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock } from "@/lib/ai-practice-bot/memory";
 import { buildBotPersona, formatPersonaPrompt, personaAllowsSexualChat, personaTiming, type SelfGender } from "@/lib/ai-practice-bot/persona";
 import { parseBotSettings, type BotSettings } from "@/lib/ops/bot-settings";
+import { logApiUsage } from "@/lib/ops/api-usage-log";
 import {
   applySessionPolicy,
   decideFallbackTurn,
@@ -201,18 +202,46 @@ async function callLlm(
   persona: ReturnType<typeof buildBotPersona>,
   memory: ReturnType<typeof buildUserMemory>,
   settings?: BotSettings | null,
+  logCtx?: { roomId: string; userId: string },
 ): Promise<AiPracticeTurnResult> {
   const maxOutputTokens = memory.sexualVibe
     ? (settings?.maxOutputTokensSexual ?? 768)
     : (settings?.maxOutputTokens ?? 512);
   const temperature = settings?.llmTemperature ?? 1.08;
-  const fetchRaw = googleApiKey() ? fetchGeminiRaw : fetchOpenAIRaw;
+  const provider = googleApiKey() ? "gemini" : "openai";
+  const fetchRaw = provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
+  const started = Date.now();
+  let hadSuccess = false;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const raw = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
     if (!raw) continue;
     const parsed = parseModelTurn(raw, history, persona, memory, settings);
-    if (parsed) return parsed;
+    if (parsed) {
+      hadSuccess = true;
+      if (logCtx) {
+        void logApiUsage({
+          endpoint: "/api/chat/ai-reply",
+          provider,
+          success: true,
+          latencyMs: Date.now() - started,
+          roomId: logCtx.roomId,
+          userId: logCtx.userId,
+        });
+      }
+      return parsed;
+    }
+  }
+
+  if (logCtx) {
+    void logApiUsage({
+      endpoint: "/api/chat/ai-reply",
+      provider: hadSuccess ? provider : "local",
+      success: false,
+      latencyMs: Date.now() - started,
+      roomId: logCtx.roomId,
+      userId: logCtx.userId,
+    });
   }
 
   return {
@@ -280,6 +309,14 @@ export async function POST(req: Request) {
 
     if (trigger === "idle_ping" || trigger === "idle_skip") {
       const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      void logApiUsage({
+        endpoint: "/api/chat/ai-reply",
+        provider: "local",
+        success: true,
+        latencyMs: 0,
+        roomId,
+        userId: user.id,
+      });
       return NextResponse.json({
         ...jsonBody(result),
         persona: {
@@ -294,7 +331,10 @@ export async function POST(req: Request) {
       ? geminiSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, persona.flirtyStarter, persona.chatMode, botSettings)
       : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
 
-    let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings);
+    let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
+      roomId,
+      userId: user.id,
+    });
 
     result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger, botSettings);
 

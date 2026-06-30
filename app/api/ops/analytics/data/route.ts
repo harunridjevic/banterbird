@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, cookieSecret, verifyAnalyticsCookie } from "@/lib/ops/analytics-cookie";
 import { analyticsPasswordConfigured } from "@/lib/ops/analytics-password";
+import {
+  type AnalyticsPeriod,
+  resolvePeriodDays,
+} from "@/lib/ops/analytics-types";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export async function GET(req: Request) {
@@ -21,8 +25,13 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const raw = searchParams.get("days");
-  const days = raw ? Math.min(365, Math.max(1, Number.parseInt(raw, 10) || 30)) : 30;
+  const period = (searchParams.get("period") ?? "month") as AnalyticsPeriod;
+  const rawDays = searchParams.get("days");
+  const customDays = rawDays ? Number.parseInt(rawDays, 10) || 30 : 30;
+  const days = resolvePeriodDays(
+    ["today", "week", "month", "year", "custom"].includes(period) ? period : "month",
+    customDays,
+  );
 
   try {
     const admin = createServiceRoleClient();

@@ -44,27 +44,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const supabaseAdmin = createServiceRoleClient();
-
-    const { error: messagesError } = await supabaseAdmin
-      .from("messages")
-      .delete()
-      .eq("room_id", roomId);
-
-    if (messagesError) {
-      console.error(`Error deleting messages for room ${roomId}:`, messagesError);
-    }
-
-    const { error: roomError } = await supabaseAdmin
-      .from("rooms")
-      .delete()
-      .eq("id", roomId);
-
-    if (roomError) {
-      console.error(`Error deleting room ${roomId}:`, roomError);
-      return NextResponse.json({ error: roomError.message }, { status: 500 });
-    }
-
+    // Don't delete immediately - let the scheduled cleanup_old_rooms function handle it after 1 hour
+    // This preserves analytics data while still eventually cleaning up for privacy
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(`Unexpected error cleaning up room ${roomId}:`, e);

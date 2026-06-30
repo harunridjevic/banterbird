@@ -32,11 +32,21 @@ export function OnlineCountPill() {
       channel.subscribe(async (status) => {
         if (cancelled || status !== "SUBSCRIBED") return;
         await channel.track({ online_at: new Date().toISOString() });
+        const { error } = await client.rpc("heartbeat_presence");
+        if (error) console.error("Heartbeat error on subscribe:", error);
       });
     })();
 
+    const heartbeat = setInterval(async () => {
+      if (!cancelled) {
+        const { error } = await client.rpc("heartbeat_presence");
+        if (error) console.error("Heartbeat error on interval:", error);
+      }
+    }, 60_000);
+
     return () => {
       cancelled = true;
+      clearInterval(heartbeat);
       const ch = channelRef.current;
       channelRef.current = null;
       if (ch) void client.removeChannel(ch);
