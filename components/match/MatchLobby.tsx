@@ -7,6 +7,7 @@ import { Bot, Mars, Users, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { PageLoader } from "@/components/ui/Loading";
 import type { SelfGender, WantsGender } from "@/lib/types/chat";
+import { loadBotSettings } from "@/lib/ops/bot-settings";
 import { MatchingLoader } from "./MatchingLoader";
 import { useCallback } from "react";
 
@@ -173,7 +174,9 @@ export function MatchLobby() {
   useEffect(() => {
     if (!ready || !canMatch || !includeAiMatch) return;
     let alive = true;
-    const delayMs = 3600 + Math.floor(Math.random() * 1600);
+    const s = loadBotSettings();
+    const span = Math.max(0, s.aiMatchDelayMaxMs - s.aiMatchDelayMinMs);
+    const delayMs = s.aiMatchDelayMinMs + Math.floor(Math.random() * (span + 1));
     const t = window.setTimeout(async () => {
       if (!alive || cancelledRef.current || navigatedRef.current) return;
       const { data, error } = await client.rpc("try_match_ai_practice", {
