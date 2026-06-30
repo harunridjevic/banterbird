@@ -1,12 +1,56 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type BotSettings } from "@/lib/ops/bot-settings";
 import { useBotSettings } from "@/lib/ops/use-bot-settings";
 
 export default function OpsBotSettingsPage() {
   const { settings, save, reset } = useBotSettings();
+  const [password, setPassword] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isCheckingCookie, setIsCheckingCookie] = useState(true);
+
+  const unlock = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/ops/analytics/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(j.error ?? `Unlock failed (${res.status})`);
+        return;
+      }
+      setUnlocked(true);
+    } catch {
+      setError("Network error");
+    } finally {
+      setLoading(false);
+    }
+  }, [password]);
+
+  useEffect(() => {
+    setIsCheckingCookie(true);
+    // Check if cookie exists and is valid by making a test request
+    void (async () => {
+      try {
+        const res = await fetch("/api/ops/analytics/data?period=month&days=30", { method: "GET" });
+        if (res.ok) {
+          setUnlocked(true);
+        }
+      } catch {
+        // Cookie not valid or network error - stay locked
+      } finally {
+        setIsCheckingCookie(false);
+      }
+    })();
+  }, []);
 
   const patch = useCallback(
     (partial: Partial<BotSettings>) => {
@@ -25,14 +69,49 @@ export default function OpsBotSettingsPage() {
               Changes save automatically and apply to new bot turns while you chat.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={reset}
-            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-navy-200 hover:bg-white/5"
-          >
-            Reset defaults
-          </button>
         </div>
+
+        {isCheckingCookie ? (
+          <div className="mt-10 flex items-center justify-center rounded-2xl border border-white/10 bg-navy-900/40 p-6">
+            <p className="text-sm text-navy-400">Checking authentication…</p>
+          </div>
+        ) : !unlocked ? (
+          <div className="mt-10 rounded-2xl border border-white/10 bg-navy-900/40 p-6">
+            <label htmlFor="ops-pw" className="block text-sm font-medium text-navy-200">
+              Password
+            </label>
+            <input
+              id="ops-pw"
+              type="password"
+              autoComplete="off"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void unlock();
+              }}
+              className="mt-2 w-full max-w-sm rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none ring-violet-500/40 focus:ring-2"
+            />
+            {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
+            <button
+              type="button"
+              disabled={loading || !password}
+              onClick={() => void unlock()}
+              className="mt-4 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+            >
+              {loading ? "Checking…" : "Unlock"}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-10 flex flex-wrap items-end gap-3">
+              <button
+                type="button"
+                onClick={reset}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-navy-200 hover:bg-white/5"
+              >
+                Reset defaults
+              </button>
+            </div>
 
         <div className="mt-10 space-y-8">
           <Section title="Sexual vibe">
@@ -263,6 +342,8 @@ export default function OpsBotSettingsPage() {
             </div>
           </Section>
         </div>
+          </>
+        )}
 
         <p className="mt-10 text-xs text-navy-500">
           <Link href="/ops" className="text-navy-400 underline-offset-2 hover:text-navy-200 hover:underline">

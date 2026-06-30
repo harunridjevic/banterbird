@@ -11,6 +11,7 @@ import {
 import { ThemeProvider } from "next-themes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
+import { OnlinePresenceProvider } from "@/components/presence/OnlinePresenceProvider";
 
 type SupabaseCtx = {
   client: SupabaseClient;
@@ -45,7 +46,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <SupabaseContext.Provider value={{ client, ready }}>
-        {children}
+        <OnlinePresenceProvider>{children}</OnlinePresenceProvider>
       </SupabaseContext.Provider>
     </ThemeProvider>
   );

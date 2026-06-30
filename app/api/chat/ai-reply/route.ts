@@ -7,6 +7,8 @@ import {
 import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock } from "@/lib/ai-practice-bot/memory";
 import { buildBotPersona, formatPersonaPrompt, personaAllowsSexualChat, personaTiming, type SelfGender } from "@/lib/ai-practice-bot/persona";
 import { parseBotSettings, type BotSettings } from "@/lib/ops/bot-settings";
+import { logApiUsage } from "@/lib/ops/api-usage-log";
+import { estimateLlmCostUsd } from "@/lib/ops/llm-cost";
 import {
   applySessionPolicy,
   decideFallbackTurn,
@@ -112,14 +114,20 @@ function geminiContents(history: ChatTurn[]) {
   }));
 }
 
+type LlmFetchResult = {
+  raw: string | null;
+  inputTokens?: number;
+  outputTokens?: number;
+};
+
 async function fetchGeminiRaw(
   history: ChatTurn[],
   systemPrompt: string,
   maxOutputTokens: number,
   temperature: number,
-): Promise<string | null> {
+): Promise<LlmFetchResult> {
   const key = googleApiKey();
-  if (!key) return null;
+  if (!key) return { raw: null };
 
   const model = process.env.GEMINI_CHAT_MODEL?.trim() || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -145,18 +153,25 @@ async function fetchGeminiRaw(
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("Gemini error:", res.status, errText);
-    return null;
+    return { raw: null };
   }
 
   const json = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
+    usageMetadata?: {
+      promptTokenCount?: number;
+      candidatesTokenCount?: number;
+      totalTokenCount?: number;
+    };
   };
-  return (
+  const inputTokens = json.usageMetadata?.promptTokenCount;
+  const outputTokens = json.usageMetadata?.candidatesTokenCount;
+  const raw =
     json.candidates?.[0]?.content?.parts
       ?.map((part) => part.text ?? "")
       .join("")
-      .trim() ?? null
-  );
+      .trim() ?? null;
+  return { raw, inputTokens, outputTokens };
 }
 
 async function fetchOpenAIRaw(
@@ -164,9 +179,9 @@ async function fetchOpenAIRaw(
   systemPrompt: string,
   maxOutputTokens: number,
   temperature: number,
-): Promise<string | null> {
+): Promise<LlmFetchResult> {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return null;
+  if (!key) return { raw: null };
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -186,13 +201,18 @@ async function fetchOpenAIRaw(
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("OpenAI error:", res.status, errText);
-    return null;
+    return { raw: null };
   }
 
   const json = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  return json.choices?.[0]?.message?.content?.trim() ?? null;
+  return {
+    raw: json.choices?.[0]?.message?.content?.trim() ?? null,
+    inputTokens: json.usage?.prompt_tokens,
+    outputTokens: json.usage?.completion_tokens,
+  };
 }
 
 async function callLlm(
@@ -201,18 +221,54 @@ async function callLlm(
   persona: ReturnType<typeof buildBotPersona>,
   memory: ReturnType<typeof buildUserMemory>,
   settings?: BotSettings | null,
+  logCtx?: { roomId: string; userId: string },
 ): Promise<AiPracticeTurnResult> {
   const maxOutputTokens = memory.sexualVibe
     ? (settings?.maxOutputTokensSexual ?? 768)
     : (settings?.maxOutputTokens ?? 512);
   const temperature = settings?.llmTemperature ?? 1.08;
-  const fetchRaw = googleApiKey() ? fetchGeminiRaw : fetchOpenAIRaw;
+  const provider = googleApiKey() ? "gemini" : "openai";
+  const fetchRaw = provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
+  const started = Date.now();
+  let hadSuccess = false;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
-    if (!raw) continue;
-    const parsed = parseModelTurn(raw, history, persona, memory, settings);
-    if (parsed) return parsed;
+    const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
+    if (!result.raw) continue;
+    const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
+    if (parsed) {
+      hadSuccess = true;
+      if (logCtx) {
+        const inputTokens = result.inputTokens ?? 0;
+        const outputTokens = result.outputTokens ?? 0;
+        void logApiUsage({
+          endpoint: "/api/chat/ai-reply",
+          provider,
+          success: true,
+          latencyMs: Date.now() - started,
+          roomId: logCtx.roomId,
+          userId: logCtx.userId,
+          inputTokens: inputTokens || undefined,
+          outputTokens: outputTokens || undefined,
+          estimatedCostUsd:
+            inputTokens || outputTokens
+              ? estimateLlmCostUsd(provider, inputTokens, outputTokens)
+              : undefined,
+        });
+      }
+      return parsed;
+    }
+  }
+
+  if (logCtx) {
+    void logApiUsage({
+      endpoint: "/api/chat/ai-reply",
+      provider: hadSuccess ? provider : "local",
+      success: false,
+      latencyMs: Date.now() - started,
+      roomId: logCtx.roomId,
+      userId: logCtx.userId,
+    });
   }
 
   return {
@@ -280,6 +336,14 @@ export async function POST(req: Request) {
 
     if (trigger === "idle_ping" || trigger === "idle_skip") {
       const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      void logApiUsage({
+        endpoint: "/api/chat/ai-reply",
+        provider: "local",
+        success: true,
+        latencyMs: 0,
+        roomId,
+        userId: user.id,
+      });
       return NextResponse.json({
         ...jsonBody(result),
         persona: {
@@ -294,7 +358,10 @@ export async function POST(req: Request) {
       ? geminiSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, persona.flirtyStarter, persona.chatMode, botSettings)
       : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
 
-    let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings);
+    let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
+      roomId,
+      userId: user.id,
+    });
 
     result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger, botSettings);
 

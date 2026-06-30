@@ -23,7 +23,7 @@ import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PageLoader } from "@/components/ui/Loading";
 import type { MessageRow, SelfGender } from "@/lib/types/chat";
-import { getSupabaseKey, getSupabaseUrl } from "@/utils/supabase/env";
+import { tabCloseFetch } from "@/lib/presence/tab-close-fetch";
 
 type Props = { roomId: string };
 
@@ -46,7 +46,6 @@ export function ChatRoom({ roomId }: Props) {
   const exitInFlightRef = useRef(false);
   const roomEndedRef = useRef(false);
   const unloadBeaconSentRef = useRef(false);
-  const accessTokenRef = useRef<string | null>(null);
   const [isAiRoom, setIsAiRoom] = useState(false);
   const isAiRoomRef = useRef(false);
   const messagesRef = useRef<MessageRow[]>([]);
@@ -101,42 +100,10 @@ export function ChatRoom({ roomId }: Props) {
   }, [roomId]);
 
   const endRoomBeacon = useCallback(() => {
-    const supabaseUrl = getSupabaseUrl();
-    const supabaseKey = getSupabaseKey();
-    if (!supabaseUrl || !supabaseKey) return;
-
     if (unloadBeaconSentRef.current) return;
     unloadBeaconSentRef.current = true;
-
-    const endpoint = `${supabaseUrl}/rest/v1/rpc/end_active_room`;
-    const token = accessTokenRef.current ?? undefined;
-
-    const payload = JSON.stringify({ p_room_id: roomId });
-    const headers: Record<string, string> = {
-      apikey: supabaseKey,
-      "Content-Type": "application/json",
-    };
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    try {
-      // Best-effort during tab close / navigation.
-      if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
-        const blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon(endpoint, blob);
-        return;
-      }
-    } catch {
-      // ignore
-    }
-
-    // Fallback (may still succeed on SPA navs).
-    void fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: payload,
-      keepalive: true,
-      credentials: "omit",
-    });
+    tabCloseFetch("/api/chat/end-room", { roomId });
+    tabCloseFetch("/api/presence/leave");
   }, [roomId]);
 
   const scrollToBottom = () => {
@@ -158,7 +125,6 @@ export function ChatRoom({ roomId }: Props) {
       return;
     }
     setSelfId(session.user.id);
-    accessTokenRef.current = session.access_token ?? null;
 
     const { data: room, error: roomErr } = await client
       .from("rooms")
@@ -288,21 +254,13 @@ export function ChatRoom({ roomId }: Props) {
 
     const onPageHide = () => endRoomBeacon();
     const onBeforeUnload = () => endRoomBeacon();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") endRoomBeacon();
-    };
-    const onOffline = () => endRoomBeacon();
 
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("beforeunload", onBeforeUnload);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("offline", onOffline);
 
     return () => {
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onBeforeUnload);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("offline", onOffline);
     };
   }, [endRoomBeacon, ready, roomId]);
 
