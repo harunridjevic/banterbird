@@ -1,3 +1,5 @@
+import { rollSexualDisposition, type BotSettings } from "@/lib/ops/bot-settings";
+
 /** Practice bot persona spec — documented as v0.2 (do not bump app version unless asked). */
 export const PRACTICE_BOT_PERSONA_VERSION = "0.2";
 
@@ -102,15 +104,33 @@ export function buildBotPersona(
   roomId: string,
   botGender: SelfGender,
   userGender: SelfGender,
+  settings?: BotSettings | null,
 ): BotPersona {
   const h = hashSeed(roomId);
   const country = pickWeighted(COUNTRIES, h);
   const age = rollAge(h >> 3);
   const genderLetter = botGender === "female" ? "f" : "m";
-  const dispositionRoll = (h >> 15) % 100;
-  const sexualDisposition: SexualDisposition =
-    dispositionRoll < 50 ? "strict" : dispositionRoll < 80 ? "persuadable" : "horny";
+  const sexualDisposition = rollSexualDisposition(h >> 15, settings);
   const chatMode: ChatMode = sexualDisposition === "strict" ? "friendly" : "flirty";
+
+  const writingStyle =
+    settings?.writingStyle && settings.writingStyle !== "random"
+      ? settings.writingStyle
+      : pickFrom(WRITING_STYLES, h >> 5);
+  const messageStyle =
+    settings?.messageStyle && settings.messageStyle !== "random"
+      ? settings.messageStyle
+      : pickFrom(MESSAGE_STYLES, h >> 7);
+  const replySpeed =
+    settings?.replySpeedMode === "fixed" && settings.replySpeed
+      ? settings.replySpeed
+      : 0.55 + ((h >> 9) % 111) / 100;
+  const typoRate =
+    settings?.typoRate && settings.typoRate !== "random"
+      ? settings.typoRate
+      : country.english
+        ? pickFrom(TYPO_RATES, h >> 11)
+        : pickFrom<TypoRate>(["sometimes", "often", "often"], h >> 11);
 
   return {
     version: PRACTICE_BOT_PERSONA_VERSION,
@@ -119,12 +139,10 @@ export function buildBotPersona(
     age,
     country: country.name,
     englishPrimary: country.english,
-    writingStyle: pickFrom(WRITING_STYLES, h >> 5),
-    messageStyle: pickFrom(MESSAGE_STYLES, h >> 7),
-    replySpeed: 0.55 + ((h >> 9) % 111) / 100,
-    typoRate: country.english
-      ? pickFrom(TYPO_RATES, h >> 11)
-      : pickFrom<TypoRate>(["sometimes", "often", "often"], h >> 11),
+    writingStyle,
+    messageStyle,
+    replySpeed,
+    typoRate,
     genderTag: `${age}${genderLetter}`,
     sexualDisposition,
     chatMode,
@@ -132,15 +150,15 @@ export function buildBotPersona(
   };
 }
 
-export function personaTiming(persona: BotPersona) {
+export function personaTiming(persona: BotPersona, settings?: BotSettings | null) {
   const burstGapMs =
     persona.messageStyle === "burst" ? 280 + (hashSeed(persona.country) % 520) : persona.messageStyle === "split" ? 700 + (hashSeed(persona.age.toString()) % 900) : 0;
   return {
     readScale: persona.replySpeed,
     typingScale: persona.replySpeed,
     burstGapMs,
-    idlePingMs: 10_000,
-    idleSkipMs: 6_000,
+    idlePingMs: settings?.ghostPingMs ?? 10_000,
+    idleSkipMs: settings?.ghostSkipMs ?? 6_000,
   };
 }
 

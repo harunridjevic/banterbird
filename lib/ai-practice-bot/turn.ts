@@ -1,6 +1,10 @@
 import type { BotPersona } from "@/lib/ai-practice-bot/persona";
 import { personaAllowsSexualChat, personaTiming } from "@/lib/ai-practice-bot/persona";
 import {
+  sessionPolicyFromSettings,
+  type BotSettings,
+} from "@/lib/ops/bot-settings";
+import {
   contextualFallbackReply,
   countSexualUserTurns,
   isAggressiveConversation,
@@ -68,8 +72,9 @@ function withTiming(
     | { action: "reply"; messages: string[] }
     | { action: "skip"; parting: string | null }
     | { action: "away"; messages: string[]; awayMs: number; returnMessages: string[] },
+  settings?: BotSettings | null,
 ): AiPracticeTurnResult {
-  return { ...turn, timing: personaTiming(persona) };
+  return { ...turn, timing: personaTiming(persona, settings) };
 }
 
 export function parseModelTurn(
@@ -77,6 +82,7 @@ export function parseModelTurn(
   history: ChatTurn[],
   persona: BotPersona,
   memory: UserMemory,
+  settings?: BotSettings | null,
 ): AiPracticeTurnResult | null {
   let obj: unknown;
   try {
@@ -105,9 +111,9 @@ export function parseModelTurn(
         return withTiming(persona, {
           action: "skip",
           parting: isAcceptableChatLine(t) ? t : null,
-        });
+        }, settings);
       }
-      return withTiming(persona, { action: "skip", parting: null });
+      return withTiming(persona, { action: "skip", parting: null }, settings);
     }
 
     if (o.action === "away") {
@@ -126,7 +132,7 @@ export function parseModelTurn(
           messages: lines,
           awayMs,
           returnMessages: returns.length > 0 ? returns : ["im back"],
-        });
+        }, settings);
       }
     }
 
@@ -150,7 +156,7 @@ export function parseModelTurn(
         ) {
           return null;
         }
-        return withTiming(persona, { action: "reply", messages: lines });
+        return withTiming(persona, { action: "reply", messages: lines }, settings);
       }
     }
   }
@@ -163,7 +169,9 @@ export function decideFallbackTurn(
   persona: BotPersona,
   trigger: AiReplyTrigger,
   memory: UserMemory,
+  settings?: BotSettings | null,
 ): AiPracticeTurnResult {
+  const policy = sessionPolicyFromSettings(settings);
   const users = history.filter((m) => m.role === "user");
   const seed = history.map((m) => m.content).join("|") || "open";
 
@@ -171,14 +179,14 @@ export function decideFallbackTurn(
     return withTiming(persona, {
       action: "skip",
       parting: pickGhostSkipParting(),
-    });
+    }, settings);
   }
 
   if (trigger === "idle_ping") {
     return withTiming(persona, {
       action: "reply",
       messages: [pickGhostPing()],
-    });
+    }, settings);
   }
 
   if (users.length === 0) {
@@ -189,31 +197,31 @@ export function decideFallbackTurn(
         memory,
         personaAllowsSexualChat(persona, memory.sexualVibe),
       ),
-    });
+    }, settings);
   }
 
   const last = users[users.length - 1]?.content ?? "";
 
   if (isUserLeavingConversation(history)) {
-    return withTiming(persona, { action: "skip", parting: pickLeavingSkipParting() });
+    return withTiming(persona, { action: "skip", parting: pickLeavingSkipParting() }, settings);
   }
 
   if (isAnnoyingConversation(history)) {
-    return withTiming(persona, { action: "skip", parting: pickBoringSkipParting(seed) });
+    return withTiming(persona, { action: "skip", parting: pickBoringSkipParting(seed) }, settings);
   }
 
   if (/\b(kill you|murder|rape|pedo|cp\b|suicid)\b/i.test(last)) {
-    return withTiming(persona, { action: "skip", parting: "nah im out" });
+    return withTiming(persona, { action: "skip", parting: "nah im out" }, settings);
   }
 
   if (
-    users.length >= 12 &&
-    (isDryConversation(history) || Math.random() < 0.12)
+    users.length >= policy.longChatSkipAt &&
+    (isDryConversation(history) || Math.random() < policy.longChatSkipChance / 100)
   ) {
     return withTiming(persona, {
       action: "skip",
       parting: pickSkipParting(seed),
-    });
+    }, settings);
   }
 
   return withTiming(persona, {
@@ -223,7 +231,7 @@ export function decideFallbackTurn(
       memory,
       personaAllowsSexualChat(persona, memory.sexualVibe),
     ),
-  });
+  }, settings);
 }
 
 export function applySessionPolicy(
@@ -232,32 +240,34 @@ export function applySessionPolicy(
   persona: BotPersona,
   memory: UserMemory,
   trigger: AiReplyTrigger,
+  settings?: BotSettings | null,
 ): AiPracticeTurnResult {
+  const policy = sessionPolicyFromSettings(settings);
   const seed = history.map((m) => m.content).join("|");
 
   if (trigger === "idle_skip") {
-    return withTiming(persona, { action: "skip", parting: pickGhostSkipParting() });
+    return withTiming(persona, { action: "skip", parting: pickGhostSkipParting() }, settings);
   }
 
   if (isUserLeavingConversation(history)) {
-    return withTiming(persona, { action: "skip", parting: pickLeavingSkipParting() });
+    return withTiming(persona, { action: "skip", parting: pickLeavingSkipParting() }, settings);
   }
 
   if (isAggressiveConversation(history) || isAnnoyingConversation(history)) {
     return withTiming(persona, {
       action: "skip",
       parting: pickBoringSkipParting(seed),
-    });
+    }, settings);
   }
 
   if (
     persona.sexualDisposition === "strict" &&
-    countSexualUserTurns(history) >= 2
+    countSexualUserTurns(history) >= policy.strictSexualSkipAt
   ) {
     return withTiming(persona, {
       action: "skip",
       parting: pickStrictSexualSkipParting(seed),
-    });
+    }, settings);
   }
 
   if (result.action === "skip" || result.action === "away") return result;
@@ -265,26 +275,31 @@ export function applySessionPolicy(
   const dry = isDryConversation(history);
   const n = memory.userTurnCount;
 
-  if (n >= 10) {
+  if (n >= policy.maxUserTurnsBeforeSkip) {
     return withTiming(persona, {
       action: "skip",
       parting: pickSkipParting(seed),
-    });
+    }, settings);
   }
 
-  if (dry && n >= 3) {
+  if (dry && n >= policy.drySkipMinUserTurns) {
     return withTiming(persona, {
       action: "skip",
       parting: pickBoringSkipParting("dry"),
-    });
+    }, settings);
   }
 
   return result;
 }
 
-export function sessionContextOverlay(memory: UserMemory, persona: BotPersona): string {
+export function sessionContextOverlay(
+  memory: UserMemory,
+  persona: BotPersona,
+  settings?: BotSettings | null,
+): string {
+  const policy = sessionPolicyFromSettings(settings);
   const lines: string[] = [];
-  if (memory.userTurnCount >= 5) {
+  if (memory.userTurnCount >= policy.sessionHintAt) {
     lines.push(
       `Chat length: ${memory.userTurnCount} user messages. If dry/boring/annoying/hostile, skip — parting like "ur boring bye".`,
     );
@@ -307,9 +322,10 @@ export function sessionContextOverlay(memory: UserMemory, persona: BotPersona): 
   return lines.join("\n");
 }
 
-export function triggerOverlay(trigger: AiReplyTrigger): string {
+export function triggerOverlay(trigger: AiReplyTrigger, settings?: BotSettings | null): string {
   if (trigger === "idle_ping") {
-    return 'They have not replied in ~10 seconds. Send ONE short nudge (reply): "hello??" or similar.';
+    const secs = Math.round((settings?.ghostPingMs ?? 10_000) / 1000);
+    return `They have not replied in ~${secs} seconds. Send ONE short nudge (reply): "hello??" or similar.`;
   }
   if (trigger === "idle_skip") {
     return 'They ghosted after your nudge. MUST skip. Parting: "bye" or "if u dont wanna talk bye".';

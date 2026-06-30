@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai-practice-bot/instructions";
 import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock } from "@/lib/ai-practice-bot/memory";
 import { buildBotPersona, formatPersonaPrompt, personaAllowsSexualChat, personaTiming, type SelfGender } from "@/lib/ai-practice-bot/persona";
+import { parseBotSettings, type BotSettings } from "@/lib/ops/bot-settings";
 import {
   applySessionPolicy,
   decideFallbackTurn,
@@ -41,8 +42,9 @@ function buildSystemPrompt(
   memoryBlock: string,
   sessionBlock: string,
   trigger: AiReplyTrigger,
+  settings?: BotSettings | null,
 ): string {
-  const triggerLine = triggerOverlay(trigger);
+  const triggerLine = triggerOverlay(trigger, settings);
   return [
     baseSystemPrompt(),
     personaBlock,
@@ -63,12 +65,13 @@ function geminiSystemPrompt(
   trigger: AiReplyTrigger,
   flirtyStarter: boolean,
   chatMode: "friendly" | "flirty",
+  settings?: BotSettings | null,
 ): string {
   const opener =
     flirtyStarter && chatMode === "flirty"
       ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi — messages array.'
       : 'Opening turn (user msg is only "."): casual friendly hi — messages array.';
-  return `${buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger)}\n\n${opener}`;
+  return `${buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, settings)}\n\n${opener}`;
 }
 
 const GEMINI_RESPONSE_SCHEMA = {
@@ -113,6 +116,7 @@ async function fetchGeminiRaw(
   history: ChatTurn[],
   systemPrompt: string,
   maxOutputTokens: number,
+  temperature: number,
 ): Promise<string | null> {
   const key = googleApiKey();
   if (!key) return null;
@@ -130,7 +134,7 @@ async function fetchGeminiRaw(
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: geminiContents(history),
       generationConfig: {
-        temperature: 1.08,
+        temperature,
         maxOutputTokens,
         responseMimeType: "application/json",
         responseSchema: GEMINI_RESPONSE_SCHEMA,
@@ -159,6 +163,7 @@ async function fetchOpenAIRaw(
   history: ChatTurn[],
   systemPrompt: string,
   maxOutputTokens: number,
+  temperature: number,
 ): Promise<string | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
@@ -171,7 +176,7 @@ async function fetchOpenAIRaw(
     },
     body: JSON.stringify({
       model: process.env.OPENAI_CHAT_MODEL ?? "gpt-4o-mini",
-      temperature: 1.08,
+      temperature,
       max_tokens: maxOutputTokens,
       response_format: { type: "json_object" },
       messages: [{ role: "system", content: systemPrompt }, ...history],
@@ -195,14 +200,18 @@ async function callLlm(
   systemPrompt: string,
   persona: ReturnType<typeof buildBotPersona>,
   memory: ReturnType<typeof buildUserMemory>,
+  settings?: BotSettings | null,
 ): Promise<AiPracticeTurnResult> {
-  const maxOutputTokens = memory.sexualVibe ? 768 : 512;
+  const maxOutputTokens = memory.sexualVibe
+    ? (settings?.maxOutputTokensSexual ?? 768)
+    : (settings?.maxOutputTokens ?? 512);
+  const temperature = settings?.llmTemperature ?? 1.08;
   const fetchRaw = googleApiKey() ? fetchGeminiRaw : fetchOpenAIRaw;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await fetchRaw(history, systemPrompt, maxOutputTokens);
+    const raw = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
     if (!raw) continue;
-    const parsed = parseModelTurn(raw, history, persona, memory);
+    const parsed = parseModelTurn(raw, history, persona, memory, settings);
     if (parsed) return parsed;
   }
 
@@ -213,7 +222,7 @@ async function callLlm(
       memory,
       personaAllowsSexualChat(persona, memory.sexualVibe),
     ),
-    timing: personaTiming(persona),
+    timing: personaTiming(persona, settings),
   };
 }
 
@@ -232,11 +241,13 @@ export async function POST(req: Request) {
       roomId?: string;
       messages?: ChatTurn[];
       trigger?: AiReplyTrigger;
+      botSettings?: unknown;
     };
     const roomId = body.roomId;
     const history = Array.isArray(body.messages) ? body.messages : [];
     const trigger: AiReplyTrigger =
       body.trigger === "idle_ping" || body.trigger === "idle_skip" ? body.trigger : "normal";
+    const botSettings = parseBotSettings(body.botSettings);
 
     if (!roomId) {
       return NextResponse.json({ error: "roomId required" }, { status: 400 });
@@ -260,15 +271,15 @@ export async function POST(req: Request) {
 
     const botGender = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
-    const persona = buildBotPersona(roomId, botGender, userGender);
+    const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
     const trimmedHistory = history.slice(-28);
     const memory = buildUserMemory(trimmedHistory);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
-    const sessionBlock = sessionContextOverlay(memory, persona);
+    const sessionBlock = sessionContextOverlay(memory, persona, botSettings);
     const personaBlock = formatPersonaPrompt(persona);
 
     if (trigger === "idle_ping" || trigger === "idle_skip") {
-      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory);
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
       return NextResponse.json({
         ...jsonBody(result),
         persona: {
@@ -280,16 +291,16 @@ export async function POST(req: Request) {
     }
 
     const systemPrompt = googleApiKey()
-      ? geminiSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, persona.flirtyStarter, persona.chatMode)
-      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger);
+      ? geminiSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, persona.flirtyStarter, persona.chatMode, botSettings)
+      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
 
-    let result = await callLlm(trimmedHistory, systemPrompt, persona, memory);
+    let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings);
 
-    result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger);
+    result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger, botSettings);
 
     const hasUserTurn = trimmedHistory.some((m) => m.role === "user");
     if (!hasUserTurn && result.action === "skip") {
-      result = decideFallbackTurn(trimmedHistory, persona, "normal", memory);
+      result = decideFallbackTurn(trimmedHistory, persona, "normal", memory, botSettings);
     }
 
     return NextResponse.json({

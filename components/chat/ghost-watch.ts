@@ -76,6 +76,8 @@ export type GhostScheduleContext = {
   endRoom: () => Promise<void>;
   isActive: () => boolean;
   botMessageId?: string | null;
+  ghostPingMs?: number;
+  ghostSkipMs?: number;
 };
 
 /**
@@ -84,6 +86,9 @@ export type GhostScheduleContext = {
  */
 export function armGhostSchedule(ctx: GhostScheduleContext) {
   if (!ctx.isActive()) return;
+
+  const ghostPingMs = ctx.ghostPingMs ?? GHOST_PING_MS;
+  const ghostSkipMs = ctx.ghostSkipMs ?? GHOST_SKIP_MS;
 
   const botId = ctx.botMessageId ?? null;
   if (
@@ -156,7 +161,7 @@ export function armGhostSchedule(ctx: GhostScheduleContext) {
             ctx.setPeerTyping(false);
           }
         })();
-      }, GHOST_SKIP_MS);
+      }, ghostSkipMs);
     })();
-  }, GHOST_PING_MS);
+  }, ghostPingMs);
 }

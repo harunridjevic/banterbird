@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
 type Snapshot = Record<string, unknown>;
@@ -82,7 +83,15 @@ export default function OpsAnalyticsPage() {
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-3xl">
-        <h1 className="text-2xl font-bold tracking-tight text-white">BanterBird analytics</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-white">BanterBird analytics</h1>
+          <Link
+            href="/ops"
+            className="text-sm text-navy-400 underline-offset-2 hover:text-navy-200 hover:underline"
+          >
+            ← Ops
+          </Link>
+        </div>
         <p className="mt-2 text-sm text-navy-300">
           Internal dashboard. Not linked from the app. All dates and DAU are <strong className="font-medium text-navy-200">UTC</strong>.
         </p>
