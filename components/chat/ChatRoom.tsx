@@ -17,6 +17,7 @@ import { buildBotPersona, type BotPersona } from "@/lib/ai-practice-bot/persona"
 import {
   BOT_SETTINGS_CHANGED_EVENT,
   loadBotSettings,
+  resolveOpenerDelayMs,
   type BotSettings,
 } from "@/lib/ops/bot-settings";
 import { ChatComposer } from "@/components/chat/ChatComposer";
@@ -552,7 +553,7 @@ export function ChatRoom({ roomId }: Props) {
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading) return;
-    const openerDelay = botSettingsRef.current.openerDelayMs;
+    const openerDelay = resolveOpenerDelayMs(botSettingsRef.current);
     openerTimerRef.current = window.setTimeout(async () => {
       openerTimerRef.current = null;
       if (openerDoneRef.current) return;

@@ -250,6 +250,55 @@ export default function OpsBotSettingsPage() {
             ) : null}
           </Section>
 
+          <Section title="Bot opener (speaks first if user is idle)">
+            <SelectField
+              label="Opener wait mode"
+              value={settings.openerDelayMode}
+              onChange={(v) => patch({ openerDelayMode: v as BotSettings["openerDelayMode"] })}
+              options={[
+                { value: "fixed", label: "Fixed delay" },
+                { value: "random", label: "Random delay (min–max range)" },
+              ]}
+            />
+            <p className="mt-2 text-xs text-navy-400">
+              How long the bot waits before saying hi when the user has not sent a message yet. Cancelled
+              immediately if the user types first.
+            </p>
+            {settings.openerDelayMode === "fixed" ? (
+              <NumberField
+                label="Fixed wait (ms)"
+                hint={`≈ ${(settings.openerDelayMs / 1000).toFixed(1)}s — e.g. 1000 = 1s, 10000 = 10s`}
+                value={settings.openerDelayMs}
+                min={0}
+                max={60000}
+                step={100}
+                onChange={(openerDelayMs) => patch({ openerDelayMs })}
+                className="mt-4"
+              />
+            ) : (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <NumberField
+                  label="Random wait min (ms)"
+                  hint={`≈ ${(settings.openerDelayMinMs / 1000).toFixed(1)}s`}
+                  value={settings.openerDelayMinMs}
+                  min={0}
+                  max={60000}
+                  step={100}
+                  onChange={(openerDelayMinMs) => patch({ openerDelayMinMs })}
+                />
+                <NumberField
+                  label="Random wait max (ms)"
+                  hint={`≈ ${(settings.openerDelayMaxMs / 1000).toFixed(1)}s`}
+                  value={settings.openerDelayMaxMs}
+                  min={settings.openerDelayMinMs}
+                  max={60000}
+                  step={100}
+                  onChange={(openerDelayMaxMs) => patch({ openerDelayMaxMs })}
+                />
+              </div>
+            )}
+          </Section>
+
           <Section title="Timing (ms)">
             <div className="grid gap-4 sm:grid-cols-2">
               <NumberField
@@ -267,14 +316,6 @@ export default function OpsBotSettingsPage() {
                 max={120000}
                 step={500}
                 onChange={(ghostSkipMs) => patch({ ghostSkipMs })}
-              />
-              <NumberField
-                label="Opener delay (wait before bot speaks first)"
-                value={settings.openerDelayMs}
-                min={0}
-                max={30000}
-                step={100}
-                onChange={(openerDelayMs) => patch({ openerDelayMs })}
               />
               <NumberField
                 label="AI match delay min"
@@ -445,6 +486,8 @@ function NumberField({
   min,
   max,
   step = 1,
+  hint,
+  className,
   onChange,
 }: {
   label: string;
@@ -452,10 +495,12 @@ function NumberField({
   min: number;
   max: number;
   step?: number;
+  hint?: string;
+  className?: string;
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="block">
+    <label className={className ?? "block"}>
       <span className="text-sm font-medium text-navy-200">{label}</span>
       <input
         type="number"
@@ -466,6 +511,7 @@ function NumberField({
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none ring-violet-500/40 focus:ring-2"
       />
+      {hint ? <p className="mt-1 text-xs text-navy-400">{hint}</p> : null}
     </label>
   );
 }
