@@ -126,7 +126,8 @@ export default function OpsBotSettingsPage() {
                 <span className="block text-sm font-medium text-navy-100">Override navbar count</span>
                 <span className="mt-1 block text-xs text-navy-400">
                   Show a synthetic online number in the app navbar instead of the live presence count.
-                  The value randomizes inside your range on a periodic interval.
+                  The value is synchronized by time, so it stays stable on refresh and matches across
+                  tabs/devices that share these settings. It drifts gradually inside your range.
                 </span>
               </span>
             </label>

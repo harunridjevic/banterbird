@@ -4,19 +4,12 @@ import { useEffect, useState } from "react";
 import {
   BOT_SETTINGS_CHANGED_EVENT,
   loadBotSettings,
-  randomIntInclusive,
 } from "@/lib/ops/bot-settings";
+import {
+  computeDisplayOnlineCount,
+  msUntilNextDisplayOnlineCount,
+} from "@/lib/ops/display-online-count";
 import { useOnlineCount } from "@/lib/ops/use-online-count";
-
-function pickDisplayCount(): number {
-  const settings = loadBotSettings();
-  return randomIntInclusive(settings.displayOnlineCountMin, settings.displayOnlineCountMax);
-}
-
-function pickChangeDelayMs(): number {
-  const settings = loadBotSettings();
-  return randomIntInclusive(settings.displayOnlineCountChangeMinMs, settings.displayOnlineCountChangeMaxMs);
-}
 
 export function useDisplayOnlineCount(): number {
   const liveCount = useOnlineCount();
@@ -24,9 +17,12 @@ export function useDisplayOnlineCount(): number {
     () => loadBotSettings().displayOnlineCountOverride,
   );
   const [settingsTick, setSettingsTick] = useState(0);
-  const [displayCount, setDisplayCount] = useState(() =>
-    loadBotSettings().displayOnlineCountOverride ? pickDisplayCount() : liveCount,
-  );
+  const [displayCount, setDisplayCount] = useState(() => {
+    const settings = loadBotSettings();
+    return settings.displayOnlineCountOverride
+      ? computeDisplayOnlineCount(settings)
+      : liveCount;
+  });
 
   useEffect(() => {
     const refresh = () => {
@@ -47,24 +43,29 @@ export function useDisplayOnlineCount(): number {
       return;
     }
 
-    setDisplayCount(pickDisplayCount());
+    const sync = () => {
+      const settings = loadBotSettings();
+      if (!settings.displayOnlineCountOverride) {
+        setOverrideEnabled(false);
+        setDisplayCount(liveCount);
+        return;
+      }
+      setDisplayCount(computeDisplayOnlineCount(settings));
+    };
+
+    sync();
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
 
     const scheduleNext = () => {
       if (cancelled) return;
+      const settings = loadBotSettings();
       timeoutId = setTimeout(() => {
         if (cancelled) return;
-        const settings = loadBotSettings();
-        if (!settings.displayOnlineCountOverride) {
-          setOverrideEnabled(false);
-          setDisplayCount(liveCount);
-          return;
-        }
-        setDisplayCount(pickDisplayCount());
+        sync();
         scheduleNext();
-      }, pickChangeDelayMs());
+      }, msUntilNextDisplayOnlineCount(settings));
     };
 
     scheduleNext();

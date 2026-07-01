@@ -64,7 +64,8 @@ export type BotSettings = {
 
   /**
    * When enabled, the navbar online pill shows a synthetic count in the configured
-   * range and updates on a random interval (ops-only display tweak).
+   * range. The value is derived from UTC time so it stays in sync across tabs,
+   * devices, and refreshes (given the same saved settings).
    */
   displayOnlineCountOverride: boolean;
   displayOnlineCountMin: number;
