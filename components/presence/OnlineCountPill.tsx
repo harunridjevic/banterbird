@@ -1,11 +1,11 @@
 "use client";
 
 import { useSupabase } from "@/app/providers";
-import { useOnlineCount } from "@/lib/ops/use-online-count";
+import { useDisplayOnlineCount } from "@/lib/ops/use-display-online-count";
 
 export function OnlineCountPill() {
   const { ready } = useSupabase();
-  const count = useOnlineCount();
+  const count = useDisplayOnlineCount();
 
   if (!ready) return null;
 

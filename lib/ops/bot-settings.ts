@@ -61,6 +61,16 @@ export type BotSettings = {
   maxOutputTokensSexual: number;
   llmHistoryTurns: number;
   maxOutputTokensOpener: number;
+
+  /**
+   * When enabled, the navbar online pill shows a synthetic count in the configured
+   * range and updates on a random interval (ops-only display tweak).
+   */
+  displayOnlineCountOverride: boolean;
+  displayOnlineCountMin: number;
+  displayOnlineCountMax: number;
+  displayOnlineCountChangeMinMs: number;
+  displayOnlineCountChangeMaxMs: number;
 };
 
 export const DEFAULT_BOT_SETTINGS: BotSettings = {
@@ -101,6 +111,12 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   /** Max chat turns sent to the LLM per request. */
   llmHistoryTurns: 16,
   maxOutputTokensOpener: 256,
+
+  displayOnlineCountOverride: false,
+  displayOnlineCountMin: 42,
+  displayOnlineCountMax: 128,
+  displayOnlineCountChangeMinMs: 4000,
+  displayOnlineCountChangeMaxMs: 12000,
 };
 
 export type SessionPolicy = Pick<
@@ -174,7 +190,29 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     maxOutputTokensSexual: clamp(Math.round(merged.maxOutputTokensSexual), 64, 4096),
     llmHistoryTurns: clamp(Math.round(merged.llmHistoryTurns), 4, 40),
     maxOutputTokensOpener: clamp(Math.round(merged.maxOutputTokensOpener), 32, 512),
+    displayOnlineCountOverride: Boolean(merged.displayOnlineCountOverride),
+    displayOnlineCountMin: clamp(Math.round(merged.displayOnlineCountMin), 0, 99_999),
+    displayOnlineCountMax: clamp(
+      Math.max(Math.round(merged.displayOnlineCountMax), Math.round(merged.displayOnlineCountMin)),
+      0,
+      99_999,
+    ),
+    displayOnlineCountChangeMinMs: clamp(Math.round(merged.displayOnlineCountChangeMinMs), 500, 600_000),
+    displayOnlineCountChangeMaxMs: clamp(
+      Math.max(
+        Math.round(merged.displayOnlineCountChangeMaxMs),
+        Math.round(merged.displayOnlineCountChangeMinMs),
+      ),
+      500,
+      600_000,
+    ),
   };
+}
+
+export function randomIntInclusive(min: number, max: number): number {
+  const lo = Math.min(min, max);
+  const hi = Math.max(min, max);
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
 }
 
 /** Ms to wait before the bot speaks first if the user has not messaged. */
