@@ -96,11 +96,11 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   sessionHintAt: 5,
 
   llmTemperature: 1.08,
-  maxOutputTokens: 256,
-  maxOutputTokensSexual: 384,
+  maxOutputTokens: 320,
+  maxOutputTokensSexual: 512,
   /** Max chat turns sent to the LLM per request. */
   llmHistoryTurns: 16,
-  maxOutputTokensOpener: 128,
+  maxOutputTokensOpener: 256,
 };
 
 export type SessionPolicy = Pick<

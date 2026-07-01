@@ -655,7 +655,7 @@ export function ChatRoom({ roomId }: Props) {
   );
 
   const displayAsHuman = isAiRoom && hideBotUi;
-  const showPeerGender = !hideGenderFilters && !displayAsHuman;
+  const showPeerGender = !hideGenderFilters;
 
   if (loading || !selfId) {
     return <PageLoader label="Opening your chat…" />;
@@ -730,7 +730,7 @@ export function ChatRoom({ roomId }: Props) {
                 ) : (
                   <span className="inline-block h-2 w-2 rounded-full bg-navy-300 dark:bg-navy-600" aria-hidden />
                 )}
-                {isAiRoom
+                {isAiRoom && !hideBotUi
                   ? "Bot persona"
                   : peerGender === "male"
                     ? "Man"

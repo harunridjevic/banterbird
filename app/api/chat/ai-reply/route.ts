@@ -230,52 +230,49 @@ async function callLlm(
   const hasUserTurn = history.some((m) => m.role === "user");
   const opener = isOpener ?? !hasUserTurn;
   const maxOutputTokens = opener
-    ? (settings?.maxOutputTokensOpener ?? 128)
+    ? (settings?.maxOutputTokensOpener ?? 256)
     : memory.sexualVibe
-      ? (settings?.maxOutputTokensSexual ?? 384)
-      : (settings?.maxOutputTokens ?? 256);
+      ? (settings?.maxOutputTokensSexual ?? 512)
+      : (settings?.maxOutputTokens ?? 320);
   const temperature = settings?.llmTemperature ?? 1.08;
   const provider = googleApiKey() ? "gemini" : "openai";
   const fetchRaw = provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
   const started = Date.now();
+
+  const logProviderUsage = (
+    result: LlmFetchResult,
+    success: boolean,
+  ) => {
+    if (!logCtx) return;
+    const inputTokens = result.inputTokens ?? 0;
+    const outputTokens = result.outputTokens ?? 0;
+    void logApiUsage({
+      endpoint: "/api/chat/ai-reply",
+      provider,
+      success,
+      latencyMs: Date.now() - started,
+      roomId: logCtx.roomId,
+      userId: logCtx.userId,
+      inputTokens: inputTokens || undefined,
+      outputTokens: outputTokens || undefined,
+      estimatedCostUsd:
+        inputTokens || outputTokens
+          ? estimateLlmCostUsd(provider, inputTokens, outputTokens)
+          : undefined,
+    });
+  };
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
     if (!result.raw) continue;
     const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
     if (parsed) {
-      if (logCtx) {
-        const inputTokens = result.inputTokens ?? 0;
-        const outputTokens = result.outputTokens ?? 0;
-        void logApiUsage({
-          endpoint: "/api/chat/ai-reply",
-          provider,
-          success: true,
-          latencyMs: Date.now() - started,
-          roomId: logCtx.roomId,
-          userId: logCtx.userId,
-          inputTokens: inputTokens || undefined,
-          outputTokens: outputTokens || undefined,
-          estimatedCostUsd:
-            inputTokens || outputTokens
-              ? estimateLlmCostUsd(provider, inputTokens, outputTokens)
-              : undefined,
-        });
-      }
+      logProviderUsage(result, true);
       return parsed;
     }
+    // Model responded but JSON did not parse — still a successful API call (use local fallback).
+    logProviderUsage(result, true);
     break;
-  }
-
-  if (logCtx) {
-    void logApiUsage({
-      endpoint: "/api/chat/ai-reply",
-      provider: "local",
-      success: false,
-      latencyMs: Date.now() - started,
-      roomId: logCtx.roomId,
-      userId: logCtx.userId,
-    });
   }
 
   return {

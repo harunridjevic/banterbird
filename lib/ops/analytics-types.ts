@@ -14,6 +14,7 @@ export type ApiCostDayPoint = { date: string; costUsd: number; tokens: number };
 
 export type AnalyticsSnapshot = {
   windowDays: number;
+  calendarToday?: boolean;
   sinceUtc: string;
   computedAtUtc: string;
   uniqueUsers: number;
@@ -71,7 +72,7 @@ export const METRIC_TOOLTIPS = {
   bounceRate:
     "Share of ended human-human chats where the user left within 30 seconds or sent no messages.",
   apiTotalCalls: "Total AI reply API calls (Gemini/OpenAI) during the window.",
-  apiSuccessRate: "Share of AI API calls that completed without an error response.",
+  apiSuccessRate: "Share of logged API calls where Gemini/OpenAI returned a response (excludes local fallbacks).",
   apiAvgLatency: "Average round-trip time for AI API calls in milliseconds.",
   apiTotalTokens: "Total input + output tokens consumed by Gemini/OpenAI calls in the window.",
   apiEstimatedCost: "Estimated API spend in USD based on token counts and configured per-model rates.",
@@ -85,10 +86,18 @@ export function resolvePeriodDays(period: AnalyticsPeriod, customDays: number): 
   return PERIOD_DAYS[period];
 }
 
+export function formatSinceUtc(iso: string): string {
+  try {
+    return new Date(iso).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  } catch {
+    return iso;
+  }
+}
+
 export function periodLabel(period: AnalyticsPeriod, days: number): string {
   switch (period) {
     case "today":
-      return "Today";
+      return "Today (UTC calendar day)";
     case "week":
       return "Last 7 days";
     case "month":
