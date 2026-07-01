@@ -35,7 +35,10 @@ export async function GET(req: Request) {
 
   try {
     const admin = createServiceRoleClient();
-    const { data, error } = await admin.rpc("ops_analytics_snapshot", { p_days: days });
+    const { data, error } = await admin.rpc("ops_analytics_snapshot", {
+      p_days: days,
+      p_calendar_today: period === "today",
+    });
     if (error) {
       console.error("ops_analytics_snapshot", error);
       return NextResponse.json({ error: error.message }, { status: 500 });

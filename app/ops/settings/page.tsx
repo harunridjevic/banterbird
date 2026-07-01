@@ -114,6 +114,37 @@ export default function OpsBotSettingsPage() {
             </div>
 
         <div className="mt-10 space-y-8">
+          <Section title="Match page">
+            <SelectField
+              label="Partner matching"
+              value={settings.matchMode}
+              onChange={(v) => patch({ matchMode: v as BotSettings["matchMode"] })}
+              options={[
+                { value: "user_choice", label: "User chooses (humans only vs humans + bot)" },
+                { value: "hidden_bots", label: "Hidden bots (always humans + bot, no bot labels in chat)" },
+                { value: "humans_only", label: "Humans only (never offer bot matches)" },
+              ]}
+            />
+            <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={settings.hideGenderFilters}
+                onChange={(e) => patch({ hideGenderFilters: e.target.checked })}
+                className="mt-1 accent-violet-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-navy-100">Hide gender filters</span>
+                <span className="mt-1 block text-xs text-navy-400">
+                  Show a single &quot;Start matching&quot; button instead of gender pickers. Users match anyone
+                  online; gender is not shown in chat.
+                </span>
+              </span>
+            </label>
+            <p className="mt-2 text-xs text-navy-400">
+              Hidden bots keeps practice partners available after a short wait but makes chat look identical to a human match.
+            </p>
+          </Section>
+
           <Section title="Sexual vibe">
             <SelectField
               label="Disposition"
@@ -219,6 +250,55 @@ export default function OpsBotSettingsPage() {
             ) : null}
           </Section>
 
+          <Section title="Bot opener (speaks first if user is idle)">
+            <SelectField
+              label="Opener wait mode"
+              value={settings.openerDelayMode}
+              onChange={(v) => patch({ openerDelayMode: v as BotSettings["openerDelayMode"] })}
+              options={[
+                { value: "fixed", label: "Fixed delay" },
+                { value: "random", label: "Random delay (min–max range)" },
+              ]}
+            />
+            <p className="mt-2 text-xs text-navy-400">
+              How long the bot waits before saying hi when the user has not sent a message yet. Cancelled
+              immediately if the user types first.
+            </p>
+            {settings.openerDelayMode === "fixed" ? (
+              <NumberField
+                label="Fixed wait (ms)"
+                hint={`≈ ${(settings.openerDelayMs / 1000).toFixed(1)}s — e.g. 1000 = 1s, 10000 = 10s`}
+                value={settings.openerDelayMs}
+                min={0}
+                max={60000}
+                step={100}
+                onChange={(openerDelayMs) => patch({ openerDelayMs })}
+                className="mt-4"
+              />
+            ) : (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <NumberField
+                  label="Random wait min (ms)"
+                  hint={`≈ ${(settings.openerDelayMinMs / 1000).toFixed(1)}s`}
+                  value={settings.openerDelayMinMs}
+                  min={0}
+                  max={60000}
+                  step={100}
+                  onChange={(openerDelayMinMs) => patch({ openerDelayMinMs })}
+                />
+                <NumberField
+                  label="Random wait max (ms)"
+                  hint={`≈ ${(settings.openerDelayMaxMs / 1000).toFixed(1)}s`}
+                  value={settings.openerDelayMaxMs}
+                  min={settings.openerDelayMinMs}
+                  max={60000}
+                  step={100}
+                  onChange={(openerDelayMaxMs) => patch({ openerDelayMaxMs })}
+                />
+              </div>
+            )}
+          </Section>
+
           <Section title="Timing (ms)">
             <div className="grid gap-4 sm:grid-cols-2">
               <NumberField
@@ -236,14 +316,6 @@ export default function OpsBotSettingsPage() {
                 max={120000}
                 step={500}
                 onChange={(ghostSkipMs) => patch({ ghostSkipMs })}
-              />
-              <NumberField
-                label="Opener delay"
-                value={settings.openerDelayMs}
-                min={0}
-                max={30000}
-                step={100}
-                onChange={(openerDelayMs) => patch({ openerDelayMs })}
               />
               <NumberField
                 label="AI match delay min"
@@ -328,7 +400,7 @@ export default function OpsBotSettingsPage() {
                 value={settings.maxOutputTokens}
                 min={64}
                 max={4096}
-                step={64}
+                step={32}
                 onChange={(maxOutputTokens) => patch({ maxOutputTokens })}
               />
               <NumberField
@@ -336,8 +408,23 @@ export default function OpsBotSettingsPage() {
                 value={settings.maxOutputTokensSexual}
                 min={64}
                 max={4096}
-                step={64}
+                step={32}
                 onChange={(maxOutputTokensSexual) => patch({ maxOutputTokensSexual })}
+              />
+              <NumberField
+                label="Max tokens (opener only)"
+                value={settings.maxOutputTokensOpener}
+                min={32}
+                max={512}
+                step={16}
+                onChange={(maxOutputTokensOpener) => patch({ maxOutputTokensOpener })}
+              />
+              <NumberField
+                label="History turns sent to LLM"
+                value={settings.llmHistoryTurns}
+                min={4}
+                max={40}
+                onChange={(llmHistoryTurns) => patch({ llmHistoryTurns })}
               />
             </div>
           </Section>
@@ -399,6 +486,8 @@ function NumberField({
   min,
   max,
   step = 1,
+  hint,
+  className,
   onChange,
 }: {
   label: string;
@@ -406,10 +495,12 @@ function NumberField({
   min: number;
   max: number;
   step?: number;
+  hint?: string;
+  className?: string;
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="block">
+    <label className={className ?? "block"}>
       <span className="text-sm font-medium text-navy-200">{label}</span>
       <input
         type="number"
@@ -420,6 +511,7 @@ function NumberField({
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none ring-violet-500/40 focus:ring-2"
       />
+      {hint ? <p className="mt-1 text-xs text-navy-400">{hint}</p> : null}
     </label>
   );
 }

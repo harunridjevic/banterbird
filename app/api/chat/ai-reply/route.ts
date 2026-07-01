@@ -68,12 +68,15 @@ function geminiSystemPrompt(
   flirtyStarter: boolean,
   chatMode: "friendly" | "flirty",
   settings?: BotSettings | null,
+  isOpener?: boolean,
 ): string {
+  const base = buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, settings);
+  if (!isOpener) return base;
   const opener =
     flirtyStarter && chatMode === "flirty"
       ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi — messages array.'
       : 'Opening turn (user msg is only "."): casual friendly hi — messages array.';
-  return `${buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, settings)}\n\n${opener}`;
+  return `${base}\n\n${opener}`;
 }
 
 const GEMINI_RESPONSE_SCHEMA = {
@@ -222,53 +225,54 @@ async function callLlm(
   memory: ReturnType<typeof buildUserMemory>,
   settings?: BotSettings | null,
   logCtx?: { roomId: string; userId: string },
+  isOpener?: boolean,
 ): Promise<AiPracticeTurnResult> {
-  const maxOutputTokens = memory.sexualVibe
-    ? (settings?.maxOutputTokensSexual ?? 768)
-    : (settings?.maxOutputTokens ?? 512);
+  const hasUserTurn = history.some((m) => m.role === "user");
+  const opener = isOpener ?? !hasUserTurn;
+  const maxOutputTokens = opener
+    ? (settings?.maxOutputTokensOpener ?? 256)
+    : memory.sexualVibe
+      ? (settings?.maxOutputTokensSexual ?? 512)
+      : (settings?.maxOutputTokens ?? 320);
   const temperature = settings?.llmTemperature ?? 1.08;
   const provider = googleApiKey() ? "gemini" : "openai";
   const fetchRaw = provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
   const started = Date.now();
-  let hadSuccess = false;
+
+  const logProviderUsage = (
+    result: LlmFetchResult,
+    success: boolean,
+  ) => {
+    if (!logCtx) return;
+    const inputTokens = result.inputTokens ?? 0;
+    const outputTokens = result.outputTokens ?? 0;
+    void logApiUsage({
+      endpoint: "/api/chat/ai-reply",
+      provider,
+      success,
+      latencyMs: Date.now() - started,
+      roomId: logCtx.roomId,
+      userId: logCtx.userId,
+      inputTokens: inputTokens || undefined,
+      outputTokens: outputTokens || undefined,
+      estimatedCostUsd:
+        inputTokens || outputTokens
+          ? estimateLlmCostUsd(provider, inputTokens, outputTokens)
+          : undefined,
+    });
+  };
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
     if (!result.raw) continue;
     const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
     if (parsed) {
-      hadSuccess = true;
-      if (logCtx) {
-        const inputTokens = result.inputTokens ?? 0;
-        const outputTokens = result.outputTokens ?? 0;
-        void logApiUsage({
-          endpoint: "/api/chat/ai-reply",
-          provider,
-          success: true,
-          latencyMs: Date.now() - started,
-          roomId: logCtx.roomId,
-          userId: logCtx.userId,
-          inputTokens: inputTokens || undefined,
-          outputTokens: outputTokens || undefined,
-          estimatedCostUsd:
-            inputTokens || outputTokens
-              ? estimateLlmCostUsd(provider, inputTokens, outputTokens)
-              : undefined,
-        });
-      }
+      logProviderUsage(result, true);
       return parsed;
     }
-  }
-
-  if (logCtx) {
-    void logApiUsage({
-      endpoint: "/api/chat/ai-reply",
-      provider: hadSuccess ? provider : "local",
-      success: false,
-      latencyMs: Date.now() - started,
-      roomId: logCtx.roomId,
-      userId: logCtx.userId,
-    });
+    // Model responded but JSON did not parse — still a successful API call (use local fallback).
+    logProviderUsage(result, true);
+    break;
   }
 
   return {
@@ -328,11 +332,13 @@ export async function POST(req: Request) {
     const botGender = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
-    const trimmedHistory = history.slice(-28);
+    const historyLimit = botSettings?.llmHistoryTurns ?? 16;
+    const trimmedHistory = history.slice(-historyLimit);
     const memory = buildUserMemory(trimmedHistory);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
     const sessionBlock = sessionContextOverlay(memory, persona, botSettings);
     const personaBlock = formatPersonaPrompt(persona);
+    const isOpener = !trimmedHistory.some((m) => m.role === "user");
 
     if (trigger === "idle_ping" || trigger === "idle_skip") {
       const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
@@ -355,13 +361,22 @@ export async function POST(req: Request) {
     }
 
     const systemPrompt = googleApiKey()
-      ? geminiSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, persona.flirtyStarter, persona.chatMode, botSettings)
+      ? geminiSystemPrompt(
+          personaBlock,
+          memoryBlock,
+          sessionBlock,
+          trigger,
+          persona.flirtyStarter,
+          persona.chatMode,
+          botSettings,
+          isOpener,
+        )
       : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
 
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,
       userId: user.id,
-    });
+    }, isOpener);
 
     result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger, botSettings);
 

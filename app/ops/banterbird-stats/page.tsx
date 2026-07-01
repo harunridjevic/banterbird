@@ -7,6 +7,7 @@ import { MetricCard } from "@/components/ops/MetricCard";
 import {
   type AnalyticsPeriod,
   type AnalyticsSnapshot,
+  formatSinceUtc,
   METRIC_TOOLTIPS,
   periodLabel,
   resolvePeriodDays,
@@ -312,6 +313,12 @@ export default function OpsAnalyticsPage() {
               <div className="mt-8 space-y-8">
                 <p className="text-sm text-navy-400">
                   Showing <span className="text-navy-200">{periodLabel(period, days)}</span>
+                  {snapshot.sinceUtc ? (
+                    <span className="text-navy-500">
+                      {" "}
+                      · from {formatSinceUtc(snapshot.sinceUtc)}
+                    </span>
+                  ) : null}
                 </p>
 
                 <section>

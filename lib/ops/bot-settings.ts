@@ -8,7 +8,23 @@ import type {
 export const BOT_SETTINGS_STORAGE_KEY = "banterbird:bot-settings";
 export const BOT_SETTINGS_CHANGED_EVENT = "banterbird:bot-settings-changed";
 
+/** How match page handles human vs bot matching. */
+export type MatchMode = "user_choice" | "hidden_bots" | "humans_only";
+
 export type BotSettings = {
+  /**
+   * user_choice — user picks humans-only vs humans+bot on /match.
+   * hidden_bots — always match humans+bot; chat UI hides bot indicators.
+   * humans_only — never offer bot matches; user cannot toggle.
+   */
+  matchMode: MatchMode;
+
+  /**
+   * When true, /match shows a single start button — no gender pickers.
+   * Users match anyone online; gender is assigned internally for the queue only.
+   */
+  hideGenderFilters: boolean;
+
   /** Sexual vibe: random uses weights below; otherwise forces every bot. */
   sexualDisposition: "random" | SexualDisposition;
   strictWeight: number;
@@ -25,7 +41,11 @@ export type BotSettings = {
 
   ghostPingMs: number;
   ghostSkipMs: number;
+  /** Fixed wait before bot sends opener when user has not messaged yet. */
+  openerDelayMode: "fixed" | "random";
   openerDelayMs: number;
+  openerDelayMinMs: number;
+  openerDelayMaxMs: number;
   aiMatchDelayMinMs: number;
   aiMatchDelayMaxMs: number;
 
@@ -39,9 +59,14 @@ export type BotSettings = {
   llmTemperature: number;
   maxOutputTokens: number;
   maxOutputTokensSexual: number;
+  llmHistoryTurns: number;
+  maxOutputTokensOpener: number;
 };
 
 export const DEFAULT_BOT_SETTINGS: BotSettings = {
+  matchMode: "user_choice",
+  hideGenderFilters: false,
+
   sexualDisposition: "random",
   strictWeight: 50,
   persuadableWeight: 30,
@@ -56,7 +81,10 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
 
   ghostPingMs: 10_000,
   ghostSkipMs: 6_000,
-  openerDelayMs: 1100,
+  openerDelayMode: "fixed",
+  openerDelayMs: 5000,
+  openerDelayMinMs: 3000,
+  openerDelayMaxMs: 8000,
   aiMatchDelayMinMs: 3600,
   aiMatchDelayMaxMs: 5200,
 
@@ -68,8 +96,11 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   sessionHintAt: 5,
 
   llmTemperature: 1.08,
-  maxOutputTokens: 512,
-  maxOutputTokensSexual: 768,
+  maxOutputTokens: 320,
+  maxOutputTokensSexual: 512,
+  /** Max chat turns sent to the LLM per request. */
+  llmHistoryTurns: 16,
+  maxOutputTokensOpener: 256,
 };
 
 export type SessionPolicy = Pick<
@@ -98,17 +129,38 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+const MATCH_MODES: MatchMode[] = ["user_choice", "hidden_bots", "humans_only"];
+
+function normalizeMatchMode(v: unknown): MatchMode {
+  return MATCH_MODES.includes(v as MatchMode) ? (v as MatchMode) : DEFAULT_BOT_SETTINGS.matchMode;
+}
+
+const OPENER_DELAY_MODES = ["fixed", "random"] as const;
+
+function normalizeOpenerDelayMode(v: unknown): BotSettings["openerDelayMode"] {
+  return OPENER_DELAY_MODES.includes(v as BotSettings["openerDelayMode"])
+    ? (v as BotSettings["openerDelayMode"])
+    : DEFAULT_BOT_SETTINGS.openerDelayMode;
+}
+
 function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
   const merged = { ...DEFAULT_BOT_SETTINGS, ...partial };
+  const openerDelayMinMs = clamp(merged.openerDelayMinMs, 0, 60_000);
+  const openerDelayMaxMs = clamp(Math.max(merged.openerDelayMaxMs, openerDelayMinMs), 0, 60_000);
   return {
     ...merged,
+    matchMode: normalizeMatchMode(merged.matchMode),
+    hideGenderFilters: Boolean(merged.hideGenderFilters),
+    openerDelayMode: normalizeOpenerDelayMode(merged.openerDelayMode),
     strictWeight: clamp(merged.strictWeight, 0, 100),
     persuadableWeight: clamp(merged.persuadableWeight, 0, 100),
     hornyWeight: clamp(merged.hornyWeight, 0, 100),
     replySpeed: clamp(merged.replySpeed, 0.55, 1.65),
     ghostPingMs: clamp(merged.ghostPingMs, 1000, 120_000),
     ghostSkipMs: clamp(merged.ghostSkipMs, 1000, 120_000),
-    openerDelayMs: clamp(merged.openerDelayMs, 0, 30_000),
+    openerDelayMs: clamp(merged.openerDelayMs, 0, 60_000),
+    openerDelayMinMs,
+    openerDelayMaxMs,
     aiMatchDelayMinMs: clamp(merged.aiMatchDelayMinMs, 0, 60_000),
     aiMatchDelayMaxMs: clamp(Math.max(merged.aiMatchDelayMaxMs, merged.aiMatchDelayMinMs), 0, 60_000),
     maxUserTurnsBeforeSkip: clamp(Math.round(merged.maxUserTurnsBeforeSkip), 1, 50),
@@ -120,6 +172,26 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     llmTemperature: clamp(merged.llmTemperature, 0, 2),
     maxOutputTokens: clamp(Math.round(merged.maxOutputTokens), 64, 4096),
     maxOutputTokensSexual: clamp(Math.round(merged.maxOutputTokensSexual), 64, 4096),
+    llmHistoryTurns: clamp(Math.round(merged.llmHistoryTurns), 4, 40),
+    maxOutputTokensOpener: clamp(Math.round(merged.maxOutputTokensOpener), 32, 512),
+  };
+}
+
+/** Ms to wait before the bot speaks first if the user has not messaged. */
+export function resolveOpenerDelayMs(settings?: BotSettings | null): number {
+  const s = settings ?? DEFAULT_BOT_SETTINGS;
+  if (s.openerDelayMode === "random") {
+    const span = Math.max(0, s.openerDelayMaxMs - s.openerDelayMinMs);
+    return s.openerDelayMinMs + Math.floor(Math.random() * (span + 1));
+  }
+  return s.openerDelayMs;
+}
+
+/** Internal queue genders when gender filters are hidden from the user. */
+export function anonymousMatchGenders(): { self: "male" | "female"; wants: "any" } {
+  return {
+    self: Math.random() < 0.5 ? "male" : "female",
+    wants: "any",
   };
 }
 
