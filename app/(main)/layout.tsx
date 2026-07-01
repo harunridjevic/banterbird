@@ -2,9 +2,9 @@ import { Navbar } from "@/components/layout/Navbar";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="relative min-h-dvh">
       <Navbar />
-      <main className="flex flex-1 flex-col">{children}</main>
+      <main className="relative">{children}</main>
     </div>
   );
 }

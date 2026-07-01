@@ -692,16 +692,19 @@ export function ChatRoom({ roomId }: Props) {
           <span className="hidden sm:inline">Match</span>
         </motion.button>
         <div className="min-w-0 flex-1 text-center">
-          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-            <p className="text-sm font-semibold text-navy-950 dark:text-navy-50">Anonymous chat</p>
+          <p className="hidden text-sm font-semibold text-navy-950 sm:block dark:text-navy-50">
+            Anonymous chat
+          </p>
+          <div className="flex flex-nowrap items-center justify-center gap-1.5 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:mt-1 sm:flex-wrap sm:gap-x-2 sm:gap-y-1 sm:overflow-visible [&::-webkit-scrollbar]:hidden">
             {!displayAsHuman && isAiRoom ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/40 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-900 dark:text-violet-100 sm:text-[11px]">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-500/40 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap text-violet-900 dark:text-violet-100 sm:text-[11px]">
                 <Bot className="h-3 w-3" aria-hidden />
-                Practice bot
+                <span className="sm:hidden">Bot</span>
+                <span className="hidden sm:inline">Practice bot</span>
               </span>
             ) : null}
             <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide sm:text-[11px] ${
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap sm:text-[11px] ${
                 peerPresence === "online"
                   ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
                   : peerPresence === "offline"
@@ -722,7 +725,7 @@ export function ChatRoom({ roomId }: Props) {
               {peerPresence === "unknown" ? "…" : peerPresence === "online" ? "Online" : "Offline"}
             </span>
             {showPeerGender ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-navy-200/70 bg-white/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy-600 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-300 sm:text-[11px]">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-navy-200/70 bg-white/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap text-navy-600 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-300 sm:text-[11px]">
                 {peerGender === "male" ? (
                   <Mars className="h-3 w-3 text-blue-500" aria-hidden />
                 ) : peerGender === "female" ? (
@@ -740,7 +743,7 @@ export function ChatRoom({ roomId }: Props) {
               </span>
             ) : null}
           </div>
-          <p className="mt-0.5 text-xs text-navy-600 dark:text-navy-400">
+          <p className="mt-1 text-xs text-navy-600 dark:text-navy-400">
             You are both strangers — stay kind.
           </p>
         </div>

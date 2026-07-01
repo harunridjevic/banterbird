@@ -7,9 +7,9 @@ type Props = { onCancel: () => void };
 
 export function MatchingLoader({ onCancel }: Props) {
   return (
-    <div className="flex min-h-[min(70dvh,32rem)] w-full flex-col items-center justify-center px-4 py-10 text-center">
+    <div className="w-full px-4 py-6 text-center">
       <motion.div
-        className="relative flex h-20 w-20 items-center justify-center rounded-[1.75rem] border border-navy-200/70 bg-white/80 shadow-lg sm:h-24 sm:w-24 sm:rounded-[2rem] dark:border-white/10 dark:bg-navy-900/40"
+        className="relative mx-auto flex h-20 w-20 items-center justify-center rounded-[1.75rem] border border-navy-200/70 bg-white/80 shadow-lg sm:h-24 sm:w-24 sm:rounded-[2rem] dark:border-white/10 dark:bg-navy-900/40"
         animate={{ scale: [1, 1.08, 1], rotate: [0, 3, -3, 0] }}
         transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
       >
@@ -23,7 +23,7 @@ export function MatchingLoader({ onCancel }: Props) {
       <p className="mt-6 text-base font-semibold text-navy-950 sm:mt-8 sm:text-lg dark:text-navy-50">
         Looking for a match…
       </p>
-      <p className="mt-2 max-w-xs text-sm text-navy-600 dark:text-navy-300">
+      <p className="mt-2 mx-auto max-w-xs text-sm text-navy-600 dark:text-navy-300">
         Hang tight — we&apos;re pairing you with someone now.
       </p>
       <motion.button

@@ -267,7 +267,7 @@ export function MatchLobby() {
 
   if (rpcError) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center">
+      <div className="mx-auto max-w-md px-4 py-8 text-center">
         <p className="text-sm text-red-600 dark:text-red-400">{rpcError}</p>
         <p className="mt-4 text-xs text-navy-600 dark:text-navy-400">
           Check that Anonymous sign-ins are enabled in Supabase Authentication providers, and that the
@@ -282,7 +282,7 @@ export function MatchLobby() {
   }
 
   return (
-    <div className="mx-auto flex w-full flex-col items-center justify-center gap-4 md:gap-7">
+    <div className="mx-auto flex w-full flex-col items-center gap-4 md:gap-7">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
