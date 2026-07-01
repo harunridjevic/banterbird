@@ -13,6 +13,11 @@ import {
   loadBotSettings,
   type MatchMode,
 } from "@/lib/ops/bot-settings";
+import {
+  canStartMatching,
+  computeEffectiveIncludeAi,
+  resolveActiveGenders,
+} from "@/lib/match/policy";
 import { MatchingLoader } from "./MatchingLoader";
 
 export function MatchLobby() {
@@ -39,18 +44,19 @@ export function MatchLobby() {
   const navigatedRef = useRef(false);
   const cancelledRef = useRef(false);
   const showMatchModePicker = matchMode === "user_choice";
-  const effectiveIncludeAi =
-    matchMode === "humans_only" ? false : matchMode === "hidden_bots" ? true : includeAiMatch;
-
-  const activeSelfGender = hideGenderFilters
-    ? matchGendersRef.current?.self
-    : selfGender;
-  const activeWantsGender = hideGenderFilters
-    ? (matchGendersRef.current?.wants ?? "any")
-    : wantsGender;
-  const canMatch = hideGenderFilters
-    ? matchRequested && !!activeSelfGender && !!activeWantsGender
-    : !!selfGender && !!wantsGender;
+  const effectiveIncludeAi = computeEffectiveIncludeAi(matchMode, includeAiMatch);
+  const { activeSelfGender, activeWantsGender } = resolveActiveGenders(
+    hideGenderFilters,
+    selfGender,
+    wantsGender,
+    matchGendersRef.current,
+  );
+  const canMatch = canStartMatching(
+    hideGenderFilters,
+    matchRequested,
+    activeSelfGender,
+    activeWantsGender,
+  );
 
   useEffect(() => {
     const refresh = () => {
