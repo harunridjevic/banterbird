@@ -17,8 +17,9 @@ export const metadata: Metadata = {
   description:
     "Fast, minimal anonymous chat. Get matched randomly and message in real time.",
   icons: {
-    icon: "/banterbird-logo.png",
-    apple: "/banterbird-logo.png",
+    icon: [{ url: "/banterbird-logo.png", type: "image/png" }],
+    shortcut: ["/banterbird-logo.png"],
+    apple: [{ url: "/banterbird-logo.png", type: "image/png" }],
   },
 };
 

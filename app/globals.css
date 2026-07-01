@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
   --color-navy-50: #f4f6f9;
@@ -14,20 +16,27 @@
   --color-navy-900: #141f2e;
   --color-navy-950: #0c121c;
   --color-bubble-me: #1e3a5f;
-  --color-bubble-them: #e8ecf4;
+  --color-bubble-them: #dce3ee;
   --shadow-glass: 0 8px 32px rgba(12, 18, 28, 0.08);
 }
 
 :root {
   --page-bg: var(--color-navy-50);
   --page-fg: var(--color-navy-950);
-  --glass-bg: rgba(255, 255, 255, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.35);
+  --text-primary: var(--color-navy-950);
+  --text-secondary: var(--color-navy-700);
+  --text-muted: var(--color-navy-600);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(20, 31, 46, 0.1);
+  --color-bubble-them: #dce3ee;
 }
 
 .dark {
   --page-bg: var(--color-navy-950);
   --page-fg: var(--color-navy-50);
+  --text-primary: var(--color-navy-50);
+  --text-secondary: var(--color-navy-200);
+  --text-muted: var(--color-navy-400);
   --glass-bg: rgba(20, 31, 46, 0.55);
   --glass-border: rgba(255, 255, 255, 0.08);
   --color-bubble-them: #1e2a3d;

@@ -7,8 +7,10 @@ export const metadata: Metadata = {
 
 export default function MatchPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
-      <MatchLobby />
+    <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center px-4 sm:px-6">
+      <div className="pointer-events-auto w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] overflow-y-auto">
+        <MatchLobby />
+      </div>
     </div>
   );
 }

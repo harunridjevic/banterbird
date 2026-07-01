@@ -114,6 +114,61 @@ export default function OpsBotSettingsPage() {
             </div>
 
         <div className="mt-10 space-y-8">
+          <Section title="Displayed online count">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={settings.displayOnlineCountOverride}
+                onChange={(e) => patch({ displayOnlineCountOverride: e.target.checked })}
+                className="mt-1 accent-violet-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-navy-100">Override navbar count</span>
+                <span className="mt-1 block text-xs text-navy-400">
+                  Show a synthetic online number in the app navbar instead of the live presence count.
+                  The value is synchronized by time, so it stays stable on refresh and matches across
+                  tabs/devices that share these settings. It drifts gradually inside your range.
+                </span>
+              </span>
+            </label>
+            {settings.displayOnlineCountOverride ? (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <NumberField
+                  label="Minimum displayed count"
+                  value={settings.displayOnlineCountMin}
+                  min={0}
+                  max={settings.displayOnlineCountMax}
+                  onChange={(displayOnlineCountMin) => patch({ displayOnlineCountMin })}
+                />
+                <NumberField
+                  label="Maximum displayed count"
+                  value={settings.displayOnlineCountMax}
+                  min={settings.displayOnlineCountMin}
+                  max={99999}
+                  onChange={(displayOnlineCountMax) => patch({ displayOnlineCountMax })}
+                />
+                <NumberField
+                  label="Change interval min (ms)"
+                  hint={`≈ ${(settings.displayOnlineCountChangeMinMs / 1000).toFixed(1)}s`}
+                  value={settings.displayOnlineCountChangeMinMs}
+                  min={500}
+                  max={600000}
+                  step={100}
+                  onChange={(displayOnlineCountChangeMinMs) => patch({ displayOnlineCountChangeMinMs })}
+                />
+                <NumberField
+                  label="Change interval max (ms)"
+                  hint={`≈ ${(settings.displayOnlineCountChangeMaxMs / 1000).toFixed(1)}s`}
+                  value={settings.displayOnlineCountChangeMaxMs}
+                  min={settings.displayOnlineCountChangeMinMs}
+                  max={600000}
+                  step={100}
+                  onChange={(displayOnlineCountChangeMaxMs) => patch({ displayOnlineCountChangeMaxMs })}
+                />
+              </div>
+            ) : null}
+          </Section>
+
           <Section title="Match page">
             <SelectField
               label="Partner matching"

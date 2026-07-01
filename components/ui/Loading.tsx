@@ -32,7 +32,7 @@ export function PageLoader({ label = "Loading…" }: { label?: string }) {
           />
         ))}
       </div>
-      <p className="text-sm text-navy-600 dark:text-navy-300">{label}</p>
+      <p className="text-sm text-navy-700 dark:text-navy-300">{label}</p>
     </div>
   );
 }
