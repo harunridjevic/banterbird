@@ -269,7 +269,7 @@ export function MatchLobby() {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <p className="text-sm text-red-600 dark:text-red-400">{rpcError}</p>
-        <p className="mt-4 text-xs text-navy-500 dark:text-navy-400">
+        <p className="mt-4 text-xs text-navy-600 dark:text-navy-400">
           Check that Anonymous sign-ins are enabled in Supabase Authentication providers, and that the
           database migration has been applied.
         </p>
@@ -282,15 +282,15 @@ export function MatchLobby() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[62vh] w-full max-w-2xl flex-col items-center justify-center gap-4 px-2 sm:px-4 md:gap-7">
+    <div className="mx-auto flex w-full flex-col items-center justify-center gap-4 md:gap-7">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-panel w-full rounded-[2rem] border border-navy-200/70 p-6 shadow-xl dark:border-white/10 sm:p-7"
+        className="glass-panel w-full rounded-3xl border border-navy-200/70 p-5 shadow-xl sm:rounded-[2rem] sm:p-7 dark:border-white/10"
       >
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-navy-950 dark:text-navy-50 sm:text-2xl">Find your vibe</h1>
-          <p className="mt-2 text-sm text-navy-600 dark:text-navy-300">{hint}</p>
+          <h1 className="text-xl font-semibold text-navy-950 sm:text-2xl dark:text-navy-50">Find your vibe</h1>
+          <p className="mt-2 text-sm text-navy-700 sm:text-base dark:text-navy-300">{hint}</p>
         </div>
 
         {hideGenderFilters ? (
@@ -305,7 +305,7 @@ export function MatchLobby() {
               <Play className="h-5 w-5" aria-hidden />
               Start matching
             </motion.button>
-            <p className="max-w-sm text-center text-xs text-navy-500 dark:text-navy-400">
+            <p className="max-w-sm text-center text-xs text-navy-600 dark:text-navy-400">
               You will be paired with the next available stranger. Gender is not shown.
             </p>
           </div>
@@ -313,7 +313,7 @@ export function MatchLobby() {
           <div className="mt-6 space-y-6">
             {showMatchModePicker ? (
               <section>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-600 dark:text-navy-400">
                   Match mode
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -323,14 +323,14 @@ export function MatchLobby() {
                     className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
                       includeAiMatch
                         ? "border-violet-500/45 bg-violet-500/10 text-violet-950 shadow-sm dark:text-violet-100"
-                        : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                        : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
                     }`}
                   >
                     <span className="inline-flex items-center gap-2">
                       <Bot className="h-4 w-4 shrink-0" />
                       Humans + practice bot
                     </span>
-                    <span className="mt-1 block text-xs font-normal text-navy-500 dark:text-navy-400">
+                    <span className="mt-1 block text-xs font-normal text-navy-600 dark:text-navy-400">
                       If no one appears after a few seconds, you may get a labeled AI partner.
                     </span>
                   </button>
@@ -340,14 +340,14 @@ export function MatchLobby() {
                     className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
                       !includeAiMatch
                         ? "border-amber-500/45 bg-amber-500/10 text-amber-950 shadow-sm dark:text-amber-100"
-                        : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                        : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
                     }`}
                   >
                     <span className="inline-flex items-center gap-2">
                       <Users className="h-4 w-4 shrink-0" />
                       Humans only
                     </span>
-                    <span className="mt-1 block text-xs font-normal text-navy-500 dark:text-navy-400">
+                    <span className="mt-1 block text-xs font-normal text-navy-600 dark:text-navy-400">
                       Wait as long as it takes for a real person.
                     </span>
                   </button>
@@ -356,7 +356,7 @@ export function MatchLobby() {
             ) : null}
 
             <section>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-600 dark:text-navy-400">
                 Your gender
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -366,7 +366,7 @@ export function MatchLobby() {
                   className={`rounded-2xl border px-4 py-3 text-left transition ${
                     selfGender === "male"
                       ? "border-blue-500/45 bg-blue-500/10 text-blue-900 shadow-sm dark:text-blue-200"
-                      : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                      : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
                   }`}
                 >
                   <span className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -379,7 +379,7 @@ export function MatchLobby() {
                   className={`rounded-2xl border px-4 py-3 text-left transition ${
                     selfGender === "female"
                       ? "border-pink-500/45 bg-pink-500/10 text-pink-900 shadow-sm dark:text-pink-200"
-                      : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                      : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
                   }`}
                 >
                   <span className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -390,7 +390,7 @@ export function MatchLobby() {
             </section>
 
             <section>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-navy-600 dark:text-navy-400">
                 You want to speak to
               </p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -406,7 +406,7 @@ export function MatchLobby() {
                     className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
                       wantsGender === option.value
                         ? "border-emerald-500/45 bg-emerald-500/10 text-emerald-900 shadow-sm dark:text-emerald-200"
-                        : "border-navy-200/70 bg-white/55 text-navy-700 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                        : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
                     }`}
                   >
                     {option.label}

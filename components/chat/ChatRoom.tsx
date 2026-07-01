@@ -678,7 +678,7 @@ export function ChatRoom({ roomId }: Props) {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-4rem)] max-w-3xl flex-col">
+    <div className="mx-auto flex h-[calc(100dvh-3.5rem)] w-full max-w-3xl flex-col sm:h-[calc(100dvh-4rem)]">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-navy-200/60 px-3 py-3 dark:border-white/10 sm:px-4">
         <motion.button
           type="button"
@@ -686,7 +686,7 @@ export function ChatRoom({ roomId }: Props) {
           whileTap={{ scale: 0.98 }}
           disabled={exiting} // This is the "Cancel" button
           onClick={() => void endRoomAndGoMatch(true)}
-          className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
+          className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm font-medium text-navy-800 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Match</span>
@@ -740,7 +740,7 @@ export function ChatRoom({ roomId }: Props) {
               </span>
             ) : null}
           </div>
-          <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
+          <p className="mt-0.5 text-xs text-navy-600 dark:text-navy-400">
             You are both strangers — stay kind.
           </p>
         </div>
@@ -765,8 +765,8 @@ export function ChatRoom({ roomId }: Props) {
               transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
               className="rounded-3xl border border-navy-200/60 bg-white/50 px-6 py-8 dark:border-white/10 dark:bg-navy-900/30"
             >
-              <p className="text-sm font-medium text-navy-800 dark:text-navy-100">No messages yet</p>
-              <p className="mt-2 max-w-xs text-xs text-navy-500 dark:text-navy-400">
+              <p className="text-sm font-medium text-navy-900 dark:text-navy-100">No messages yet</p>
+              <p className="mt-2 max-w-xs text-xs text-navy-600 dark:text-navy-400">
                 Say hi — your match is on the other side of this glassy little bubble.
               </p>
             </motion.div>}

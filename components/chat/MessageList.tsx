@@ -23,8 +23,8 @@ function TypingBubble({ label }: { label: string }) {
       aria-live="polite"
       aria-label={`${label} is typing`}
     >
-      <div className="relative max-w-[85%] rounded-3xl rounded-bl-lg bg-[var(--color-bubble-them)] px-4 py-3 shadow-sm sm:max-w-[70%]">
-        <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+      <div className="relative max-w-[85%] rounded-3xl rounded-bl-lg bg-[var(--color-bubble-them)] px-4 py-3 text-navy-950 shadow-sm sm:max-w-[70%] dark:text-navy-50">
+        <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wide text-navy-700 dark:text-navy-400">
           {label}
         </span>
         <div className="flex items-center gap-1.5 px-0.5 py-0.5">
@@ -79,7 +79,7 @@ export function MessageList({
               }`}
             >
               {!mine ? (
-                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-navy-500 dark:text-navy-400">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-navy-700 dark:text-navy-400">
                   {peerIsBot && m.is_from_ai ? `${peerLabel} · AI` : peerLabel}
                 </span>
               ) : null}

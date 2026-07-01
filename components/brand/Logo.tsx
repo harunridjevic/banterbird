@@ -14,7 +14,7 @@ export function Logo({
   priority = false,
 }: LogoProps) {
   return (
-    <Link href="/" className={`group inline-flex flex-col items-center gap-1 ${className}`}>
+    <Link href="/match" className={`group inline-flex flex-col items-center gap-1 ${className}`}>
       <motion.div
         whileHover={{ y: -2 }}
         transition={{ type: "spring", stiffness: 400, damping: 22 }}
