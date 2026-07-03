@@ -7,6 +7,8 @@ import type {
 
 export const BOT_SETTINGS_STORAGE_KEY = "banterbird:bot-settings";
 export const BOT_SETTINGS_CHANGED_EVENT = "banterbird:bot-settings-changed";
+/** Bump when cost-related defaults change — migrates stored ops settings on load. */
+export const BOT_SETTINGS_VERSION = 2;
 
 /** How match page handles human vs bot matching. */
 export type MatchMode = "user_choice" | "hidden_bots" | "humans_only";
@@ -107,11 +109,11 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   sessionHintAt: 5,
 
   llmTemperature: 1.08,
-  maxOutputTokens: 320,
-  maxOutputTokensSexual: 512,
+  maxOutputTokens: 160,
+  maxOutputTokensSexual: 256,
   /** Max chat turns sent to the LLM per request. */
-  llmHistoryTurns: 16,
-  maxOutputTokensOpener: 256,
+  llmHistoryTurns: 8,
+  maxOutputTokensOpener: 96,
 
   displayOnlineCountOverride: false,
   displayOnlineCountMin: 42,
@@ -239,7 +241,16 @@ export function loadBotSettings(): BotSettings {
   try {
     const raw = localStorage.getItem(BOT_SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_BOT_SETTINGS;
-    return mergeWithDefaults(JSON.parse(raw) as Partial<BotSettings>);
+    const parsed = JSON.parse(raw) as Partial<BotSettings> & { _v?: number };
+    if ((parsed._v ?? 1) < BOT_SETTINGS_VERSION) {
+      delete parsed.llmHistoryTurns;
+      delete parsed.maxOutputTokens;
+      delete parsed.maxOutputTokensSexual;
+      delete parsed.maxOutputTokensOpener;
+      parsed._v = BOT_SETTINGS_VERSION;
+      localStorage.setItem(BOT_SETTINGS_STORAGE_KEY, JSON.stringify(parsed));
+    }
+    return mergeWithDefaults(parsed);
   } catch {
     return DEFAULT_BOT_SETTINGS;
   }
@@ -248,7 +259,10 @@ export function loadBotSettings(): BotSettings {
 export function saveBotSettings(settings: BotSettings) {
   const normalized = mergeWithDefaults(settings);
   if (typeof window !== "undefined") {
-    localStorage.setItem(BOT_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
+    localStorage.setItem(
+      BOT_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ ...normalized, _v: BOT_SETTINGS_VERSION }),
+    );
     window.dispatchEvent(new CustomEvent(BOT_SETTINGS_CHANGED_EVENT));
   }
   return normalized;

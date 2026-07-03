@@ -2,13 +2,24 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   PRACTICE_BOT_OUTPUT_JSON_RULES,
+  PRACTICE_BOT_OUTPUT_JSON_RULES_COMPACT,
   PRACTICE_BOT_SYSTEM_INSTRUCTIONS,
+  PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT,
 } from "@/lib/ai-practice-bot/instructions";
+import { shouldUseLocalReply } from "@/lib/ai-practice-bot/llm-routing";
 import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock } from "@/lib/ai-practice-bot/memory";
-import { buildBotPersona, formatPersonaPrompt, personaAllowsSexualChat, personaTiming, type SelfGender } from "@/lib/ai-practice-bot/persona";
+import {
+  buildBotPersona,
+  formatPersonaPrompt,
+  formatPersonaPromptCompact,
+  personaAllowsSexualChat,
+  personaTiming,
+  type SelfGender,
+} from "@/lib/ai-practice-bot/persona";
 import { parseBotSettings, type BotSettings } from "@/lib/ops/bot-settings";
 import { logApiUsage } from "@/lib/ops/api-usage-log";
 import { estimateLlmCostUsd } from "@/lib/ops/llm-cost";
+import { shouldSkipLlmForBudget } from "@/lib/ops/llm-budget";
 import {
   applySessionPolicy,
   decideFallbackTurn,
@@ -36,12 +47,24 @@ function googleApiKey(): string | undefined {
   );
 }
 
+function useCompactPrompts(): boolean {
+  return process.env.LLM_USE_FULL_PROMPT?.trim() !== "true";
+}
+
 function baseSystemPrompt(): string {
   const fromEnv =
     process.env.PRACTICE_BOT_SYSTEM_PROMPT?.trim() ||
     process.env.OPENAI_PRACTICE_BOT_SYSTEM_PROMPT?.trim();
   if (fromEnv) return fromEnv;
-  return PRACTICE_BOT_SYSTEM_INSTRUCTIONS;
+  return useCompactPrompts()
+    ? PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT
+    : PRACTICE_BOT_SYSTEM_INSTRUCTIONS;
+}
+
+function outputJsonRules(): string {
+  return useCompactPrompts()
+    ? PRACTICE_BOT_OUTPUT_JSON_RULES_COMPACT
+    : PRACTICE_BOT_OUTPUT_JSON_RULES;
 }
 
 function buildSystemPrompt(
@@ -57,7 +80,7 @@ function buildSystemPrompt(
     personaBlock,
     memoryBlock,
     sessionBlock,
-    PRACTICE_BOT_OUTPUT_JSON_RULES,
+    outputJsonRules(),
     triggerLine,
   ]
     .filter(Boolean)
@@ -191,7 +214,7 @@ async function fetchGroqRaw(
   const key = groqApiKey();
   if (!key) return { raw: null };
 
-  const model = process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.3-70b-versatile";
+  const model = process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.1-8b-instant";
 
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -283,10 +306,10 @@ async function callLlm(
   const hasUserTurn = history.some((m) => m.role === "user");
   const opener = isOpener ?? !hasUserTurn;
   const maxOutputTokens = opener
-    ? (settings?.maxOutputTokensOpener ?? 256)
+    ? (settings?.maxOutputTokensOpener ?? 96)
     : memory.sexualVibe
-      ? (settings?.maxOutputTokensSexual ?? 512)
-      : (settings?.maxOutputTokens ?? 320);
+      ? (settings?.maxOutputTokensSexual ?? 256)
+      : (settings?.maxOutputTokens ?? 160);
   const temperature = settings?.llmTemperature ?? 1.08;
   const provider = groqApiKey() ? "groq" : googleApiKey() ? "gemini" : "openai";
   const fetchRaw =
@@ -316,20 +339,17 @@ async function callLlm(
     });
   };
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
-    if (!result.raw) continue;
+  const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
+  if (result.raw) {
     const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
     if (parsed) {
       logProviderUsage(result, true);
       return parsed;
     }
-    // Model responded but JSON did not parse — still a successful API call (use local fallback).
     logProviderUsage(result, true);
-    break;
+  } else {
+    logProviderUsage({ raw: null }, false);
   }
-
-  logProviderUsage({ raw: null }, false);
 
   return {
     action: "reply",
@@ -388,16 +408,17 @@ export async function POST(req: Request) {
     const botGender = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
-    const historyLimit = botSettings?.llmHistoryTurns ?? 16;
+    const historyLimit = botSettings?.llmHistoryTurns ?? 8;
     const trimmedHistory = history.slice(-historyLimit);
     const memory = buildUserMemory(trimmedHistory);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
     const sessionBlock = sessionContextOverlay(memory, persona, botSettings);
-    const personaBlock = formatPersonaPrompt(persona);
+    const personaBlock = useCompactPrompts()
+      ? formatPersonaPromptCompact(persona)
+      : formatPersonaPrompt(persona);
     const isOpener = !trimmedHistory.some((m) => m.role === "user");
 
-    if (trigger === "idle_ping" || trigger === "idle_skip") {
-      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+    const logLocal = () => {
       void logApiUsage({
         endpoint: "/api/chat/ai-reply",
         provider: "local",
@@ -406,6 +427,24 @@ export async function POST(req: Request) {
         roomId,
         userId: user.id,
       });
+    };
+
+    const respondLocal = (result: AiPracticeTurnResult) => {
+      logLocal();
+      return NextResponse.json({
+        ...jsonBody(result),
+        persona: {
+          version: persona.version,
+          genderTag: persona.genderTag,
+          country: persona.country,
+          sexualDisposition: persona.sexualDisposition,
+        },
+      });
+    };
+
+    if (trigger === "idle_ping" || trigger === "idle_skip") {
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      logLocal();
       return NextResponse.json({
         ...jsonBody(result),
         persona: {
@@ -414,6 +453,16 @@ export async function POST(req: Request) {
           country: persona.country,
         },
       });
+    }
+
+    if (shouldUseLocalReply(trimmedHistory, isOpener)) {
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      return respondLocal(result);
+    }
+
+    if (await shouldSkipLlmForBudget(roomId)) {
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      return respondLocal(result);
     }
 
     const systemPrompt = groqApiKey() || !googleApiKey()
