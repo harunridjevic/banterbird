@@ -355,10 +355,19 @@ export default function OpsAnalyticsPage() {
                       accent="violet"
                     />
                     <MetricCard
-                      label="Bounce rate"
+                      label="First-chat churn"
                       value={fmtPct(snapshot.bounceRate)}
                       tooltip={METRIC_TOOLTIPS.bounceRate}
                       accent="rose"
+                    />
+                    <MetricCard
+                      label="Churned after 1st chat"
+                      value={
+                        snapshot.firstChatUsers > 0
+                          ? `${fmtNum(snapshot.bouncedUsers)} / ${fmtNum(snapshot.firstChatUsers)}`
+                          : "-"
+                      }
+                      tooltip={METRIC_TOOLTIPS.bouncedUsers}
                     />
                   </dl>
                 </section>
