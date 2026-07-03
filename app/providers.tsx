@@ -14,6 +14,7 @@ import { createClient } from "@/utils/supabase/client";
 import { ensureAnonymousSession } from "@/lib/auth/ensure-anonymous-session";
 import { OnlinePresenceProvider } from "@/components/presence/OnlinePresenceProvider";
 import { ClientErrorReporter } from "@/components/monitoring/ClientErrorReporter";
+import { BotSettingsProvider } from "@/lib/ops/bot-settings-provider";
 
 type SupabaseCtx = {
   client: SupabaseClient;
@@ -50,10 +51,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <SupabaseContext.Provider value={{ client, ready, authError }}>
-        <OnlinePresenceProvider>
-          <ClientErrorReporter />
-          {children}
-        </OnlinePresenceProvider>
+        <BotSettingsProvider>
+          <OnlinePresenceProvider>
+            <ClientErrorReporter />
+            {children}
+          </OnlinePresenceProvider>
+        </BotSettingsProvider>
       </SupabaseContext.Provider>
     </ThemeProvider>
   );

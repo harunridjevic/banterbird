@@ -16,7 +16,7 @@ import {
   personaTiming,
   type SelfGender,
 } from "@/lib/ai-practice-bot/persona";
-import { parseBotSettings, type BotSettings } from "@/lib/ops/bot-settings";
+import { loadBotSettingsFromDb, type BotSettings } from "@/lib/ops/bot-settings";
 import { logApiUsage } from "@/lib/ops/api-usage-log";
 import { estimateLlmCostUsd } from "@/lib/ops/llm-cost";
 import { shouldSkipLlmForBudget } from "@/lib/ops/llm-budget";
@@ -377,13 +377,12 @@ export async function POST(req: Request) {
       roomId?: string;
       messages?: ChatTurn[];
       trigger?: AiReplyTrigger;
-      botSettings?: unknown;
     };
     const roomId = body.roomId;
     const history = Array.isArray(body.messages) ? body.messages : [];
     const trigger: AiReplyTrigger =
       body.trigger === "idle_ping" || body.trigger === "idle_skip" ? body.trigger : "normal";
-    const botSettings = parseBotSettings(body.botSettings);
+    const botSettings = await loadBotSettingsFromDb();
 
     if (!roomId) {
       return NextResponse.json({ error: "roomId required" }, { status: 400 });
@@ -408,7 +407,7 @@ export async function POST(req: Request) {
     const botGender = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
-    const historyLimit = botSettings?.llmHistoryTurns ?? 8;
+    const historyLimit = botSettings.llmHistoryTurns;
     const trimmedHistory = history.slice(-historyLimit);
     const memory = buildUserMemory(trimmedHistory);
     const memoryBlock = formatUserMemoryBlock(memory, persona);

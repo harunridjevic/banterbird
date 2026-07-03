@@ -16,10 +16,10 @@ import { shouldClientSkipChat } from "@/lib/ai-practice-bot/client-skip";
 import { buildBotPersona, type BotPersona } from "@/lib/ai-practice-bot/persona";
 import {
   BOT_SETTINGS_CHANGED_EVENT,
-  loadBotSettings,
   resolveOpenerDelayMs,
   type BotSettings,
 } from "@/lib/ops/bot-settings";
+import { useGlobalBotSettings } from "@/lib/ops/bot-settings-provider";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PageLoader } from "@/components/ui/Loading";
@@ -68,17 +68,14 @@ export function ChatRoom({ roomId }: Props) {
   const ghostSchedule = useRef(createGhostSchedule());
   const botPersonaRef = useRef<BotPersona | null>(null);
   const botTimingRef = useRef<BotApiBody["timing"]>({});
-  const botSettingsRef = useRef<BotSettings>(loadBotSettings());
+  const globalBotSettings = useGlobalBotSettings();
+  const botSettingsRef = useRef<BotSettings>(globalBotSettings);
 
   const aiBusyRef = useRef(false);
   const skipEndingRef = useRef(false);
 
-  const [hideBotUi, setHideBotUi] = useState(
-    () => loadBotSettings().matchMode === "hidden_bots",
-  );
-  const [hideGenderFilters, setHideGenderFilters] = useState(
-    () => loadBotSettings().hideGenderFilters,
-  );
+  const [hideBotUi, setHideBotUi] = useState(globalBotSettings.matchMode === "hidden_bots");
+  const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
   const [showReport, setShowReport] = useState(false);
   const keyboardInset = useKeyboardInset();
 
@@ -111,9 +108,9 @@ export function ChatRoom({ roomId }: Props) {
 
   useEffect(() => {
     const refresh = () => {
-      botSettingsRef.current = loadBotSettings();
-      setHideBotUi(botSettingsRef.current.matchMode === "hidden_bots");
-      setHideGenderFilters(botSettingsRef.current.hideGenderFilters);
+      botSettingsRef.current = globalBotSettings;
+      setHideBotUi(globalBotSettings.matchMode === "hidden_bots");
+      setHideGenderFilters(globalBotSettings.hideGenderFilters);
       if (isAiRoomRef.current && botPersonaRef.current) {
         const p = botPersonaRef.current;
         botPersonaRef.current = buildBotPersona(roomId, p.botGender, p.userGender, botSettingsRef.current);
@@ -122,7 +119,7 @@ export function ChatRoom({ roomId }: Props) {
     refresh();
     window.addEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
-  }, [roomId]);
+  }, [roomId, globalBotSettings]);
 
   useEffect(() => {
     openerDoneRef.current = false;
@@ -577,7 +574,6 @@ export function ChatRoom({ roomId }: Props) {
         body: JSON.stringify({
           roomId,
           messages: transcript,
-          botSettings: botSettingsRef.current,
         }),
       });
       if (!res.ok) return;
@@ -628,7 +624,6 @@ export function ChatRoom({ roomId }: Props) {
           body: JSON.stringify({
             roomId,
             messages: [] as { role: "user" | "assistant"; content: string }[],
-            botSettings: botSettingsRef.current,
           }),
         });
         if (!res.ok) return;

@@ -10,9 +10,9 @@ import type { SelfGender, WantsGender } from "@/lib/types/chat";
 import {
   anonymousMatchGenders,
   BOT_SETTINGS_CHANGED_EVENT,
-  loadBotSettings,
   type MatchMode,
 } from "@/lib/ops/bot-settings";
+import { useGlobalBotSettings } from "@/lib/ops/bot-settings-provider";
 import {
   canStartMatching,
   computeEffectiveIncludeAi,
@@ -49,10 +49,9 @@ export function MatchLobby() {
   const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
   const [rpcError, setRpcError] = useState<string | null>(null);
   const [includeAiMatch, setIncludeAiMatch] = useState(true);
-  const [matchMode, setMatchMode] = useState<MatchMode>(() => loadBotSettings().matchMode);
-  const [hideGenderFilters, setHideGenderFilters] = useState(
-    () => loadBotSettings().hideGenderFilters,
-  );
+  const globalBotSettings = useGlobalBotSettings();
+  const [matchMode, setMatchMode] = useState<MatchMode>(globalBotSettings.matchMode);
+  const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
   const [accessBlocked, setAccessBlocked] = useState(false);
   const matchingPaused = isMatchingPausedForInactivity();
   const matchGendersRef = useRef<{ self: SelfGender; wants: WantsGender } | null>(null);
@@ -93,14 +92,13 @@ export function MatchLobby() {
 
   useEffect(() => {
     const refresh = () => {
-      const s = loadBotSettings();
-      setMatchMode(s.matchMode);
-      setHideGenderFilters(s.hideGenderFilters);
+      setMatchMode(globalBotSettings.matchMode);
+      setHideGenderFilters(globalBotSettings.hideGenderFilters);
     };
     refresh();
     window.addEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
-  }, []);
+  }, [globalBotSettings.matchMode, globalBotSettings.hideGenderFilters]);
 
   useEffect(() => {
     if (!isMatching) {
@@ -334,7 +332,7 @@ export function MatchLobby() {
   useEffect(() => {
     if (!ready || !shouldMatch || !effectiveIncludeAi) return;
     let alive = true;
-    const s = loadBotSettings();
+    const s = globalBotSettings;
     const span = Math.max(0, s.aiMatchDelayMaxMs - s.aiMatchDelayMinMs);
     const delayMs = s.aiMatchDelayMinMs + Math.floor(Math.random() * (span + 1));
     const t = window.setTimeout(async () => {
@@ -360,7 +358,7 @@ export function MatchLobby() {
       alive = false;
       window.clearTimeout(t);
     };
-  }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch]);
+  }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings]);
 
   if (!ready) {
     return <PageLoader label="Preparing your session…" />;
