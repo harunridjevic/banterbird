@@ -92,11 +92,11 @@ export function ApiCostChart({ snapshot }: ChartProps) {
   }));
 
   if (data.length === 0) {
-    return <EmptyChart message="No Gemini/OpenAI cost logged yet." />;
+    return <EmptyChart message="No LLM API cost logged yet." />;
   }
 
   return (
-    <ChartShell title="Gemini API cost per day">
+    <ChartShell title="LLM API cost per day">
       <ResponsiveContainer width="100%" height={220}>
         <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />

@@ -24,7 +24,7 @@ export function MatchingLoader({ onCancel }: Props) {
         Looking for a match…
       </p>
       <p className="mt-2 mx-auto max-w-xs text-sm text-navy-600 dark:text-navy-300">
-        Hang tight — we&apos;re pairing you with someone now.
+        Hang tight. We&apos;re pairing you with someone now.
       </p>
       <motion.button
         type="button"

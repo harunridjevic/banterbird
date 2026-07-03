@@ -22,6 +22,11 @@ import {
   type ChatTurn,
 } from "@/lib/ai-practice-bot/turn";
 import { createClient } from "@/utils/supabase/server";
+import { logError } from "@/lib/ops/error-log";
+
+function groqApiKey(): string | undefined {
+  return process.env.GROQ_API_KEY?.trim() || undefined;
+}
 
 function googleApiKey(): string | undefined {
   return (
@@ -74,8 +79,8 @@ function geminiSystemPrompt(
   if (!isOpener) return base;
   const opener =
     flirtyStarter && chatMode === "flirty"
-      ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi — messages array.'
-      : 'Opening turn (user msg is only "."): casual friendly hi — messages array.';
+      ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi. messages array.'
+      : 'Opening turn (user msg is only "."): casual friendly hi. messages array.';
   return `${base}\n\n${opener}`;
 }
 
@@ -177,6 +182,54 @@ async function fetchGeminiRaw(
   return { raw, inputTokens, outputTokens };
 }
 
+async function fetchGroqRaw(
+  history: ChatTurn[],
+  systemPrompt: string,
+  maxOutputTokens: number,
+  temperature: number,
+): Promise<LlmFetchResult> {
+  const key = groqApiKey();
+  if (!key) return { raw: null };
+
+  const model = process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.3-70b-versatile";
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature,
+      max_tokens: maxOutputTokens,
+      response_format: { type: "json_object" },
+      messages: [{ role: "system", content: systemPrompt }, ...history],
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.error("Groq error:", res.status, errText);
+    void logError({
+      source: "/api/chat/ai-reply",
+      message: `Groq API error ${res.status}`,
+      metadata: { status: res.status, body: errText.slice(0, 500) },
+    });
+    return { raw: null };
+  }
+
+  const json = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  return {
+    raw: json.choices?.[0]?.message?.content?.trim() ?? null,
+    inputTokens: json.usage?.prompt_tokens,
+    outputTokens: json.usage?.completion_tokens,
+  };
+}
+
 async function fetchOpenAIRaw(
   history: ChatTurn[],
   systemPrompt: string,
@@ -235,8 +288,9 @@ async function callLlm(
       ? (settings?.maxOutputTokensSexual ?? 512)
       : (settings?.maxOutputTokens ?? 320);
   const temperature = settings?.llmTemperature ?? 1.08;
-  const provider = googleApiKey() ? "gemini" : "openai";
-  const fetchRaw = provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
+  const provider = groqApiKey() ? "groq" : googleApiKey() ? "gemini" : "openai";
+  const fetchRaw =
+    provider === "groq" ? fetchGroqRaw : provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
   const started = Date.now();
 
   const logProviderUsage = (
@@ -274,6 +328,8 @@ async function callLlm(
     logProviderUsage(result, true);
     break;
   }
+
+  logProviderUsage({ raw: null }, false);
 
   return {
     action: "reply",
@@ -360,8 +416,9 @@ export async function POST(req: Request) {
       });
     }
 
-    const systemPrompt = googleApiKey()
-      ? geminiSystemPrompt(
+    const systemPrompt = groqApiKey() || !googleApiKey()
+      ? buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings)
+      : geminiSystemPrompt(
           personaBlock,
           memoryBlock,
           sessionBlock,
@@ -370,8 +427,7 @@ export async function POST(req: Request) {
           persona.chatMode,
           botSettings,
           isOpener,
-        )
-      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
+        );
 
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,
@@ -396,6 +452,11 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error(e);
+    void logError({
+      source: "/api/chat/ai-reply",
+      message: e instanceof Error ? e.message : "Unknown error",
+      stack: e instanceof Error ? e.stack : undefined,
+    });
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

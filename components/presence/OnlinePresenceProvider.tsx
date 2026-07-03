@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useSupabase } from "@/app/providers";
+import { formatAuthError } from "@/lib/auth/ensure-anonymous-session";
 import { tabCloseFetch } from "@/lib/presence/tab-close-fetch";
 
 type OnlinePresenceCtx = {
@@ -23,12 +24,14 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
   const [onlineCount, setOnlineCount] = useState(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const leavingRef = useRef(false);
+  const sessionUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!ready) return;
 
     let cancelled = false;
     leavingRef.current = false;
+    sessionUserIdRef.current = null;
 
     const leaveOnline = () => {
       if (leavingRef.current) return;
@@ -43,14 +46,22 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
       tabCloseFetch("/api/presence/leave");
     };
 
+    const pingHeartbeat = async () => {
+      if (!sessionUserIdRef.current) return;
+      const { error } = await client.rpc("heartbeat_presence");
+      if (error) console.error("Heartbeat error:", formatAuthError(error));
+    };
+
     void (async () => {
       const {
-        data: { session },
-      } = await client.auth.getSession();
-      if (cancelled || !session?.user?.id) return;
+        data: { user },
+      } = await client.auth.getUser();
+      if (cancelled || !user?.id) return;
+
+      sessionUserIdRef.current = user.id;
 
       const channel = client.channel("banterbird-online", {
-        config: { presence: { key: session.user.id } },
+        config: { presence: { key: user.id } },
       });
       channelRef.current = channel;
 
@@ -67,16 +78,12 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
       channel.subscribe(async (status) => {
         if (cancelled || status !== "SUBSCRIBED") return;
         await channel.track({ online_at: new Date().toISOString() });
-        const { error } = await client.rpc("heartbeat_presence");
-        if (error) console.error("Heartbeat error on subscribe:", error);
+        await pingHeartbeat();
       });
     })();
 
-    const heartbeat = setInterval(async () => {
-      if (!cancelled && !leavingRef.current) {
-        const { error } = await client.rpc("heartbeat_presence");
-        if (error) console.error("Heartbeat error on interval:", error);
-      }
+    const heartbeat = setInterval(() => {
+      if (!cancelled && !leavingRef.current) void pingHeartbeat();
     }, 60_000);
 
     const onPageHide = () => leaveOnline();

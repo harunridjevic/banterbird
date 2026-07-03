@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type BotSettings } from "@/lib/ops/bot-settings";
 import { useBotSettings } from "@/lib/ops/use-bot-settings";
+import type { AppSettings } from "@/lib/ops/app-settings";
 
 export default function OpsBotSettingsPage() {
   const { settings, save, reset } = useBotSettings();
@@ -12,6 +13,8 @@ export default function OpsBotSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCheckingCookie, setIsCheckingCookie] = useState(true);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [appSettingsSaving, setAppSettingsSaving] = useState(false);
 
   const unlock = useCallback(async () => {
     setError(null);
@@ -28,6 +31,10 @@ export default function OpsBotSettingsPage() {
         return;
       }
       setUnlocked(true);
+      const settingsRes = await fetch("/api/ops/app-settings");
+      if (settingsRes.ok) {
+        setAppSettings((await settingsRes.json()) as AppSettings);
+      }
     } catch {
       setError("Network error");
     } finally {
@@ -43,6 +50,10 @@ export default function OpsBotSettingsPage() {
         const res = await fetch("/api/ops/analytics/data?period=month&days=30", { method: "GET" });
         if (res.ok) {
           setUnlocked(true);
+          const settingsRes = await fetch("/api/ops/app-settings");
+          if (settingsRes.ok) {
+            setAppSettings((await settingsRes.json()) as AppSettings);
+          }
         }
       } catch {
         // Cookie not valid or network error - stay locked
@@ -51,6 +62,31 @@ export default function OpsBotSettingsPage() {
       }
     })();
   }, []);
+
+  const patchAppSettings = useCallback(
+    async (partial: Partial<AppSettings>) => {
+      if (!appSettings) return;
+      const next = {
+        ...appSettings,
+        ...partial,
+        rateLimiting: { ...appSettings.rateLimiting, ...partial.rateLimiting },
+        ageGate: { ...appSettings.ageGate, ...partial.ageGate },
+      };
+      setAppSettings(next);
+      setAppSettingsSaving(true);
+      try {
+        const res = await fetch("/api/ops/app-settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        if (res.ok) setAppSettings((await res.json()) as AppSettings);
+      } finally {
+        setAppSettingsSaving(false);
+      }
+    },
+    [appSettings],
+  );
 
   const patch = useCallback(
     (partial: Partial<BotSettings>) => {
@@ -114,6 +150,102 @@ export default function OpsBotSettingsPage() {
             </div>
 
         <div className="mt-10 space-y-8">
+          {appSettings ? (
+            <>
+              <Section title="Age confirmation (all users)">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.ageGate.enabled}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        ageGate: { ...appSettings.ageGate, enabled: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Require age confirmation</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      Users must confirm minimum age before entering match. Saved server-side.
+                    </span>
+                  </span>
+                </label>
+                <NumberField
+                  label="Minimum age"
+                  value={appSettings.ageGate.minimumAge}
+                  min={13}
+                  max={21}
+                  onChange={(minimumAge) =>
+                    void patchAppSettings({ ageGate: { ...appSettings.ageGate, minimumAge } })
+                  }
+                  className="mt-4"
+                />
+              </Section>
+
+              <Section title="Rate limiting (all users)">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.rateLimiting.enabled}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        rateLimiting: { ...appSettings.rateLimiting, enabled: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Enable rate limiting</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      Blocks spam by limiting messages and rematches. Restricted users cannot use the app.
+                    </span>
+                  </span>
+                </label>
+                {appSettingsSaving ? (
+                  <p className="mt-2 text-xs text-violet-300">Saving…</p>
+                ) : null}
+                {appSettings.rateLimiting.enabled ? (
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <NumberField
+                      label="Max messages per minute"
+                      value={appSettings.rateLimiting.maxMessagesPerMinute}
+                      min={1}
+                      max={200}
+                      onChange={(maxMessagesPerMinute) =>
+                        void patchAppSettings({
+                          rateLimiting: { ...appSettings.rateLimiting, maxMessagesPerMinute },
+                        })
+                      }
+                    />
+                    <NumberField
+                      label="Max messages per 10 seconds"
+                      value={appSettings.rateLimiting.maxMessagesPer10Seconds}
+                      min={1}
+                      max={50}
+                      onChange={(maxMessagesPer10Seconds) =>
+                        void patchAppSettings({
+                          rateLimiting: { ...appSettings.rateLimiting, maxMessagesPer10Seconds },
+                        })
+                      }
+                    />
+                    <NumberField
+                      label="Max rematches per minute"
+                      value={appSettings.rateLimiting.maxRematchesPerMinute}
+                      min={1}
+                      max={60}
+                      onChange={(maxRematchesPerMinute) =>
+                        void patchAppSettings({
+                          rateLimiting: { ...appSettings.rateLimiting, maxRematchesPerMinute },
+                        })
+                      }
+                    />
+                  </div>
+                ) : null}
+              </Section>
+            </>
+          ) : null}
+
           <Section title="Displayed online count">
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
               <input
@@ -322,7 +454,7 @@ export default function OpsBotSettingsPage() {
             {settings.openerDelayMode === "fixed" ? (
               <NumberField
                 label="Fixed wait (ms)"
-                hint={`≈ ${(settings.openerDelayMs / 1000).toFixed(1)}s — e.g. 1000 = 1s, 10000 = 10s`}
+                hint={`≈ ${(settings.openerDelayMs / 1000).toFixed(1)}s (e.g. 1000 = 1s, 10000 = 10s)`}
                 value={settings.openerDelayMs}
                 min={0}
                 max={60000}

@@ -15,23 +15,23 @@ import {
 import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 function fmtNum(n: number | null | undefined, suffix = ""): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
   return `${n}${suffix}`;
 }
 
 function fmtPct(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
   return `${(n * 100).toFixed(1)}%`;
 }
 
 function fmtUsd(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
   if (n < 0.01 && n > 0) return "<$0.01";
   return `$${n.toFixed(2)}`;
 }
 
 function fmtTokens(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);
@@ -70,7 +70,7 @@ export default function OpsAnalyticsPage() {
       if (res.status === 401) {
         setUnlocked(false);
         setSnapshot(null);
-        setError("Session expired — enter the password again.");
+        setError("Session expired. Enter the password again.");
         return;
       }
       if (!res.ok) {
@@ -118,7 +118,7 @@ export default function OpsAnalyticsPage() {
       const res = await fetch("/api/ops/analytics/reset", { method: "POST" });
       if (res.status === 401) {
         setUnlocked(false);
-        setError("Session expired — enter the password again.");
+        setError("Session expired. Enter the password again.");
         return;
       }
       if (!res.ok) {
@@ -402,7 +402,7 @@ export default function OpsAnalyticsPage() {
                       value={
                         snapshot.totalRooms > 0
                           ? `${fmtPct(snapshot.humanChats / snapshot.totalRooms)} human`
-                          : "—"
+                          : "-"
                       }
                       tooltip="Percentage of rooms that were matched with a real person vs practice bot."
                     />
@@ -456,7 +456,7 @@ export default function OpsAnalyticsPage() {
                     <MetricCard
                       label="Users with API calls"
                       value={fmtNum(snapshot.apiUsage.usersWithApiCalls)}
-                      tooltip="Distinct users who triggered at least one Gemini/OpenAI call in the window."
+                      tooltip="Distinct users who triggered at least one Groq/Gemini/OpenAI call in the window."
                     />
                   </dl>
                   {providerEntries.length > 0 ? (

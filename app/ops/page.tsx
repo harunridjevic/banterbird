@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, Settings } from "lucide-react";
+import { BarChart3, Settings, Shield, AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const cards = [
@@ -16,6 +16,18 @@ const cards = [
     title: "Bot settings",
     description: "Tune AI practice bot timing, personality, sexual vibe, and session policy. Changes apply live.",
     icon: Settings,
+  },
+  {
+    href: "/ops/moderation",
+    title: "Moderation",
+    description: "Review user reports, block IPs, devices, or users, and manage active blocks.",
+    icon: Shield,
+  },
+  {
+    href: "/ops/errors",
+    title: "Error monitoring",
+    description: "Server errors, failed API requests, and client exceptions for production debugging.",
+    icon: AlertTriangle,
   },
 ] as const;
 
