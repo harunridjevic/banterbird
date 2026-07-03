@@ -27,7 +27,12 @@ export type AnalyticsSnapshot = {
   avgBotRoomMinutes: number | null;
   onlineUsersNow: number;
   recurringUsers: number;
+  /** Share of new users (first-ever chat started in window) who never rematched or returned another day. */
   bounceRate: number | null;
+  bouncedUsers: number;
+  firstChatUsers: number;
+  /** Ended human room left in <30s or with no messages (legacy room metric). */
+  roomBounceRate: number | null;
   bouncedRooms: number;
   endedHumanRooms: number;
   apiUsage: {
@@ -70,12 +75,18 @@ export const METRIC_TOOLTIPS = {
   totalUserSessionMinutes:
     "Combined time all users spent in rooms during the window — sum of every room session.",
   bounceRate:
-    "Share of ended human-human chats where the user left within 30 seconds or sent no messages.",
-  apiTotalCalls: "Total AI reply API calls (Gemini/OpenAI) during the window.",
-  apiSuccessRate: "Share of logged API calls where Gemini/OpenAI returned a response (excludes local fallbacks).",
+    "Share of users whose first-ever chat started in this period, finished it, then never started another chat or visited on a later day (UTC).",
+  bouncedUsers: "Users who left after their first ended chat (no rematch, no return day).",
+  firstChatUsers: "Users whose first-ever chat started and ended in this period.",
+  roomBounceRate:
+    "Share of ended human-human rooms where someone left within 30 seconds or no one sent a message.",
+  apiTotalCalls: "Total AI reply API calls (Groq/Gemini/OpenAI/local) during the window.",
+  apiSuccessRate:
+    "Share of logged API calls where an LLM provider returned a response (excludes local fallbacks).",
   apiAvgLatency: "Average round-trip time for AI API calls in milliseconds.",
-  apiTotalTokens: "Total input + output tokens consumed by Gemini/OpenAI calls in the window.",
-  apiEstimatedCost: "Estimated API spend in USD based on token counts and configured per-model rates.",
+  apiTotalTokens: "Total input + output tokens consumed by Groq/Gemini/OpenAI calls in the window.",
+  apiEstimatedCost:
+    "Estimated API spend in USD based on token counts and configured per-provider rates.",
   apiAvgTokensPerUser: "Average tokens used per user who triggered at least one AI API call.",
 } as const;
 

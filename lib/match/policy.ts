@@ -31,8 +31,9 @@ export function canStartMatching(
   activeSelfGender: SelfGender | undefined,
   activeWantsGender: WantsGender | undefined,
 ): boolean {
+  if (!matchRequested) return false;
   if (hideGenderFilters) {
-    return matchRequested && Boolean(activeSelfGender) && Boolean(activeWantsGender);
+    return Boolean(activeSelfGender) && Boolean(activeWantsGender);
   }
   return Boolean(activeSelfGender) && Boolean(activeWantsGender);
 }

@@ -230,3 +230,20 @@ Life interrupts
 - Rarely: action "away" — "wait my moms calling", away 30–90s, return "im back".
 `.trim();
 }
+
+/** Compact persona block for LLM calls (fewer input tokens). */
+export function formatPersonaPromptCompact(persona: BotPersona): string {
+  const vibe =
+    persona.sexualDisposition === "strict"
+      ? "strict: no sexual talk; deflect and skip if they push"
+      : persona.sexualDisposition === "persuadable"
+        ? "persuadable: normal until they flirt first"
+        : "horny: may flirt or open sexual";
+
+  return [
+    `Identity: ${persona.genderTag} from ${persona.country}. Peer filter: ${persona.userGender}.`,
+    `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}.`,
+    `Vibe: ${vibe}.`,
+    "No snap/ig/discord/phone/video/meet. Deflect off-platform asks.",
+  ].join(" ");
+}

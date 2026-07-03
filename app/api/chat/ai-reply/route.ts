@@ -2,13 +2,24 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   PRACTICE_BOT_OUTPUT_JSON_RULES,
+  PRACTICE_BOT_OUTPUT_JSON_RULES_COMPACT,
   PRACTICE_BOT_SYSTEM_INSTRUCTIONS,
+  PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT,
 } from "@/lib/ai-practice-bot/instructions";
+import { shouldUseLocalReply } from "@/lib/ai-practice-bot/llm-routing";
 import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock } from "@/lib/ai-practice-bot/memory";
-import { buildBotPersona, formatPersonaPrompt, personaAllowsSexualChat, personaTiming, type SelfGender } from "@/lib/ai-practice-bot/persona";
-import { parseBotSettings, type BotSettings } from "@/lib/ops/bot-settings";
+import {
+  buildBotPersona,
+  formatPersonaPrompt,
+  formatPersonaPromptCompact,
+  personaAllowsSexualChat,
+  personaTiming,
+  type SelfGender,
+} from "@/lib/ai-practice-bot/persona";
+import { loadBotSettingsFromDb, type BotSettings } from "@/lib/ops/bot-settings";
 import { logApiUsage } from "@/lib/ops/api-usage-log";
 import { estimateLlmCostUsd } from "@/lib/ops/llm-cost";
+import { shouldSkipLlmForBudget } from "@/lib/ops/llm-budget";
 import {
   applySessionPolicy,
   decideFallbackTurn,
@@ -22,6 +33,11 @@ import {
   type ChatTurn,
 } from "@/lib/ai-practice-bot/turn";
 import { createClient } from "@/utils/supabase/server";
+import { logError } from "@/lib/ops/error-log";
+
+function groqApiKey(): string | undefined {
+  return process.env.GROQ_API_KEY?.trim() || undefined;
+}
 
 function googleApiKey(): string | undefined {
   return (
@@ -31,12 +47,24 @@ function googleApiKey(): string | undefined {
   );
 }
 
+function useCompactPrompts(): boolean {
+  return process.env.LLM_USE_FULL_PROMPT?.trim() !== "true";
+}
+
 function baseSystemPrompt(): string {
   const fromEnv =
     process.env.PRACTICE_BOT_SYSTEM_PROMPT?.trim() ||
     process.env.OPENAI_PRACTICE_BOT_SYSTEM_PROMPT?.trim();
   if (fromEnv) return fromEnv;
-  return PRACTICE_BOT_SYSTEM_INSTRUCTIONS;
+  return useCompactPrompts()
+    ? PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT
+    : PRACTICE_BOT_SYSTEM_INSTRUCTIONS;
+}
+
+function outputJsonRules(): string {
+  return useCompactPrompts()
+    ? PRACTICE_BOT_OUTPUT_JSON_RULES_COMPACT
+    : PRACTICE_BOT_OUTPUT_JSON_RULES;
 }
 
 function buildSystemPrompt(
@@ -52,7 +80,7 @@ function buildSystemPrompt(
     personaBlock,
     memoryBlock,
     sessionBlock,
-    PRACTICE_BOT_OUTPUT_JSON_RULES,
+    outputJsonRules(),
     triggerLine,
   ]
     .filter(Boolean)
@@ -74,8 +102,8 @@ function geminiSystemPrompt(
   if (!isOpener) return base;
   const opener =
     flirtyStarter && chatMode === "flirty"
-      ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi — messages array.'
-      : 'Opening turn (user msg is only "."): casual friendly hi — messages array.';
+      ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi. messages array.'
+      : 'Opening turn (user msg is only "."): casual friendly hi. messages array.';
   return `${base}\n\n${opener}`;
 }
 
@@ -177,6 +205,54 @@ async function fetchGeminiRaw(
   return { raw, inputTokens, outputTokens };
 }
 
+async function fetchGroqRaw(
+  history: ChatTurn[],
+  systemPrompt: string,
+  maxOutputTokens: number,
+  temperature: number,
+): Promise<LlmFetchResult> {
+  const key = groqApiKey();
+  if (!key) return { raw: null };
+
+  const model = process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.1-8b-instant";
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature,
+      max_tokens: maxOutputTokens,
+      response_format: { type: "json_object" },
+      messages: [{ role: "system", content: systemPrompt }, ...history],
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.error("Groq error:", res.status, errText);
+    void logError({
+      source: "/api/chat/ai-reply",
+      message: `Groq API error ${res.status}`,
+      metadata: { status: res.status, body: errText.slice(0, 500) },
+    });
+    return { raw: null };
+  }
+
+  const json = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  return {
+    raw: json.choices?.[0]?.message?.content?.trim() ?? null,
+    inputTokens: json.usage?.prompt_tokens,
+    outputTokens: json.usage?.completion_tokens,
+  };
+}
+
 async function fetchOpenAIRaw(
   history: ChatTurn[],
   systemPrompt: string,
@@ -230,13 +306,14 @@ async function callLlm(
   const hasUserTurn = history.some((m) => m.role === "user");
   const opener = isOpener ?? !hasUserTurn;
   const maxOutputTokens = opener
-    ? (settings?.maxOutputTokensOpener ?? 256)
+    ? (settings?.maxOutputTokensOpener ?? 96)
     : memory.sexualVibe
-      ? (settings?.maxOutputTokensSexual ?? 512)
-      : (settings?.maxOutputTokens ?? 320);
+      ? (settings?.maxOutputTokensSexual ?? 256)
+      : (settings?.maxOutputTokens ?? 160);
   const temperature = settings?.llmTemperature ?? 1.08;
-  const provider = googleApiKey() ? "gemini" : "openai";
-  const fetchRaw = provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
+  const provider = groqApiKey() ? "groq" : googleApiKey() ? "gemini" : "openai";
+  const fetchRaw =
+    provider === "groq" ? fetchGroqRaw : provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
   const started = Date.now();
 
   const logProviderUsage = (
@@ -262,17 +339,16 @@ async function callLlm(
     });
   };
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
-    if (!result.raw) continue;
+  const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
+  if (result.raw) {
     const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
     if (parsed) {
       logProviderUsage(result, true);
       return parsed;
     }
-    // Model responded but JSON did not parse — still a successful API call (use local fallback).
     logProviderUsage(result, true);
-    break;
+  } else {
+    logProviderUsage({ raw: null }, false);
   }
 
   return {
@@ -301,13 +377,12 @@ export async function POST(req: Request) {
       roomId?: string;
       messages?: ChatTurn[];
       trigger?: AiReplyTrigger;
-      botSettings?: unknown;
     };
     const roomId = body.roomId;
     const history = Array.isArray(body.messages) ? body.messages : [];
     const trigger: AiReplyTrigger =
       body.trigger === "idle_ping" || body.trigger === "idle_skip" ? body.trigger : "normal";
-    const botSettings = parseBotSettings(body.botSettings);
+    const botSettings = await loadBotSettingsFromDb();
 
     if (!roomId) {
       return NextResponse.json({ error: "roomId required" }, { status: 400 });
@@ -332,16 +407,17 @@ export async function POST(req: Request) {
     const botGender = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
-    const historyLimit = botSettings?.llmHistoryTurns ?? 16;
+    const historyLimit = botSettings.llmHistoryTurns;
     const trimmedHistory = history.slice(-historyLimit);
     const memory = buildUserMemory(trimmedHistory);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
     const sessionBlock = sessionContextOverlay(memory, persona, botSettings);
-    const personaBlock = formatPersonaPrompt(persona);
+    const personaBlock = useCompactPrompts()
+      ? formatPersonaPromptCompact(persona)
+      : formatPersonaPrompt(persona);
     const isOpener = !trimmedHistory.some((m) => m.role === "user");
 
-    if (trigger === "idle_ping" || trigger === "idle_skip") {
-      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+    const logLocal = () => {
       void logApiUsage({
         endpoint: "/api/chat/ai-reply",
         provider: "local",
@@ -350,6 +426,24 @@ export async function POST(req: Request) {
         roomId,
         userId: user.id,
       });
+    };
+
+    const respondLocal = (result: AiPracticeTurnResult) => {
+      logLocal();
+      return NextResponse.json({
+        ...jsonBody(result),
+        persona: {
+          version: persona.version,
+          genderTag: persona.genderTag,
+          country: persona.country,
+          sexualDisposition: persona.sexualDisposition,
+        },
+      });
+    };
+
+    if (trigger === "idle_ping" || trigger === "idle_skip") {
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      logLocal();
       return NextResponse.json({
         ...jsonBody(result),
         persona: {
@@ -360,8 +454,19 @@ export async function POST(req: Request) {
       });
     }
 
-    const systemPrompt = googleApiKey()
-      ? geminiSystemPrompt(
+    if (shouldUseLocalReply(trimmedHistory, isOpener)) {
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      return respondLocal(result);
+    }
+
+    if (await shouldSkipLlmForBudget(roomId)) {
+      const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
+      return respondLocal(result);
+    }
+
+    const systemPrompt = groqApiKey() || !googleApiKey()
+      ? buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings)
+      : geminiSystemPrompt(
           personaBlock,
           memoryBlock,
           sessionBlock,
@@ -370,8 +475,7 @@ export async function POST(req: Request) {
           persona.chatMode,
           botSettings,
           isOpener,
-        )
-      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
+        );
 
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,
@@ -396,6 +500,11 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error(e);
+    void logError({
+      source: "/api/chat/ai-reply",
+      message: e instanceof Error ? e.message : "Unknown error",
+      stack: e instanceof Error ? e.stack : undefined,
+    });
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

@@ -12,7 +12,7 @@ export default async function ChatPage({
 }) {
   const { roomId } = await params;
   return (
-    <div className="relative z-20 flex min-h-[calc(100dvh-3.5rem)] flex-1 flex-col sm:min-h-[calc(100dvh-4rem)]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ChatRoom roomId={roomId} />
     </div>
   );

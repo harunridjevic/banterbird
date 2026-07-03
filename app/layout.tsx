@@ -11,7 +11,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "BanterBird — Anonymous chat",
+    default: "BanterBird | Anonymous chat",
     template: "%s · BanterBird",
   },
   description:
@@ -30,6 +30,7 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

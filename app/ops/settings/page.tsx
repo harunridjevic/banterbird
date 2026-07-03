@@ -2,16 +2,30 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { type BotSettings } from "@/lib/ops/bot-settings";
-import { useBotSettings } from "@/lib/ops/use-bot-settings";
+import { DEFAULT_BOT_SETTINGS, type BotSettings } from "@/lib/ops/bot-settings";
+import type { AppSettings } from "@/lib/ops/app-settings";
+
+async function loadOpsSettings() {
+  const [appRes, botRes] = await Promise.all([
+    fetch("/api/ops/app-settings"),
+    fetch("/api/ops/bot-settings"),
+  ]);
+  return {
+    appSettings: appRes.ok ? ((await appRes.json()) as AppSettings) : null,
+    botSettings: botRes.ok ? ((await botRes.json()) as BotSettings) : null,
+  };
+}
 
 export default function OpsBotSettingsPage() {
-  const { settings, save, reset } = useBotSettings();
   const [password, setPassword] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCheckingCookie, setIsCheckingCookie] = useState(true);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
+  const [appSettingsSaving, setAppSettingsSaving] = useState(false);
+  const [botSettingsSaving, setBotSettingsSaving] = useState(false);
 
   const unlock = useCallback(async () => {
     setError(null);
@@ -28,6 +42,9 @@ export default function OpsBotSettingsPage() {
         return;
       }
       setUnlocked(true);
+      const loaded = await loadOpsSettings();
+      if (loaded.appSettings) setAppSettings(loaded.appSettings);
+      if (loaded.botSettings) setBotSettings(loaded.botSettings);
     } catch {
       setError("Network error");
     } finally {
@@ -43,6 +60,9 @@ export default function OpsBotSettingsPage() {
         const res = await fetch("/api/ops/analytics/data?period=month&days=30", { method: "GET" });
         if (res.ok) {
           setUnlocked(true);
+          const loaded = await loadOpsSettings();
+          if (loaded.appSettings) setAppSettings(loaded.appSettings);
+          if (loaded.botSettings) setBotSettings(loaded.botSettings);
         }
       } catch {
         // Cookie not valid or network error - stay locked
@@ -52,11 +72,67 @@ export default function OpsBotSettingsPage() {
     })();
   }, []);
 
+  const patchAppSettings = useCallback(
+    async (partial: Partial<AppSettings>) => {
+      if (!appSettings) return;
+      const next = {
+        ...appSettings,
+        ...partial,
+        rateLimiting: { ...appSettings.rateLimiting, ...partial.rateLimiting },
+        ageGate: { ...appSettings.ageGate, ...partial.ageGate },
+      };
+      setAppSettings(next);
+      setAppSettingsSaving(true);
+      try {
+        const res = await fetch("/api/ops/app-settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        if (res.ok) setAppSettings((await res.json()) as AppSettings);
+      } finally {
+        setAppSettingsSaving(false);
+      }
+    },
+    [appSettings],
+  );
+
+  const patchBotSettings = useCallback(
+    async (partial: Partial<BotSettings>) => {
+      if (!botSettings) return;
+      const next = { ...botSettings, ...partial };
+      setBotSettings(next);
+      setBotSettingsSaving(true);
+      try {
+        const res = await fetch("/api/ops/bot-settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        if (res.ok) setBotSettings((await res.json()) as BotSettings);
+      } finally {
+        setBotSettingsSaving(false);
+      }
+    },
+    [botSettings],
+  );
+
+  const resetBotSettings = useCallback(async () => {
+    setBotSettingsSaving(true);
+    try {
+      const res = await fetch("/api/ops/bot-settings", { method: "DELETE" });
+      if (res.ok) setBotSettings((await res.json()) as BotSettings);
+      else setBotSettings(DEFAULT_BOT_SETTINGS);
+    } finally {
+      setBotSettingsSaving(false);
+    }
+  }, []);
+
   const patch = useCallback(
     (partial: Partial<BotSettings>) => {
-      save({ ...settings, ...partial });
+      void patchBotSettings(partial);
     },
-    [settings, save],
+    [patchBotSettings],
   );
 
   return (
@@ -66,7 +142,7 @@ export default function OpsBotSettingsPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white">Bot settings</h1>
             <p className="mt-2 text-sm text-navy-300">
-              Changes save automatically and apply to new bot turns while you chat.
+              Changes save to the server and apply globally for every user and device.
             </p>
           </div>
         </div>
@@ -101,24 +177,124 @@ export default function OpsBotSettingsPage() {
               {loading ? "Checking…" : "Unlock"}
             </button>
           </div>
-        ) : (
+        ) : botSettings ? (
           <>
             <div className="mt-10 flex flex-wrap items-end gap-3">
               <button
                 type="button"
-                onClick={reset}
-                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-navy-200 hover:bg-white/5"
+                onClick={() => void resetBotSettings()}
+                disabled={botSettingsSaving}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-navy-200 hover:bg-white/5 disabled:opacity-50"
               >
                 Reset defaults
               </button>
+              {botSettingsSaving ? (
+                <span className="text-xs text-navy-400">Saving…</span>
+              ) : null}
             </div>
 
         <div className="mt-10 space-y-8">
+          {appSettings ? (
+            <>
+              <Section title="Age confirmation (all users)">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.ageGate.enabled}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        ageGate: { ...appSettings.ageGate, enabled: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Require age confirmation</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      Users must confirm minimum age before entering match. Saved server-side.
+                    </span>
+                  </span>
+                </label>
+                <NumberField
+                  label="Minimum age"
+                  value={appSettings.ageGate.minimumAge}
+                  min={13}
+                  max={21}
+                  onChange={(minimumAge) =>
+                    void patchAppSettings({ ageGate: { ...appSettings.ageGate, minimumAge } })
+                  }
+                  className="mt-4"
+                />
+              </Section>
+
+              <Section title="Rate limiting (all users)">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.rateLimiting.enabled}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        rateLimiting: { ...appSettings.rateLimiting, enabled: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Enable rate limiting</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      Blocks spam by limiting messages and rematches. Restricted users cannot use the app.
+                    </span>
+                  </span>
+                </label>
+                {appSettingsSaving ? (
+                  <p className="mt-2 text-xs text-violet-300">Saving…</p>
+                ) : null}
+                {appSettings.rateLimiting.enabled ? (
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <NumberField
+                      label="Max messages per minute"
+                      value={appSettings.rateLimiting.maxMessagesPerMinute}
+                      min={1}
+                      max={200}
+                      onChange={(maxMessagesPerMinute) =>
+                        void patchAppSettings({
+                          rateLimiting: { ...appSettings.rateLimiting, maxMessagesPerMinute },
+                        })
+                      }
+                    />
+                    <NumberField
+                      label="Max messages per 10 seconds"
+                      value={appSettings.rateLimiting.maxMessagesPer10Seconds}
+                      min={1}
+                      max={50}
+                      onChange={(maxMessagesPer10Seconds) =>
+                        void patchAppSettings({
+                          rateLimiting: { ...appSettings.rateLimiting, maxMessagesPer10Seconds },
+                        })
+                      }
+                    />
+                    <NumberField
+                      label="Max rematches per minute"
+                      value={appSettings.rateLimiting.maxRematchesPerMinute}
+                      min={1}
+                      max={60}
+                      onChange={(maxRematchesPerMinute) =>
+                        void patchAppSettings({
+                          rateLimiting: { ...appSettings.rateLimiting, maxRematchesPerMinute },
+                        })
+                      }
+                    />
+                  </div>
+                ) : null}
+              </Section>
+            </>
+          ) : null}
+
           <Section title="Displayed online count">
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
               <input
                 type="checkbox"
-                checked={settings.displayOnlineCountOverride}
+                checked={botSettings.displayOnlineCountOverride}
                 onChange={(e) => patch({ displayOnlineCountOverride: e.target.checked })}
                 className="mt-1 accent-violet-500"
               />
@@ -127,30 +303,30 @@ export default function OpsBotSettingsPage() {
                 <span className="mt-1 block text-xs text-navy-400">
                   Show a synthetic online number in the app navbar instead of the live presence count.
                   The value is synchronized by time, so it stays stable on refresh and matches across
-                  tabs/devices that share these settings. It drifts gradually inside your range.
+                  tabs/devices that share these botSettings. It drifts gradually inside your range.
                 </span>
               </span>
             </label>
-            {settings.displayOnlineCountOverride ? (
+            {botSettings.displayOnlineCountOverride ? (
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <NumberField
                   label="Minimum displayed count"
-                  value={settings.displayOnlineCountMin}
+                  value={botSettings.displayOnlineCountMin}
                   min={0}
-                  max={settings.displayOnlineCountMax}
+                  max={botSettings.displayOnlineCountMax}
                   onChange={(displayOnlineCountMin) => patch({ displayOnlineCountMin })}
                 />
                 <NumberField
                   label="Maximum displayed count"
-                  value={settings.displayOnlineCountMax}
-                  min={settings.displayOnlineCountMin}
+                  value={botSettings.displayOnlineCountMax}
+                  min={botSettings.displayOnlineCountMin}
                   max={99999}
                   onChange={(displayOnlineCountMax) => patch({ displayOnlineCountMax })}
                 />
                 <NumberField
                   label="Change interval min (ms)"
-                  hint={`≈ ${(settings.displayOnlineCountChangeMinMs / 1000).toFixed(1)}s`}
-                  value={settings.displayOnlineCountChangeMinMs}
+                  hint={`≈ ${(botSettings.displayOnlineCountChangeMinMs / 1000).toFixed(1)}s`}
+                  value={botSettings.displayOnlineCountChangeMinMs}
                   min={500}
                   max={600000}
                   step={100}
@@ -158,9 +334,9 @@ export default function OpsBotSettingsPage() {
                 />
                 <NumberField
                   label="Change interval max (ms)"
-                  hint={`≈ ${(settings.displayOnlineCountChangeMaxMs / 1000).toFixed(1)}s`}
-                  value={settings.displayOnlineCountChangeMaxMs}
-                  min={settings.displayOnlineCountChangeMinMs}
+                  hint={`≈ ${(botSettings.displayOnlineCountChangeMaxMs / 1000).toFixed(1)}s`}
+                  value={botSettings.displayOnlineCountChangeMaxMs}
+                  min={botSettings.displayOnlineCountChangeMinMs}
                   max={600000}
                   step={100}
                   onChange={(displayOnlineCountChangeMaxMs) => patch({ displayOnlineCountChangeMaxMs })}
@@ -172,7 +348,7 @@ export default function OpsBotSettingsPage() {
           <Section title="Match page">
             <SelectField
               label="Partner matching"
-              value={settings.matchMode}
+              value={botSettings.matchMode}
               onChange={(v) => patch({ matchMode: v as BotSettings["matchMode"] })}
               options={[
                 { value: "user_choice", label: "User chooses (humans only vs humans + bot)" },
@@ -183,7 +359,7 @@ export default function OpsBotSettingsPage() {
             <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
               <input
                 type="checkbox"
-                checked={settings.hideGenderFilters}
+                checked={botSettings.hideGenderFilters}
                 onChange={(e) => patch({ hideGenderFilters: e.target.checked })}
                 className="mt-1 accent-violet-500"
               />
@@ -203,7 +379,7 @@ export default function OpsBotSettingsPage() {
           <Section title="Sexual vibe">
             <SelectField
               label="Disposition"
-              value={settings.sexualDisposition}
+              value={botSettings.sexualDisposition}
               onChange={(v) => patch({ sexualDisposition: v as BotSettings["sexualDisposition"] })}
               options={[
                 { value: "random", label: "Random (weighted)" },
@@ -212,11 +388,11 @@ export default function OpsBotSettingsPage() {
                 { value: "horny", label: "Always horny" },
               ]}
             />
-            {settings.sexualDisposition === "random" ? (
+            {botSettings.sexualDisposition === "random" ? (
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
                 <SliderField
                   label="Strict %"
-                  value={settings.strictWeight}
+                  value={botSettings.strictWeight}
                   min={0}
                   max={100}
                   step={1}
@@ -224,7 +400,7 @@ export default function OpsBotSettingsPage() {
                 />
                 <SliderField
                   label="Persuadable %"
-                  value={settings.persuadableWeight}
+                  value={botSettings.persuadableWeight}
                   min={0}
                   max={100}
                   step={1}
@@ -232,7 +408,7 @@ export default function OpsBotSettingsPage() {
                 />
                 <SliderField
                   label="Horny %"
-                  value={settings.hornyWeight}
+                  value={botSettings.hornyWeight}
                   min={0}
                   max={100}
                   step={1}
@@ -246,7 +422,7 @@ export default function OpsBotSettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectField
                 label="Writing style"
-                value={settings.writingStyle}
+                value={botSettings.writingStyle}
                 onChange={(v) => patch({ writingStyle: v as BotSettings["writingStyle"] })}
                 options={[
                   { value: "random", label: "Random" },
@@ -257,7 +433,7 @@ export default function OpsBotSettingsPage() {
               />
               <SelectField
                 label="Message style"
-                value={settings.messageStyle}
+                value={botSettings.messageStyle}
                 onChange={(v) => patch({ messageStyle: v as BotSettings["messageStyle"] })}
                 options={[
                   { value: "random", label: "Random" },
@@ -268,7 +444,7 @@ export default function OpsBotSettingsPage() {
               />
               <SelectField
                 label="Typo rate"
-                value={settings.typoRate}
+                value={botSettings.typoRate}
                 onChange={(v) => patch({ typoRate: v as BotSettings["typoRate"] })}
                 options={[
                   { value: "random", label: "Random" },
@@ -283,18 +459,18 @@ export default function OpsBotSettingsPage() {
           <Section title="Response speed">
             <SelectField
               label="Reply speed mode"
-              value={settings.replySpeedMode}
+              value={botSettings.replySpeedMode}
               onChange={(v) => patch({ replySpeedMode: v as BotSettings["replySpeedMode"] })}
               options={[
                 { value: "random", label: "Random per room" },
                 { value: "fixed", label: "Fixed for all rooms" },
               ]}
             />
-            {settings.replySpeedMode === "fixed" ? (
+            {botSettings.replySpeedMode === "fixed" ? (
               <SliderField
                 label="Reply speed"
                 hint="0.55 = fast, 1.65 = slow. Affects read delay and typing duration."
-                value={settings.replySpeed}
+                value={botSettings.replySpeed}
                 min={0.55}
                 max={1.65}
                 step={0.05}
@@ -308,7 +484,7 @@ export default function OpsBotSettingsPage() {
           <Section title="Bot opener (speaks first if user is idle)">
             <SelectField
               label="Opener wait mode"
-              value={settings.openerDelayMode}
+              value={botSettings.openerDelayMode}
               onChange={(v) => patch({ openerDelayMode: v as BotSettings["openerDelayMode"] })}
               options={[
                 { value: "fixed", label: "Fixed delay" },
@@ -319,11 +495,11 @@ export default function OpsBotSettingsPage() {
               How long the bot waits before saying hi when the user has not sent a message yet. Cancelled
               immediately if the user types first.
             </p>
-            {settings.openerDelayMode === "fixed" ? (
+            {botSettings.openerDelayMode === "fixed" ? (
               <NumberField
                 label="Fixed wait (ms)"
-                hint={`≈ ${(settings.openerDelayMs / 1000).toFixed(1)}s — e.g. 1000 = 1s, 10000 = 10s`}
-                value={settings.openerDelayMs}
+                hint={`≈ ${(botSettings.openerDelayMs / 1000).toFixed(1)}s (e.g. 1000 = 1s, 10000 = 10s)`}
+                value={botSettings.openerDelayMs}
                 min={0}
                 max={60000}
                 step={100}
@@ -334,8 +510,8 @@ export default function OpsBotSettingsPage() {
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <NumberField
                   label="Random wait min (ms)"
-                  hint={`≈ ${(settings.openerDelayMinMs / 1000).toFixed(1)}s`}
-                  value={settings.openerDelayMinMs}
+                  hint={`≈ ${(botSettings.openerDelayMinMs / 1000).toFixed(1)}s`}
+                  value={botSettings.openerDelayMinMs}
                   min={0}
                   max={60000}
                   step={100}
@@ -343,9 +519,9 @@ export default function OpsBotSettingsPage() {
                 />
                 <NumberField
                   label="Random wait max (ms)"
-                  hint={`≈ ${(settings.openerDelayMaxMs / 1000).toFixed(1)}s`}
-                  value={settings.openerDelayMaxMs}
-                  min={settings.openerDelayMinMs}
+                  hint={`≈ ${(botSettings.openerDelayMaxMs / 1000).toFixed(1)}s`}
+                  value={botSettings.openerDelayMaxMs}
+                  min={botSettings.openerDelayMinMs}
                   max={60000}
                   step={100}
                   onChange={(openerDelayMaxMs) => patch({ openerDelayMaxMs })}
@@ -358,7 +534,7 @@ export default function OpsBotSettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <NumberField
                 label="Ghost ping (wait for user)"
-                value={settings.ghostPingMs}
+                value={botSettings.ghostPingMs}
                 min={1000}
                 max={120000}
                 step={500}
@@ -366,7 +542,7 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="Ghost skip (after ping)"
-                value={settings.ghostSkipMs}
+                value={botSettings.ghostSkipMs}
                 min={1000}
                 max={120000}
                 step={500}
@@ -374,7 +550,7 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="AI match delay min"
-                value={settings.aiMatchDelayMinMs}
+                value={botSettings.aiMatchDelayMinMs}
                 min={0}
                 max={60000}
                 step={100}
@@ -382,8 +558,8 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="AI match delay max"
-                value={settings.aiMatchDelayMaxMs}
-                min={settings.aiMatchDelayMinMs}
+                value={botSettings.aiMatchDelayMaxMs}
+                min={botSettings.aiMatchDelayMinMs}
                 max={60000}
                 step={100}
                 onChange={(aiMatchDelayMaxMs) => patch({ aiMatchDelayMaxMs })}
@@ -395,35 +571,35 @@ export default function OpsBotSettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <NumberField
                 label="Max user turns before skip"
-                value={settings.maxUserTurnsBeforeSkip}
+                value={botSettings.maxUserTurnsBeforeSkip}
                 min={1}
                 max={50}
                 onChange={(maxUserTurnsBeforeSkip) => patch({ maxUserTurnsBeforeSkip })}
               />
               <NumberField
                 label="Dry chat skip (min user turns)"
-                value={settings.drySkipMinUserTurns}
+                value={botSettings.drySkipMinUserTurns}
                 min={1}
                 max={20}
                 onChange={(drySkipMinUserTurns) => patch({ drySkipMinUserTurns })}
               />
               <NumberField
                 label="Strict bot sexual msgs before skip"
-                value={settings.strictSexualSkipAt}
+                value={botSettings.strictSexualSkipAt}
                 min={1}
                 max={10}
                 onChange={(strictSexualSkipAt) => patch({ strictSexualSkipAt })}
               />
               <NumberField
                 label="Long chat skip at (user turns)"
-                value={settings.longChatSkipAt}
+                value={botSettings.longChatSkipAt}
                 min={1}
                 max={50}
                 onChange={(longChatSkipAt) => patch({ longChatSkipAt })}
               />
               <SliderField
                 label="Long chat random skip chance %"
-                value={settings.longChatSkipChance}
+                value={botSettings.longChatSkipChance}
                 min={0}
                 max={100}
                 step={1}
@@ -431,7 +607,7 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="Session hint at (user turns)"
-                value={settings.sessionHintAt}
+                value={botSettings.sessionHintAt}
                 min={1}
                 max={30}
                 onChange={(sessionHintAt) => patch({ sessionHintAt })}
@@ -443,7 +619,7 @@ export default function OpsBotSettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <SliderField
                 label="Temperature"
-                value={settings.llmTemperature}
+                value={botSettings.llmTemperature}
                 min={0}
                 max={2}
                 step={0.01}
@@ -452,7 +628,7 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="Max output tokens"
-                value={settings.maxOutputTokens}
+                value={botSettings.maxOutputTokens}
                 min={64}
                 max={4096}
                 step={32}
@@ -460,7 +636,7 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="Max tokens (sexual vibe)"
-                value={settings.maxOutputTokensSexual}
+                value={botSettings.maxOutputTokensSexual}
                 min={64}
                 max={4096}
                 step={32}
@@ -468,7 +644,7 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="Max tokens (opener only)"
-                value={settings.maxOutputTokensOpener}
+                value={botSettings.maxOutputTokensOpener}
                 min={32}
                 max={512}
                 step={16}
@@ -476,7 +652,7 @@ export default function OpsBotSettingsPage() {
               />
               <NumberField
                 label="History turns sent to LLM"
-                value={settings.llmHistoryTurns}
+                value={botSettings.llmHistoryTurns}
                 min={4}
                 max={40}
                 onChange={(llmHistoryTurns) => patch({ llmHistoryTurns })}
@@ -485,6 +661,10 @@ export default function OpsBotSettingsPage() {
           </Section>
         </div>
           </>
+        ) : (
+          <div className="mt-10 flex items-center justify-center rounded-2xl border border-white/10 bg-navy-900/40 p-6">
+            <p className="text-sm text-navy-400">Loading settings…</p>
+          </div>
         )}
 
         <p className="mt-10 text-xs text-navy-500">

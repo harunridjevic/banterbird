@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  BOT_SETTINGS_CHANGED_EVENT,
-  loadBotSettings,
-} from "@/lib/ops/bot-settings";
+import { BOT_SETTINGS_CHANGED_EVENT } from "@/lib/ops/bot-settings";
+import { useGlobalBotSettings } from "@/lib/ops/bot-settings-provider";
 import {
   computeDisplayOnlineCount,
   msUntilNextDisplayOnlineCount,
@@ -13,29 +11,26 @@ import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 export function useDisplayOnlineCount(): number {
   const liveCount = useOnlineCount();
+  const globalBotSettings = useGlobalBotSettings();
   const [overrideEnabled, setOverrideEnabled] = useState(
-    () => loadBotSettings().displayOnlineCountOverride,
+    globalBotSettings.displayOnlineCountOverride,
   );
   const [settingsTick, setSettingsTick] = useState(0);
-  const [displayCount, setDisplayCount] = useState(() => {
-    const settings = loadBotSettings();
-    return settings.displayOnlineCountOverride
-      ? computeDisplayOnlineCount(settings)
-      : liveCount;
-  });
+  const [displayCount, setDisplayCount] = useState(() =>
+    globalBotSettings.displayOnlineCountOverride
+      ? computeDisplayOnlineCount(globalBotSettings)
+      : liveCount,
+  );
 
   useEffect(() => {
     const refresh = () => {
-      setOverrideEnabled(loadBotSettings().displayOnlineCountOverride);
+      setOverrideEnabled(globalBotSettings.displayOnlineCountOverride);
       setSettingsTick((tick) => tick + 1);
     };
     refresh();
     window.addEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
-    window.addEventListener("storage", (e) => {
-      if (e.key === "banterbird:bot-settings") refresh();
-    });
     return () => window.removeEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
-  }, []);
+  }, [globalBotSettings.displayOnlineCountOverride]);
 
   useEffect(() => {
     if (!overrideEnabled) {
@@ -44,13 +39,12 @@ export function useDisplayOnlineCount(): number {
     }
 
     const sync = () => {
-      const settings = loadBotSettings();
-      if (!settings.displayOnlineCountOverride) {
+      if (!globalBotSettings.displayOnlineCountOverride) {
         setOverrideEnabled(false);
         setDisplayCount(liveCount);
         return;
       }
-      setDisplayCount(computeDisplayOnlineCount(settings));
+      setDisplayCount(computeDisplayOnlineCount(globalBotSettings));
     };
 
     sync();
@@ -60,12 +54,11 @@ export function useDisplayOnlineCount(): number {
 
     const scheduleNext = () => {
       if (cancelled) return;
-      const settings = loadBotSettings();
       timeoutId = setTimeout(() => {
         if (cancelled) return;
         sync();
         scheduleNext();
-      }, msUntilNextDisplayOnlineCount(settings));
+      }, msUntilNextDisplayOnlineCount(globalBotSettings));
     };
 
     scheduleNext();
@@ -74,7 +67,7 @@ export function useDisplayOnlineCount(): number {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [overrideEnabled, liveCount, settingsTick]);
+  }, [overrideEnabled, liveCount, settingsTick, globalBotSettings]);
 
   return displayCount;
 }

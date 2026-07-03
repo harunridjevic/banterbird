@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Bot, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
+import { ArrowLeft, Bot, Flag, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
 import { executeBotTurn, type BotApiBody } from "@/components/chat/bot-turn";
 import {
@@ -16,15 +16,25 @@ import { shouldClientSkipChat } from "@/lib/ai-practice-bot/client-skip";
 import { buildBotPersona, type BotPersona } from "@/lib/ai-practice-bot/persona";
 import {
   BOT_SETTINGS_CHANGED_EVENT,
-  loadBotSettings,
   resolveOpenerDelayMs,
   type BotSettings,
 } from "@/lib/ops/bot-settings";
+import { useGlobalBotSettings } from "@/lib/ops/bot-settings-provider";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PageLoader } from "@/components/ui/Loading";
 import type { MessageRow, SelfGender } from "@/lib/types/chat";
 import { tabCloseFetch } from "@/lib/presence/tab-close-fetch";
+import { getDeviceId } from "@/lib/moderation/device-id";
+import { ConnectionSignal } from "@/components/chat/ConnectionSignal";
+import { ReportUserDialog } from "@/components/chat/ReportUserDialog";
+import { checkMatchAccess, rejectBlockedRoom, shouldAcceptRoom } from "@/lib/match/room-guard";
+import { useKeyboardInset } from "@/lib/hooks/use-keyboard-inset";
+import { useInactivityTimeout } from "@/lib/hooks/use-inactivity-timeout";
+import {
+  recordInactivitySkip,
+  resetInactivityStrikes,
+} from "@/lib/moderation/inactivity-strikes";
 
 type Props = { roomId: string };
 
@@ -58,17 +68,16 @@ export function ChatRoom({ roomId }: Props) {
   const ghostSchedule = useRef(createGhostSchedule());
   const botPersonaRef = useRef<BotPersona | null>(null);
   const botTimingRef = useRef<BotApiBody["timing"]>({});
-  const botSettingsRef = useRef<BotSettings>(loadBotSettings());
+  const globalBotSettings = useGlobalBotSettings();
+  const botSettingsRef = useRef<BotSettings>(globalBotSettings);
 
   const aiBusyRef = useRef(false);
   const skipEndingRef = useRef(false);
 
-  const [hideBotUi, setHideBotUi] = useState(
-    () => loadBotSettings().matchMode === "hidden_bots",
-  );
-  const [hideGenderFilters, setHideGenderFilters] = useState(
-    () => loadBotSettings().hideGenderFilters,
-  );
+  const [hideBotUi, setHideBotUi] = useState(globalBotSettings.matchMode === "hidden_bots");
+  const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
+  const [showReport, setShowReport] = useState(false);
+  const keyboardInset = useKeyboardInset();
 
   const cancelOpener = useCallback(() => {
     if (openerTimerRef.current !== null) {
@@ -99,9 +108,9 @@ export function ChatRoom({ roomId }: Props) {
 
   useEffect(() => {
     const refresh = () => {
-      botSettingsRef.current = loadBotSettings();
-      setHideBotUi(botSettingsRef.current.matchMode === "hidden_bots");
-      setHideGenderFilters(botSettingsRef.current.hideGenderFilters);
+      botSettingsRef.current = globalBotSettings;
+      setHideBotUi(globalBotSettings.matchMode === "hidden_bots");
+      setHideGenderFilters(globalBotSettings.hideGenderFilters);
       if (isAiRoomRef.current && botPersonaRef.current) {
         const p = botPersonaRef.current;
         botPersonaRef.current = buildBotPersona(roomId, p.botGender, p.userGender, botSettingsRef.current);
@@ -110,7 +119,7 @@ export function ChatRoom({ roomId }: Props) {
     refresh();
     window.addEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
-  }, [roomId]);
+  }, [roomId, globalBotSettings]);
 
   useEffect(() => {
     openerDoneRef.current = false;
@@ -136,13 +145,22 @@ export function ChatRoom({ roomId }: Props) {
     tabCloseFetch("/api/presence/leave");
   }, [roomId]);
 
-  const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const scrollToBottom = useCallback((instant = false) => {
+    bottomRef.current?.scrollIntoView({
+      behavior: instant ? "auto" : "smooth",
+      block: "end",
+    });
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages.length, peerTyping]);
+  }, [messages.length, peerTyping, scrollToBottom]);
+
+  useEffect(() => {
+    if (keyboardInset > 0) {
+      scrollToBottom(true);
+    }
+  }, [keyboardInset, scrollToBottom]);
 
   const load = useCallback(async () => {
     if (!ready) return;
@@ -189,6 +207,20 @@ export function ChatRoom({ roomId }: Props) {
     if (room.ended_at) {
       setPeerId(null);
       setPeerGender(null);
+      router.replace("/match");
+      return;
+    }
+
+    const access = await checkMatchAccess();
+    if (!access.allowed) {
+      await client.rpc("end_active_room", { p_room_id: roomId });
+      router.replace("/match");
+      return;
+    }
+
+    const accept = await shouldAcceptRoom(client, roomId, session.user.id);
+    if (!accept) {
+      await rejectBlockedRoom(client, roomId);
       router.replace("/match");
       return;
     }
@@ -426,6 +458,29 @@ export function ChatRoom({ roomId }: Props) {
     router.replace("/match");
   }, [client, roomId, router]);
 
+  const leaveManually = useCallback(
+    async (clearFilters: boolean) => {
+      resetInactivityStrikes();
+      await endRoomAndGoMatch(clearFilters);
+    },
+    [endRoomAndGoMatch],
+  );
+
+  const leaveForInactivity = useCallback(async () => {
+    recordInactivitySkip();
+    await endRoomAndGoMatch(false);
+  }, [endRoomAndGoMatch]);
+
+  const inactive = !loading && !error && !exiting && !showReport;
+  const { bumpActivity } = useInactivityTimeout(
+    () => void leaveForInactivity(),
+    inactive,
+  );
+
+  useEffect(() => {
+    bumpActivity();
+  }, [messages.length, peerTyping, bumpActivity]);
+
   const transcriptFromSnapshot = useCallback((snapshot: MessageRow[]) => {
     return snapshot.map((m) => ({
       role: (isBotMessage(m) ? "assistant" : "user") as "user" | "assistant",
@@ -433,10 +488,11 @@ export function ChatRoom({ roomId }: Props) {
     }));
   }, []);
 
-  const finishSkipAndLeave = useCallback(async () => {
+  const finishBotSkipAndLeave = useCallback(async () => {
     skipEndingRef.current = true;
     disarmGhostSchedule(ghostSchedule.current);
     replyQueueRef.current = [];
+    recordInactivitySkip();
     await endRoomAndGoMatch(false);
   }, [endRoomAndGoMatch]);
 
@@ -451,14 +507,14 @@ export function ChatRoom({ roomId }: Props) {
         roomId,
         setPeerTyping,
         onError: setError,
-        endRoom: () => finishSkipAndLeave(),
+        endRoom: () => finishBotSkipAndLeave(),
         isActive: () => isAiRoomRef.current && !exitInFlightRef.current && !skipEndingRef.current,
         botMessageId,
         ghostPingMs: s.ghostPingMs,
         ghostSkipMs: s.ghostSkipMs,
       };
     },
-    [client, roomId, finishSkipAndLeave],
+    [client, roomId, finishBotSkipAndLeave],
   );
 
   const armGhostAfterBot = useCallback(
@@ -507,7 +563,7 @@ export function ChatRoom({ roomId }: Props) {
           userMessageLen: triggeringLen,
         });
         if (outcome === "skip") {
-          await finishSkipAndLeave();
+          await finishBotSkipAndLeave();
         }
         return;
       }
@@ -518,7 +574,6 @@ export function ChatRoom({ roomId }: Props) {
         body: JSON.stringify({
           roomId,
           messages: transcript,
-          botSettings: botSettingsRef.current,
         }),
       });
       if (!res.ok) return;
@@ -535,7 +590,7 @@ export function ChatRoom({ roomId }: Props) {
       });
 
       if (outcome === "skip") {
-        await finishSkipAndLeave();
+        await finishBotSkipAndLeave();
         return;
       }
       armGhostAfterBot(messagesRef.current[messagesRef.current.length - 1]?.id ?? null);
@@ -549,7 +604,7 @@ export function ChatRoom({ roomId }: Props) {
         });
       }
     }
-  }, [client, roomId, transcriptFromSnapshot, armGhostAfterBot, finishSkipAndLeave]);
+  }, [client, roomId, transcriptFromSnapshot, armGhostAfterBot, finishBotSkipAndLeave]);
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading) return;
@@ -569,7 +624,6 @@ export function ChatRoom({ roomId }: Props) {
           body: JSON.stringify({
             roomId,
             messages: [] as { role: "user" | "assistant"; content: string }[],
-            botSettings: botSettingsRef.current,
           }),
         });
         if (!res.ok) return;
@@ -587,7 +641,7 @@ export function ChatRoom({ roomId }: Props) {
           isOpener: true,
         });
         if (outcome === "skip") {
-          await finishSkipAndLeave();
+          await finishBotSkipAndLeave();
           return;
         }
         armGhostAfterBot(messagesRef.current[messagesRef.current.length - 1]?.id ?? null);
@@ -602,7 +656,7 @@ export function ChatRoom({ roomId }: Props) {
         openerTimerRef.current = null;
       }
     };
-  }, [ready, isAiRoom, loading, roomId, client, finishSkipAndLeave, armGhostAfterBot, userHasSpoken]);
+  }, [ready, isAiRoom, loading, roomId, client, finishBotSkipAndLeave, armGhostAfterBot, userHasSpoken]);
 
   // Re-arm ghost when bot message lands (covers missed arms + page reload mid-wait).
   useEffect(() => {
@@ -636,22 +690,35 @@ export function ChatRoom({ roomId }: Props) {
 
   const sendMessage = useCallback(
     async (text: string) => {
+      resetInactivityStrikes();
       if (isAiRoomRef.current) cancelOpener();
       disarmGhostSchedule(ghostSchedule.current);
-      const {
-        data: { session },
-      } = await client.auth.getSession();
-      if (!session?.user?.id) return;
-      const { error: insErr } = await client.from("messages").insert({
-        room_id: roomId,
-        user_id: session.user.id,
-        content: text,
+      const res = await fetch("/api/chat/send-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId,
+          content: text,
+          deviceId: getDeviceId(),
+        }),
       });
-      if (insErr) {
-        setError(insErr.message);
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
+        if (res.status === 403) {
+          router.replace("/match");
+          return;
+        }
+        if (res.status === 429) {
+          setError(j.error ?? "Slow down. Messages sent too quickly.");
+          if (j.reason === "rate_limit" || j.reason === "burst_limit") {
+            router.replace("/match");
+          }
+          return;
+        }
+        setError(j.error ?? "Could not send message");
       }
     },
-    [client, roomId, cancelOpener],
+    [roomId, cancelOpener, router],
   );
 
   const displayAsHuman = isAiRoom && hideBotUi;
@@ -678,14 +745,14 @@ export function ChatRoom({ roomId }: Props) {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-3.5rem)] w-full max-w-3xl flex-col sm:h-[calc(100dvh-4rem)]">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-navy-200/60 px-3 py-3 dark:border-white/10 sm:px-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-navy-200/60 px-3 py-3 dark:border-white/10 sm:gap-3 sm:px-4">
         <motion.button
           type="button"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           disabled={exiting} // This is the "Cancel" button
-          onClick={() => void endRoomAndGoMatch(true)}
+          onClick={() => void leaveManually(true)}
           className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm font-medium text-navy-800 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -695,16 +762,16 @@ export function ChatRoom({ roomId }: Props) {
           <p className="hidden text-sm font-semibold text-navy-950 sm:block dark:text-navy-50">
             Anonymous chat
           </p>
-          <div className="flex flex-nowrap items-center justify-center gap-1.5 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:mt-1 sm:flex-wrap sm:gap-x-2 sm:gap-y-1 sm:overflow-visible [&::-webkit-scrollbar]:hidden">
+          <div className="flex flex-nowrap items-center justify-center gap-1 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:mt-1 sm:gap-1.5 [&::-webkit-scrollbar]:hidden">
             {!displayAsHuman && isAiRoom ? (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-500/40 bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap text-violet-900 dark:text-violet-100 sm:text-[11px]">
-                <Bot className="h-3 w-3" aria-hidden />
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-500/40 bg-violet-500/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap text-violet-900 dark:text-violet-100 sm:px-2 sm:text-[11px]">
+                <Bot className="h-3 w-3 shrink-0" aria-hidden />
                 <span className="sm:hidden">Bot</span>
                 <span className="hidden sm:inline">Practice bot</span>
               </span>
             ) : null}
             <span
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap sm:text-[11px] ${
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap sm:px-2 sm:text-[11px] ${
                 peerPresence === "online"
                   ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
                   : peerPresence === "offline"
@@ -724,41 +791,82 @@ export function ChatRoom({ roomId }: Props) {
               />
               {peerPresence === "unknown" ? "…" : peerPresence === "online" ? "Online" : "Offline"}
             </span>
+            <ConnectionSignal />
             {showPeerGender ? (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-navy-200/70 bg-white/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap text-navy-600 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-300 sm:text-[11px]">
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-navy-200/70 bg-white/55 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap text-navy-600 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-300 sm:px-2 sm:text-[11px]"
+                title={
+                  isAiRoom && !hideBotUi
+                    ? "Bot persona"
+                    : peerGender === "male"
+                      ? "Man"
+                      : peerGender === "female"
+                        ? "Woman"
+                        : "Unknown"
+                }
+              >
                 {peerGender === "male" ? (
-                  <Mars className="h-3 w-3 text-blue-500" aria-hidden />
+                  <Mars className="h-3 w-3 shrink-0 text-blue-500" aria-hidden />
                 ) : peerGender === "female" ? (
-                  <Venus className="h-3 w-3 text-pink-500" aria-hidden />
+                  <Venus className="h-3 w-3 shrink-0 text-pink-500" aria-hidden />
                 ) : (
-                  <span className="inline-block h-2 w-2 rounded-full bg-navy-300 dark:bg-navy-600" aria-hidden />
+                  <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-navy-300 dark:bg-navy-600" aria-hidden />
                 )}
-                {isAiRoom && !hideBotUi
-                  ? "Bot persona"
-                  : peerGender === "male"
-                    ? "Man"
-                    : peerGender === "female"
-                      ? "Woman"
-                      : "Unknown"}
+                <span className="hidden sm:inline">
+                  {isAiRoom && !hideBotUi
+                    ? "Bot persona"
+                    : peerGender === "male"
+                      ? "Man"
+                      : peerGender === "female"
+                        ? "Woman"
+                        : "Unknown"}
+                </span>
               </span>
             ) : null}
           </div>
-          <p className="mt-1 text-xs text-navy-600 dark:text-navy-400">
-            You are both strangers — stay kind.
+          <p className="mt-1 hidden text-xs text-navy-600 sm:block dark:text-navy-400">
+            You are both strangers. Stay kind.
           </p>
         </div>
         <motion.button
           type="button"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
+          disabled={exiting}
+          onClick={() => setShowReport(true)}
+          className="inline-flex items-center gap-1 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-2 text-xs font-semibold text-rose-800 disabled:opacity-50 dark:text-rose-200"
+          aria-label="Report user"
+        >
+          <Flag className="h-3.5 w-3.5" aria-hidden />
+          <span className="hidden sm:inline">Report</span>
+        </motion.button>
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           disabled={exiting} // This is the "Skip" button
-          onClick={() => void endRoomAndGoMatch(false)}
+          onClick={() => void leaveManually(false)}
           className="inline-flex items-center gap-1.5 rounded-2xl bg-navy-900 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-50 dark:bg-navy-100 dark:text-navy-950"
         >
           <SkipForward className="h-3.5 w-3.5" aria-hidden />
           Skip
         </motion.button>
       </div>
+
+      {showReport ? (
+        <ReportUserDialog
+          roomId={roomId}
+          peerId={peerId}
+          isAiRoom={isAiRoom}
+          messages={messages}
+          selfId={selfId}
+          onReported={() => {
+            setShowReport(false);
+            void router.replace("/match");
+          }}
+          onClose={() => setShowReport(false)}
+        />
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {messages.length === 0 && !peerTyping ? (
@@ -770,7 +878,7 @@ export function ChatRoom({ roomId }: Props) {
             >
               <p className="text-sm font-medium text-navy-900 dark:text-navy-100">No messages yet</p>
               <p className="mt-2 max-w-xs text-xs text-navy-600 dark:text-navy-400">
-                Say hi — your match is on the other side of this glassy little bubble.
+                Say hi. Your match is on the other side of this glassy little bubble.
               </p>
             </motion.div>}
           </div>
@@ -786,10 +894,11 @@ export function ChatRoom({ roomId }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="shrink-0 space-y-1 border-t border-navy-200/50 bg-[var(--page-bg)]/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10">
+      <div className="shrink-0 border-t border-navy-200/50 bg-[var(--page-bg)]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10">
         <ChatComposer
           onSend={sendMessage}
           onTypingChange={(typing) => void sendTypingBroadcast(typing)}
+          onFocus={() => scrollToBottom(true)}
         />
       </div>
     </div>

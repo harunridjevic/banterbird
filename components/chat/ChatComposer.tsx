@@ -8,9 +8,10 @@ type Props = {
   disabled?: boolean;
   onSend: (text: string) => Promise<void>;
   onTypingChange: (typing: boolean) => void;
+  onFocus?: () => void;
 };
 
-export function ChatComposer({ disabled, onSend, onTypingChange }: Props) {
+export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Props) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -69,9 +70,15 @@ export function ChatComposer({ disabled, onSend, onTypingChange }: Props) {
           rows={1}
           disabled={disabled || sending}
           placeholder="Say something nice…"
-          className="max-h-32 min-h-[44px] flex-1 resize-none rounded-2xl border border-navy-200/80 bg-white/80 px-4 py-3 text-[15px] text-navy-950 outline-none ring-navy-900/10 placeholder:text-navy-400 focus:ring-2 dark:border-white/10 dark:bg-navy-950/60 dark:text-navy-50 dark:placeholder:text-navy-500"
+          enterKeyHint="send"
+          className="max-h-32 min-h-[44px] flex-1 resize-none rounded-2xl border border-navy-200/80 bg-white/80 px-4 py-3 text-[16px] text-navy-950 outline-none ring-navy-900/10 placeholder:text-navy-400 focus:ring-2 dark:border-white/10 dark:bg-navy-950/60 dark:text-navy-50 dark:placeholder:text-navy-500"
           value={value}
           onChange={(e) => handleChange(e.target.value)}
+          onFocus={() => {
+            onFocus?.();
+            window.setTimeout(() => onFocus?.(), 150);
+            window.setTimeout(() => onFocus?.(), 400);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

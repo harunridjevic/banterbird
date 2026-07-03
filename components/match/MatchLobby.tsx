@@ -10,19 +10,32 @@ import type { SelfGender, WantsGender } from "@/lib/types/chat";
 import {
   anonymousMatchGenders,
   BOT_SETTINGS_CHANGED_EVENT,
-  loadBotSettings,
   type MatchMode,
 } from "@/lib/ops/bot-settings";
+import { useGlobalBotSettings } from "@/lib/ops/bot-settings-provider";
 import {
   canStartMatching,
   computeEffectiveIncludeAi,
   resolveActiveGenders,
 } from "@/lib/match/policy";
+import { getDeviceId } from "@/lib/moderation/device-id";
+import { getSessionBlockedUsers } from "@/lib/moderation/session-block";
+import {
+  checkMatchAccess,
+  rejectBlockedRoom,
+  shouldAcceptRoom,
+} from "@/lib/match/room-guard";
 import { MatchingLoader } from "./MatchingLoader";
+import { useInactivityTimeout } from "@/lib/hooks/use-inactivity-timeout";
+import {
+  isMatchingPausedForInactivity,
+  recordInactivitySkip,
+  resetInactivityStrikes,
+} from "@/lib/moderation/inactivity-strikes";
 
 export function MatchLobby() {
   const router = useRouter();
-  const { client, ready } = useSupabase();
+  const { client, ready, authError } = useSupabase();
   const [selfGender, setSelfGender] = useState<SelfGender | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("banterbird:selfGender") as SelfGender | null;
@@ -36,10 +49,11 @@ export function MatchLobby() {
   const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
   const [rpcError, setRpcError] = useState<string | null>(null);
   const [includeAiMatch, setIncludeAiMatch] = useState(true);
-  const [matchMode, setMatchMode] = useState<MatchMode>(() => loadBotSettings().matchMode);
-  const [hideGenderFilters, setHideGenderFilters] = useState(
-    () => loadBotSettings().hideGenderFilters,
-  );
+  const globalBotSettings = useGlobalBotSettings();
+  const [matchMode, setMatchMode] = useState<MatchMode>(globalBotSettings.matchMode);
+  const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
+  const [accessBlocked, setAccessBlocked] = useState(false);
+  const matchingPaused = isMatchingPausedForInactivity();
   const matchGendersRef = useRef<{ self: SelfGender; wants: WantsGender } | null>(null);
   const navigatedRef = useRef(false);
   const cancelledRef = useRef(false);
@@ -57,20 +71,41 @@ export function MatchLobby() {
     activeSelfGender,
     activeWantsGender,
   );
+  const shouldMatch = canMatch && !matchingPaused;
+
+  useEffect(() => {
+    if (!matchingPaused) return;
+    setMatchRequested(false);
+    setIsMatching(false);
+    matchGendersRef.current = null;
+    if (ready && client) {
+      void client.rpc("leave_match_queue");
+    }
+  }, [matchingPaused, ready, client]);
+
+  useEffect(() => {
+    if (hideGenderFilters || matchingPaused) return;
+    if (selfGender && wantsGender) {
+      setMatchRequested(true);
+    }
+  }, [hideGenderFilters, matchingPaused, selfGender, wantsGender]);
 
   useEffect(() => {
     const refresh = () => {
-      const s = loadBotSettings();
-      setMatchMode(s.matchMode);
-      setHideGenderFilters(s.hideGenderFilters);
+      setMatchMode(globalBotSettings.matchMode);
+      setHideGenderFilters(globalBotSettings.hideGenderFilters);
     };
     refresh();
     window.addEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
-  }, []);
+  }, [globalBotSettings.matchMode, globalBotSettings.hideGenderFilters]);
 
   useEffect(() => {
     if (!isMatching) {
+      if (matchingPaused) {
+        setHint("Matching paused after inactivity. Start again when you're ready.");
+        return;
+      }
       setHint(
         hideGenderFilters
           ? "Tap start to match with the next person online."
@@ -80,7 +115,7 @@ export function MatchLobby() {
     }
     setRpcError(null);
     setHint("Finding your best match now…");
-  }, [isMatching, hideGenderFilters]);
+  }, [isMatching, hideGenderFilters, matchingPaused]);
 
   useEffect(() => {
     if (!hideGenderFilters && selfGender) {
@@ -97,7 +132,7 @@ export function MatchLobby() {
   useEffect(() => {
     cancelledRef.current = false;
     navigatedRef.current = false;
-    if (!ready || !canMatch) {
+    if (!ready || !shouldMatch) {
       setIsMatching(false);
       return;
     }
@@ -109,11 +144,63 @@ export function MatchLobby() {
     let alive = true;
 
     const attemptMatch = async () => {
-      const result = await client.rpc("try_match", {
-        p_self_gender: activeSelfGender,
-        p_wants_gender: activeWantsGender,
+      if (isMatchingPausedForInactivity()) {
+        return { data: null, error: null };
+      }
+      const access = await checkMatchAccess(client);
+      if (!access.allowed) {
+        if (access.reason === "blocked") setAccessBlocked(true);
+        const message =
+          access.reason === "blocked"
+            ? "Your access has been restricted."
+            : access.reason === "unauthorized"
+              ? "Sign-in failed or your session expired. Refresh the page."
+              : "Could not verify access. Try refreshing.";
+        return { data: null, error: { message } };
+      }
+
+      const res = await fetch("/api/match/try", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selfGender: activeSelfGender,
+          wantsGender: activeWantsGender,
+          blockedUserIds: getSessionBlockedUsers(),
+          deviceId: getDeviceId(),
+        }),
       });
-      return result;
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
+        if (res.status === 403) {
+          setAccessBlocked(true);
+          return { data: null, error: { message: j.error ?? "Your access has been restricted." } };
+        }
+        if (res.status === 429 && (j.reason === "rate_limit" || j.reason === "burst_limit")) {
+          setAccessBlocked(true);
+          return { data: null, error: { message: j.error ?? "Spam detected. Access temporarily restricted." } };
+        }
+        return { data: null, error: { message: j.error ?? `Match failed (${res.status})` } };
+      }
+      const j = (await res.json()) as { roomId?: string | null };
+      return { data: j.roomId ?? null, error: null };
+    };
+
+    const goToRoom = async (roomId: string, uid: string) => {
+      if (isMatchingPausedForInactivity()) return false;
+      const access = await checkMatchAccess(client);
+      if (!access.allowed) {
+        if (access.reason === "blocked") setAccessBlocked(true);
+        await rejectBlockedRoom(client, roomId);
+        return false;
+      }
+      const ok = await shouldAcceptRoom(client, roomId, uid);
+      if (!ok) {
+        await rejectBlockedRoom(client, roomId);
+        return false;
+      }
+      navigatedRef.current = true;
+      router.replace(`/chat/${roomId}`);
+      return true;
     };
 
     void (async () => {
@@ -125,8 +212,11 @@ export function MatchLobby() {
       }
       const firstRoom = first.data as string | null;
       if (firstRoom) {
-        navigatedRef.current = true;
-        router.replace(`/chat/${firstRoom}`);
+        const {
+          data: { session },
+        } = await client.auth.getSession();
+        const uid = session?.user?.id;
+        if (uid) await goToRoom(firstRoom, uid);
         return;
       }
 
@@ -140,10 +230,8 @@ export function MatchLobby() {
 
       const handleInsert = (payload: { new: Record<string, unknown> }) => {
         const id = typeof payload.new?.id === "string" ? payload.new.id : undefined;
-        if (id && alive && !cancelledRef.current) {
-          navigatedRef.current = true;
-          router.replace(`/chat/${id}`);
-        }
+        if (!id || !alive || cancelledRef.current) return;
+        void goToRoom(id, uid);
       };
 
       const suffix =
@@ -193,10 +281,7 @@ export function MatchLobby() {
         const { data, error } = await attemptMatch();
         if (error || !alive || cancelledRef.current) return;
         const rid = data as string | null;
-        if (rid) {
-          navigatedRef.current = true;
-          router.replace(`/chat/${rid}`);
-        }
+        if (rid) await goToRoom(rid, uid);
       }, 2800);
     })();
 
@@ -208,7 +293,7 @@ export function MatchLobby() {
       void client.rpc("leave_match_queue");
       if (matchChannel) void client.removeChannel(matchChannel);
     };
-  }, [client, ready, router, activeSelfGender, activeWantsGender, canMatch]);
+  }, [client, ready, router, activeSelfGender, activeWantsGender, shouldMatch]);
 
   const clearMatchFilters = useCallback(() => {
     setSelfGender(null);
@@ -229,7 +314,15 @@ export function MatchLobby() {
     setIsMatching(false);
   }, [client, clearMatchFilters]);
 
+  const handleInactivityWhileMatching = useCallback(async () => {
+    recordInactivitySkip();
+    await handleCancelMatching();
+  }, [handleCancelMatching]);
+
+  useInactivityTimeout(() => void handleInactivityWhileMatching(), isMatching);
+
   const handleStartMatching = useCallback(() => {
+    resetInactivityStrikes();
     if (hideGenderFilters) {
       matchGendersRef.current = anonymousMatchGenders();
     }
@@ -237,13 +330,19 @@ export function MatchLobby() {
   }, [hideGenderFilters]);
 
   useEffect(() => {
-    if (!ready || !canMatch || !effectiveIncludeAi) return;
+    if (!ready || !shouldMatch || !effectiveIncludeAi) return;
     let alive = true;
-    const s = loadBotSettings();
+    const s = globalBotSettings;
     const span = Math.max(0, s.aiMatchDelayMaxMs - s.aiMatchDelayMinMs);
     const delayMs = s.aiMatchDelayMinMs + Math.floor(Math.random() * (span + 1));
     const t = window.setTimeout(async () => {
       if (!alive || cancelledRef.current || navigatedRef.current) return;
+      if (isMatchingPausedForInactivity()) return;
+      const access = await checkMatchAccess(client);
+      if (!access.allowed) {
+        if (access.reason === "blocked") setAccessBlocked(true);
+        return;
+      }
       const { data, error } = await client.rpc("try_match_ai_practice", {
         p_self_gender: activeSelfGender,
         p_wants_gender: activeWantsGender,
@@ -259,20 +358,58 @@ export function MatchLobby() {
       alive = false;
       window.clearTimeout(t);
     };
-  }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, canMatch]);
+  }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings]);
 
   if (!ready) {
     return <PageLoader label="Preparing your session…" />;
+  }
+
+  if (authError) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-8 text-center">
+        <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
+          Could not start an anonymous session.
+        </p>
+        <p className="mt-4 text-xs text-navy-600 dark:text-navy-400">{authError}</p>
+        <p className="mt-4 text-xs text-navy-600 dark:text-navy-400">
+          In Supabase: Authentication → Providers → enable <strong>Anonymous</strong> sign-ins,
+          then wait about a minute (auth rate limits reset) and refresh this page.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded-xl bg-navy-900 px-4 py-2 text-sm font-medium text-white dark:bg-navy-100 dark:text-navy-950"
+        >
+          Refresh page
+        </button>
+      </div>
+    );
+  }
+
+  if (accessBlocked) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-8 text-center">
+        <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
+          Your access has been restricted.
+        </p>
+        <p className="mt-4 text-xs text-navy-600 dark:text-navy-400">
+          This account, device, or network has been blocked by moderation. You cannot match or chat.
+        </p>
+      </div>
+    );
   }
 
   if (rpcError) {
     return (
       <div className="mx-auto max-w-md px-4 py-8 text-center">
         <p className="text-sm text-red-600 dark:text-red-400">{rpcError}</p>
-        <p className="mt-4 text-xs text-navy-600 dark:text-navy-400">
-          Check that Anonymous sign-ins are enabled in Supabase Authentication providers, and that the
-          database migration has been applied.
-        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded-xl bg-navy-900 px-4 py-2 text-sm font-medium text-white dark:bg-navy-100 dark:text-navy-950"
+        >
+          Refresh page
+        </button>
       </div>
     );
   }
@@ -414,6 +551,19 @@ export function MatchLobby() {
                 ))}
               </div>
             </section>
+
+            {matchingPaused ? (
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleStartMatching}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-navy-900 px-8 py-4 text-base font-semibold text-white shadow-lg dark:bg-navy-100 dark:text-navy-950"
+              >
+                <Play className="h-5 w-5" aria-hidden />
+                Start matching
+              </motion.button>
+            ) : null}
           </div>
         )}
       </motion.div>

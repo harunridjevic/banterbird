@@ -4,9 +4,15 @@ import type {
   TypoRate,
   WritingStyle,
 } from "@/lib/ai-practice-bot/persona";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-export const BOT_SETTINGS_STORAGE_KEY = "banterbird:bot-settings";
 export const BOT_SETTINGS_CHANGED_EVENT = "banterbird:bot-settings-changed";
+
+const BOT_SETTINGS_DB_KEY = "bot_settings";
+const BOT_SETTINGS_CACHE_MS = 5_000;
+
+let cachedBotSettings: BotSettings | null = null;
+let cachedBotSettingsAt = 0;
 
 /** How match page handles human vs bot matching. */
 export type MatchMode = "user_choice" | "hidden_bots" | "humans_only";
@@ -107,11 +113,11 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   sessionHintAt: 5,
 
   llmTemperature: 1.08,
-  maxOutputTokens: 320,
-  maxOutputTokensSexual: 512,
+  maxOutputTokens: 160,
+  maxOutputTokensSexual: 256,
   /** Max chat turns sent to the LLM per request. */
-  llmHistoryTurns: 16,
-  maxOutputTokensOpener: 256,
+  llmHistoryTurns: 8,
+  maxOutputTokensOpener: 96,
 
   displayOnlineCountOverride: false,
   displayOnlineCountMin: 42,
@@ -234,23 +240,50 @@ export function anonymousMatchGenders(): { self: "male" | "female"; wants: "any"
   };
 }
 
-export function loadBotSettings(): BotSettings {
-  if (typeof window === "undefined") return DEFAULT_BOT_SETTINGS;
+export function invalidateBotSettingsCache() {
+  cachedBotSettings = null;
+  cachedBotSettingsAt = 0;
+}
+
+export async function loadBotSettingsFromDb(): Promise<BotSettings> {
+  const now = Date.now();
+  if (cachedBotSettings && now - cachedBotSettingsAt < BOT_SETTINGS_CACHE_MS) {
+    return cachedBotSettings;
+  }
+
   try {
-    const raw = localStorage.getItem(BOT_SETTINGS_STORAGE_KEY);
-    if (!raw) return DEFAULT_BOT_SETTINGS;
-    return mergeWithDefaults(JSON.parse(raw) as Partial<BotSettings>);
+    const admin = createServiceRoleClient();
+    const { data, error } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", BOT_SETTINGS_DB_KEY)
+      .maybeSingle();
+
+    if (error || !data?.value) {
+      cachedBotSettings = DEFAULT_BOT_SETTINGS;
+      cachedBotSettingsAt = now;
+      return cachedBotSettings;
+    }
+
+    cachedBotSettings = mergeWithDefaults(data.value as Partial<BotSettings>);
+    cachedBotSettingsAt = now;
+    return cachedBotSettings;
   } catch {
     return DEFAULT_BOT_SETTINGS;
   }
 }
 
-export function saveBotSettings(settings: BotSettings) {
+export async function saveBotSettingsToDb(settings: BotSettings): Promise<BotSettings> {
   const normalized = mergeWithDefaults(settings);
-  if (typeof window !== "undefined") {
-    localStorage.setItem(BOT_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
-    window.dispatchEvent(new CustomEvent(BOT_SETTINGS_CHANGED_EVENT));
-  }
+  const admin = createServiceRoleClient();
+  const now = new Date().toISOString();
+
+  await admin.from("app_settings").upsert([
+    { key: BOT_SETTINGS_DB_KEY, value: normalized, updated_at: now },
+  ]);
+
+  cachedBotSettings = normalized;
+  cachedBotSettingsAt = Date.now();
   return normalized;
 }
 

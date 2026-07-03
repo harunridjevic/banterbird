@@ -11,11 +11,15 @@ import {
 import { ThemeProvider } from "next-themes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
+import { ensureAnonymousSession } from "@/lib/auth/ensure-anonymous-session";
 import { OnlinePresenceProvider } from "@/components/presence/OnlinePresenceProvider";
+import { ClientErrorReporter } from "@/components/monitoring/ClientErrorReporter";
+import { BotSettingsProvider } from "@/lib/ops/bot-settings-provider";
 
 type SupabaseCtx = {
   client: SupabaseClient;
   ready: boolean;
+  authError: string | null;
 };
 
 const SupabaseContext = createContext<SupabaseCtx | null>(null);
@@ -23,21 +27,22 @@ const SupabaseContext = createContext<SupabaseCtx | null>(null);
 export function AppProviders({ children }: { children: ReactNode }) {
   const client = useMemo(() => createClient(), []);
   const [ready, setReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const {
-        data: { session },
-      } = await client.auth.getSession();
-      if (!session) {
-        const { error } = await client.auth.signInAnonymously();
-        if (error) {
-          console.error("Anonymous sign-in failed:", error.message);
-        }
+    void (async () => {
+      const result = await ensureAnonymousSession(client);
+      if (cancelled) return;
+      if (!result.ok) {
+        setAuthError(result.error);
+        console.error("Anonymous sign-in failed:", result.error);
+      } else {
+        setAuthError(null);
       }
-      if (!cancelled) setReady(true);
+      setReady(true);
     })();
+
     return () => {
       cancelled = true;
     };
@@ -45,8 +50,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <SupabaseContext.Provider value={{ client, ready }}>
-        <OnlinePresenceProvider>{children}</OnlinePresenceProvider>
+      <SupabaseContext.Provider value={{ client, ready, authError }}>
+        <BotSettingsProvider>
+          <OnlinePresenceProvider>
+            <ClientErrorReporter />
+            {children}
+          </OnlinePresenceProvider>
+        </BotSettingsProvider>
       </SupabaseContext.Provider>
     </ThemeProvider>
   );
