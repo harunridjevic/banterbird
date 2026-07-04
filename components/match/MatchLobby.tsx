@@ -52,6 +52,7 @@ export function MatchLobby() {
   const globalBotSettings = useGlobalBotSettings();
   const [matchMode, setMatchMode] = useState<MatchMode>(globalBotSettings.matchMode);
   const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [accessBlocked, setAccessBlocked] = useState(false);
   const matchingPaused = isMatchingPausedForInactivity();
   const matchGendersRef = useRef<{ self: SelfGender; wants: WantsGender } | null>(null);
@@ -94,6 +95,7 @@ export function MatchLobby() {
     const refresh = () => {
       setMatchMode(globalBotSettings.matchMode);
       setHideGenderFilters(globalBotSettings.hideGenderFilters);
+      setSettingsLoaded(true);
     };
     refresh();
     window.addEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
@@ -360,7 +362,7 @@ export function MatchLobby() {
     };
   }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings]);
 
-  if (!ready) {
+  if (!ready || !settingsLoaded) {
     return <PageLoader label="Preparing your session…" />;
   }
 

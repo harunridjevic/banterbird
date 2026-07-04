@@ -72,6 +72,20 @@ export async function POST(req: Request) {
       }
     }
 
+    // Check for blocked words
+    if (settings.blockedWords.enabled && settings.blockedWords.words.length > 0) {
+      const contentLower = content.toLowerCase();
+      const hasBlockedWord = settings.blockedWords.words.some((word) =>
+        contentLower.includes(word.toLowerCase())
+      );
+      if (hasBlockedWord) {
+        return NextResponse.json(
+          { error: "Your message contains blocked content." },
+          { status: 400 }
+        );
+      }
+    }
+
     const { data: room } = await supabase
       .from("rooms")
       .select("id,user_a,user_b,ended_at,is_ai_room")

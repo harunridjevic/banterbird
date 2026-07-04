@@ -3,6 +3,7 @@ import { LegalPageShell } from "@/components/legal/LegalPageShell";
 
 export const metadata: Metadata = {
   title: "Cookie Policy",
+  description: "Understand how BanterBird uses cookies and local storage for authentication, preferences, and essential service functionality. No third-party advertising trackers.",
 };
 
 export default function CookiesPage() {

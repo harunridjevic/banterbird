@@ -80,6 +80,7 @@ export default function OpsBotSettingsPage() {
         ...partial,
         rateLimiting: { ...appSettings.rateLimiting, ...partial.rateLimiting },
         ageGate: { ...appSettings.ageGate, ...partial.ageGate },
+        blockedWords: { ...appSettings.blockedWords, ...partial.blockedWords },
       };
       setAppSettings(next);
       setAppSettingsSaving(true);
@@ -284,6 +285,49 @@ export default function OpsBotSettingsPage() {
                         })
                       }
                     />
+                  </div>
+                ) : null}
+              </Section>
+
+              <Section title="Blocked words">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.blockedWords.enabled}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        blockedWords: { ...appSettings.blockedWords, enabled: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Enable blocked words filter</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      Messages containing blocked words will not be sent. Add words below (comma-separated).
+                    </span>
+                  </span>
+                </label>
+                {appSettings.blockedWords.enabled ? (
+                  <div className="mt-4">
+                    <label className="block">
+                      <span className="text-sm font-medium text-navy-200">Blocked words</span>
+                      <textarea
+                        value={appSettings.blockedWords.words.join(", ")}
+                        onChange={(e) => {
+                          const words = e.target.value
+                            .split(",")
+                            .map((w) => w.trim().toLowerCase())
+                            .filter((w) => w.length > 0);
+                          void patchAppSettings({ blockedWords: { ...appSettings.blockedWords, words } });
+                        }}
+                        placeholder="word1, word2, word3"
+                        className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none ring-violet-500/40 focus:ring-2 min-h-[100px]"
+                      />
+                      <p className="mt-1 text-xs text-navy-400">
+                        {appSettings.blockedWords.words.length} word(s) blocked
+                      </p>
+                    </label>
                   </div>
                 ) : null}
               </Section>

@@ -4,6 +4,7 @@ import { LegalPageShell } from "@/components/legal/LegalPageShell";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
+  description: "Learn how BanterBird protects your privacy. We collect minimal data and prioritize anonymous, secure chat experiences.",
 };
 
 export default function PrivacyPage() {
