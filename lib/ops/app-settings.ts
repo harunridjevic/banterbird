@@ -13,9 +13,15 @@ export type AgeGateSettings = {
   minimumAge: number;
 };
 
+export type BlockedWordsSettings = {
+  enabled: boolean;
+  words: string[];
+};
+
 export type AppSettings = {
   rateLimiting: RateLimitSettings;
   ageGate: AgeGateSettings;
+  blockedWords: BlockedWordsSettings;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -29,6 +35,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   ageGate: {
     enabled: true,
     minimumAge: 18,
+  },
+  blockedWords: {
+    enabled: false,
+    words: [],
   },
 };
 
@@ -55,13 +65,23 @@ export function normalizeAgeGateSettings(raw: Partial<AgeGateSettings>): AgeGate
   };
 }
 
+export function normalizeBlockedWordsSettings(raw: Partial<BlockedWordsSettings>): BlockedWordsSettings {
+  const d = DEFAULT_APP_SETTINGS.blockedWords;
+  return {
+    enabled: raw.enabled ?? d.enabled,
+    words: Array.isArray(raw.words) ? raw.words : d.words,
+  };
+}
+
 export function normalizeAppSettings(partial: {
   rateLimiting?: Partial<RateLimitSettings>;
   ageGate?: Partial<AgeGateSettings>;
+  blockedWords?: Partial<BlockedWordsSettings>;
 }): AppSettings {
   return {
     rateLimiting: normalizeRateLimitSettings(partial.rateLimiting ?? {}),
     ageGate: normalizeAgeGateSettings(partial.ageGate ?? {}),
+    blockedWords: normalizeBlockedWordsSettings(partial.blockedWords ?? {}),
   };
 }
 
@@ -75,6 +95,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
     return normalizeAppSettings({
       rateLimiting: (map.rate_limiting ?? {}) as Partial<RateLimitSettings>,
       ageGate: (map.age_gate ?? {}) as Partial<AgeGateSettings>,
+      blockedWords: (map.blocked_words ?? {}) as Partial<BlockedWordsSettings>,
     });
   } catch {
     return DEFAULT_APP_SETTINGS;
@@ -89,6 +110,7 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
   await admin.from("app_settings").upsert([
     { key: "rate_limiting", value: normalized.rateLimiting, updated_at: now },
     { key: "age_gate", value: normalized.ageGate, updated_at: now },
+    { key: "blocked_words", value: normalized.blockedWords, updated_at: now },
   ]);
 
   return normalized;

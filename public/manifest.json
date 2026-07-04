@@ -1,0 +1,26 @@
+{
+  "name": "BanterBird - Anonymous Chat",
+  "short_name": "BanterBird",
+  "description": "Fast, anonymous chat platform. Meet strangers instantly without registration.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c121c",
+  "theme_color": "#0c121c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["social", "communication"],
+  "screenshots": []
+}
