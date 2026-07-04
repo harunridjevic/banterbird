@@ -14,12 +14,14 @@ import {
   type BotSettings,
 } from "@/lib/ops/bot-settings";
 
-const BotSettingsContext = createContext<BotSettings>(DEFAULT_BOT_SETTINGS);
+const BotSettingsContext = createContext<BotSettings | null>(null);
+const BotSettingsLoadedContext = createContext<boolean>(false);
 
 const REFRESH_MS = 30_000;
 
 export function BotSettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<BotSettings>(DEFAULT_BOT_SETTINGS);
+  const [settings, setSettings] = useState<BotSettings | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +34,7 @@ export function BotSettingsProvider({ children }: { children: ReactNode }) {
         const parsed = parseBotSettings(data.botSettings);
         if (!cancelled && parsed) {
           setSettings(parsed);
+          setLoaded(true);
           window.dispatchEvent(new CustomEvent(BOT_SETTINGS_CHANGED_EVENT));
         }
       } catch {
@@ -51,9 +54,18 @@ export function BotSettingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <BotSettingsContext.Provider value={settings}>{children}</BotSettingsContext.Provider>;
+  return (
+    <BotSettingsLoadedContext.Provider value={loaded}>
+      <BotSettingsContext.Provider value={settings}>{children}</BotSettingsContext.Provider>
+    </BotSettingsLoadedContext.Provider>
+  );
 }
 
 export function useGlobalBotSettings(): BotSettings {
-  return useContext(BotSettingsContext);
+  const settings = useContext(BotSettingsContext);
+  return settings ?? DEFAULT_BOT_SETTINGS;
+}
+
+export function useGlobalBotSettingsLoaded(): boolean {
+  return useContext(BotSettingsLoadedContext);
 }
