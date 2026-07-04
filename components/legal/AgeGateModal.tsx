@@ -63,7 +63,7 @@ export function useAgeGate() {
   useEffect(() => {
     void (async () => {
       try {
-        if (sessionStorage.getItem(AGE_CONFIRMED_KEY) === "1") {
+        if (localStorage.getItem(AGE_CONFIRMED_KEY) === "1") {
           setChecked(true);
           return;
         }
@@ -86,7 +86,7 @@ export function useAgeGate() {
   }, []);
 
   const confirm = () => {
-    sessionStorage.setItem(AGE_CONFIRMED_KEY, "1");
+    localStorage.setItem(AGE_CONFIRMED_KEY, "1");
     setRequired(false);
   };
 

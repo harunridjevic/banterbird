@@ -12,7 +12,7 @@ import {
   BOT_SETTINGS_CHANGED_EVENT,
   type MatchMode,
 } from "@/lib/ops/bot-settings";
-import { useGlobalBotSettings } from "@/lib/ops/bot-settings-provider";
+import { useGlobalBotSettings, useGlobalBotSettingsLoaded } from "@/lib/ops/bot-settings-provider";
 import {
   canStartMatching,
   computeEffectiveIncludeAi,
@@ -50,29 +50,29 @@ export function MatchLobby() {
   const [rpcError, setRpcError] = useState<string | null>(null);
   const [includeAiMatch, setIncludeAiMatch] = useState(true);
   const globalBotSettings = useGlobalBotSettings();
-  const [matchMode, setMatchMode] = useState<MatchMode>(globalBotSettings.matchMode);
-  const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const globalSettingsLoaded = useGlobalBotSettingsLoaded();
+  const [matchMode, setMatchMode] = useState<MatchMode | null>(null);
+  const [hideGenderFilters, setHideGenderFilters] = useState<boolean | null>(null);
   const [accessBlocked, setAccessBlocked] = useState(false);
   const matchingPaused = isMatchingPausedForInactivity();
   const matchGendersRef = useRef<{ self: SelfGender; wants: WantsGender } | null>(null);
   const navigatedRef = useRef(false);
   const cancelledRef = useRef(false);
-  const showMatchModePicker = matchMode === "user_choice";
-  const effectiveIncludeAi = computeEffectiveIncludeAi(matchMode, includeAiMatch);
+  const showMatchModePicker = globalSettingsLoaded && matchMode === "user_choice";
+  const effectiveIncludeAi = globalSettingsLoaded && matchMode ? computeEffectiveIncludeAi(matchMode, includeAiMatch) : false;
   const { activeSelfGender, activeWantsGender } = resolveActiveGenders(
-    hideGenderFilters,
+    hideGenderFilters ?? false,
     selfGender,
     wantsGender,
     matchGendersRef.current,
   );
   const canMatch = canStartMatching(
-    hideGenderFilters,
+    hideGenderFilters ?? false,
     matchRequested,
     activeSelfGender,
     activeWantsGender,
   );
-  const shouldMatch = canMatch && !matchingPaused;
+  const shouldMatch = globalSettingsLoaded && canMatch && !matchingPaused;
 
   useEffect(() => {
     if (!matchingPaused) return;
@@ -85,22 +85,23 @@ export function MatchLobby() {
   }, [matchingPaused, ready, client]);
 
   useEffect(() => {
-    if (hideGenderFilters || matchingPaused) return;
+    if (!globalSettingsLoaded || hideGenderFilters || matchingPaused) return;
     if (selfGender && wantsGender) {
       setMatchRequested(true);
     }
-  }, [hideGenderFilters, matchingPaused, selfGender, wantsGender]);
+  }, [globalSettingsLoaded, hideGenderFilters, matchingPaused, selfGender, wantsGender]);
 
   useEffect(() => {
     const refresh = () => {
-      setMatchMode(globalBotSettings.matchMode);
-      setHideGenderFilters(globalBotSettings.hideGenderFilters);
-      setSettingsLoaded(true);
+      if (globalSettingsLoaded) {
+        setMatchMode(globalBotSettings.matchMode);
+        setHideGenderFilters(globalBotSettings.hideGenderFilters);
+      }
     };
     refresh();
     window.addEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(BOT_SETTINGS_CHANGED_EVENT, refresh);
-  }, [globalBotSettings.matchMode, globalBotSettings.hideGenderFilters]);
+  }, [globalBotSettings, globalSettingsLoaded]);
 
   useEffect(() => {
     if (!isMatching) {
@@ -362,7 +363,7 @@ export function MatchLobby() {
     };
   }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings]);
 
-  if (!ready || !settingsLoaded) {
+  if (!ready || !globalSettingsLoaded) {
     return <PageLoader label="Preparing your session…" />;
   }
 

@@ -3,8 +3,8 @@ import { MatchLobby } from "@/components/match/MatchLobby";
 import { AgeGateWrapper } from "@/components/legal/AgeGateWrapper";
 
 export const metadata: Metadata = {
-  title: "Find Your Match - Anonymous Chat",
-  description: "Start matching with random strangers instantly. No registration required. Choose your preferences and begin chatting in seconds.",
+  title: "Start Anonymous Chat - BanterBird",
+  description: "Start chatting with random strangers instantly. No registration required. Choose your preferences and begin anonymous chatting in seconds.",
 };
 
 export default function MatchPage() {

@@ -52,12 +52,13 @@ export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Prop
   const submit = async () => {
     const t = value.trim();
     if (!t || sending || disabled) return;
+    const messageToSend = t;
+    setValue("");
     setSending(true);
     clearTypingTimer();
     onTypingChange(false);
     try {
-      await onSend(t);
-      setValue("");
+      await onSend(messageToSend);
     } finally {
       setSending(false);
     }
