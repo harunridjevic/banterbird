@@ -10,8 +10,9 @@ import {
   armGhostSchedule,
   createGhostSchedule,
   disarmGhostSchedule,
+  extendGhostPingDeadline,
   pauseGhostSchedule,
-  resumeGhostSchedule,
+  refreshGhostAfterForeground,
   isBotMessage,
   type GhostScheduleContext,
 } from "@/components/chat/ghost-watch";
@@ -54,7 +55,7 @@ export function ChatRoom({ roomId }: Props) {
   const [peerGender, setPeerGender] = useState<SelfGender | null>(null);
   const [peerPresence, setPeerPresence] = useState<"unknown" | "online" | "offline">("unknown");
   const [exiting, setExiting] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const typingChannelRef = useRef<ReturnType<typeof client.channel> | null>(null);
   const selfIdRef = useRef<string | null>(null);
   const typingHide = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,7 +80,6 @@ export function ChatRoom({ roomId }: Props) {
   const skipEndingRef = useRef(false);
   const abortBotTurnRef = useRef(false);
   const resumeReplyAfterBackgroundRef = useRef(false);
-  const hiddenAtRef = useRef<number | null>(null);
   const flushReplyQueueRef = useRef<() => void>(() => {});
   const ghostCtxRef = useRef<(botMessageId?: string | null) => GhostScheduleContext>(() => ({
     schedule: ghostSchedule.current,
@@ -97,6 +97,7 @@ export function ChatRoom({ roomId }: Props) {
   const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
   const [showReport, setShowReport] = useState(false);
   const keyboardInset = useKeyboardInset();
+  const peerTypingRef = useRef(false);
 
   const cancelOpener = useCallback(() => {
     if (openerTimerRef.current !== null) {
@@ -165,24 +166,27 @@ export function ChatRoom({ roomId }: Props) {
   }, [roomId]);
 
   const scrollToBottom = useCallback((instant = false) => {
-    bottomRef.current?.scrollIntoView({
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTo({
+      top: el.scrollHeight,
       behavior: instant ? "auto" : "smooth",
-      block: "end",
     });
   }, []);
 
   const shouldAbortBotTurn = useCallback(() => abortBotTurnRef.current, []);
 
   useEffect(() => {
-    if (keyboardInset > 0) return;
-    scrollToBottom();
-  }, [messages.length, peerTyping, keyboardInset, scrollToBottom]);
+    peerTypingRef.current = peerTyping;
+  }, [peerTyping]);
 
   useEffect(() => {
-    if (keyboardInset > 0) {
-      scrollToBottom(true);
-    }
+    scrollToBottom(true);
   }, [keyboardInset, scrollToBottom]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, peerTyping, scrollToBottom]);
 
   const load = useCallback(async () => {
     if (!ready) return;
@@ -367,7 +371,6 @@ export function ChatRoom({ roomId }: Props) {
     const onBeforeUnload = () => endRoomBeacon();
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        hiddenAtRef.current = Date.now();
         abortBotTurnRef.current = true;
         cancelOpener();
         pauseGhostSchedule(ghostSchedule.current);
@@ -378,19 +381,12 @@ export function ChatRoom({ roomId }: Props) {
       }
 
       abortBotTurnRef.current = false;
-      const hiddenMs =
-        hiddenAtRef.current !== null ? Date.now() - hiddenAtRef.current : 0;
-      hiddenAtRef.current = null;
 
-      if (isAiRoomRef.current && ghostSchedule.current.armed) {
-        if (hiddenMs > 45_000) {
-          disarmGhostSchedule(ghostSchedule.current);
-        } else {
-          resumeGhostSchedule({
-            ...ghostCtxRef.current(ghostSchedule.current.armedForBotMessageId),
-            selfId: selfIdRef.current ?? "",
-          });
-        }
+      if (isAiRoomRef.current && ghostSchedule.current.armed && selfIdRef.current) {
+        refreshGhostAfterForeground({
+          ...ghostCtxRef.current(ghostSchedule.current.armedForBotMessageId),
+          selfId: selfIdRef.current,
+        });
       }
 
       if (!resumeReplyAfterBackgroundRef.current) return;
@@ -610,10 +606,17 @@ export function ChatRoom({ roomId }: Props) {
     (botMessageId?: string | null) => {
       const self = selfIdRef.current;
       if (!self || !isAiRoomRef.current || exitInFlightRef.current || skipEndingRef.current) return;
+      if (aiBusyRef.current || flushLockRef.current || peerTypingRef.current) return;
+
+      const msgs = messagesRef.current;
+      const last = msgs[msgs.length - 1];
+      if (!last || !isBotMessage(last)) return;
+      if (last.id.startsWith("temp-")) return;
 
       armGhostSchedule({
-        ...ghostCtx(botMessageId),
+        ...ghostCtx(botMessageId ?? last.id),
         selfId: self,
+        botMessageId: botMessageId ?? last.id,
       });
     },
     [ghostCtx],
@@ -776,11 +779,12 @@ export function ChatRoom({ roomId }: Props) {
   // Re-arm ghost when bot message lands (covers missed arms + page reload mid-wait).
   useEffect(() => {
     if (!ready || !isAiRoom || loading || !selfId || exitInFlightRef.current || skipEndingRef.current) return;
-    if (aiBusyRef.current || flushLockRef.current) return;
+    if (aiBusyRef.current || flushLockRef.current || peerTyping) return;
     if (ghostSchedule.current.armed || ghostSchedule.current.pingSentAt !== null) return;
+    if (document.visibilityState === "hidden") return;
 
     const last = messages[messages.length - 1];
-    if (!last || !isBotMessage(last)) return;
+    if (!last || !isBotMessage(last) || last.id.startsWith("temp-")) return;
 
     const lastIdx = messages.findIndex((m) => m.id === last.id);
     const userReplied = messages
@@ -789,7 +793,17 @@ export function ChatRoom({ roomId }: Props) {
     if (userReplied) return;
 
     armGhostAfterBot(last.id);
-  }, [messages, ready, isAiRoom, loading, selfId, armGhostAfterBot]);
+  }, [messages, ready, isAiRoom, loading, selfId, peerTyping, armGhostAfterBot]);
+
+  const handleComposerTyping = useCallback(
+    (active: boolean) => {
+      sendTypingBroadcast(active);
+      if (active) scrollToBottom(true);
+      if (!isAiRoomRef.current || !active) return;
+      extendGhostPingDeadline(ghostCtxRef.current(ghostSchedule.current.armedForBotMessageId));
+    },
+    [sendTypingBroadcast, scrollToBottom],
+  );
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading || !selfId) return;
@@ -1008,7 +1022,7 @@ export function ChatRoom({ roomId }: Props) {
         />
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {messages.length === 0 && !peerTyping ? (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
             {loading ? <PageLoader label="Opening your chat..." /> : <motion.div
@@ -1031,13 +1045,12 @@ export function ChatRoom({ roomId }: Props) {
             peerLabel="Stranger"
           />
         )}
-        <div ref={bottomRef} />
       </div>
 
       <div className="shrink-0 border-t border-navy-200/50 bg-[var(--page-bg)]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10">
         <ChatComposer
           onSend={sendMessage}
-          onTypingChange={sendTypingBroadcast}
+          onTypingChange={handleComposerTyping}
           onFocus={() => scrollToBottom(true)}
         />
       </div>

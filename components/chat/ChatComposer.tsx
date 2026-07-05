@@ -9,9 +9,10 @@ type Props = {
   onSend: (text: string) => Promise<void>;
   onTypingChange: (typing: boolean) => void;
   onFocus?: () => void;
+  onBlur?: () => void;
 };
 
-export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Props) {
+export function ChatComposer({ disabled, onSend, onTypingChange, onFocus, onBlur }: Props) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -61,9 +62,6 @@ export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Prop
 
     void onSend(messageToSend).finally(() => {
       setSending(false);
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus({ preventScroll: true });
-      });
     });
   };
 
@@ -79,9 +77,8 @@ export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Prop
           className="max-h-32 min-h-[44px] flex-1 resize-none rounded-2xl border border-navy-200/80 bg-white/80 px-4 py-3 text-[16px] text-navy-950 outline-none ring-navy-900/10 placeholder:text-navy-400 focus:ring-2 dark:border-white/10 dark:bg-navy-950/60 dark:text-navy-50 dark:placeholder:text-navy-500"
           value={value}
           onChange={(e) => handleChange(e.target.value)}
-          onFocus={() => {
-            onFocus?.();
-          }}
+          onFocus={() => onFocus?.()}
+          onBlur={() => onBlur?.()}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

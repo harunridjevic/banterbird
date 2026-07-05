@@ -157,8 +157,8 @@ export function personaTiming(persona: BotPersona, settings?: BotSettings | null
     readScale: persona.replySpeed,
     typingScale: persona.replySpeed,
     burstGapMs,
-    idlePingMs: settings?.ghostPingMs ?? 10_000,
-    idleSkipMs: settings?.ghostSkipMs ?? 6_000,
+    idlePingMs: settings?.ghostPingMs ?? 45_000,
+    idleSkipMs: settings?.ghostSkipMs ?? 20_000,
   };
 }
 

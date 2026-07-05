@@ -96,8 +96,8 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   replySpeed: 1,
   replySpeedMode: "random",
 
-  ghostPingMs: 10_000,
-  ghostSkipMs: 6_000,
+  ghostPingMs: 45_000,
+  ghostSkipMs: 20_000,
   openerDelayMode: "fixed",
   openerDelayMs: 5000,
   openerDelayMinMs: 3000,
@@ -116,7 +116,7 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   maxOutputTokens: 160,
   maxOutputTokensSexual: 256,
   /** Max chat turns sent to the LLM per request. */
-  llmHistoryTurns: 20,
+  llmHistoryTurns: 50,
   maxOutputTokensOpener: 96,
 
   displayOnlineCountOverride: false,
@@ -203,7 +203,7 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     llmTemperature: clamp(merged.llmTemperature, 0, 2),
     maxOutputTokens: clamp(Math.round(merged.maxOutputTokens), 64, 4096),
     maxOutputTokensSexual: clamp(Math.round(merged.maxOutputTokensSexual), 64, 4096),
-    llmHistoryTurns: clamp(Math.round(merged.llmHistoryTurns), 4, 40),
+    llmHistoryTurns: clamp(Math.round(merged.llmHistoryTurns), 4, 80),
     maxOutputTokensOpener: clamp(Math.round(merged.maxOutputTokensOpener), 32, 512),
     displayOnlineCountOverride: Boolean(merged.displayOnlineCountOverride),
     displayOnlineCountMin: clamp(Math.round(merged.displayOnlineCountMin), 0, 99_999),

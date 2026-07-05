@@ -361,7 +361,7 @@ export function goodbyeContextOverlay(): string {
 
 export function triggerOverlay(trigger: AiReplyTrigger, settings?: BotSettings | null): string {
   if (trigger === "idle_ping") {
-    const secs = Math.round((settings?.ghostPingMs ?? 10_000) / 1000);
+    const secs = Math.round((settings?.ghostPingMs ?? 45_000) / 1000);
     return `They have not replied in ~${secs} seconds. Send ONE short nudge (reply): "hello??" or similar.`;
   }
   if (trigger === "idle_skip") {

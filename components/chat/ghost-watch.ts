@@ -2,8 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { pickGhostPing, pickGhostSkipParting } from "@/lib/ai-practice-bot/memory";
 import { runHumanlikeTyping, typingDurationForReply } from "@/components/chat/typing";
 
-export const GHOST_PING_MS = 10_000;
-export const GHOST_SKIP_MS = 6_000;
+export const GHOST_PING_MS = 45_000;
+export const GHOST_SKIP_MS = 20_000;
 
 export type GhostMessage = {
   id: string;
@@ -23,9 +23,10 @@ export type GhostSchedule = {
   armed: boolean;
   armedForBotMessageId: string | null;
   pingSentAt: number | null;
-  /** Wall-clock ms when the ping should fire (survives background tab throttle). */
   pingDeadline: number | null;
   skipDeadline: number | null;
+  /** Bumped to invalidate in-flight timer callbacks. */
+  timerEpoch: number;
 };
 
 export function createGhostSchedule(): GhostSchedule {
@@ -38,14 +39,24 @@ export function createGhostSchedule(): GhostSchedule {
     pingSentAt: null,
     pingDeadline: null,
     skipDeadline: null,
+    timerEpoch: 0,
   };
 }
 
+function clearGhostTimers(schedule: GhostSchedule) {
+  schedule.timerEpoch += 1;
+  if (schedule.pingTimer !== null) {
+    window.clearTimeout(schedule.pingTimer);
+    schedule.pingTimer = null;
+  }
+  if (schedule.skipTimer !== null) {
+    window.clearTimeout(schedule.skipTimer);
+    schedule.skipTimer = null;
+  }
+}
+
 export function disarmGhostSchedule(schedule: GhostSchedule) {
-  if (schedule.pingTimer) clearTimeout(schedule.pingTimer);
-  if (schedule.skipTimer) clearTimeout(schedule.skipTimer);
-  schedule.pingTimer = null;
-  schedule.skipTimer = null;
+  clearGhostTimers(schedule);
   schedule.armed = false;
   schedule.armedForBotMessageId = null;
   schedule.pingSentAt = null;
@@ -53,16 +64,29 @@ export function disarmGhostSchedule(schedule: GhostSchedule) {
   schedule.skipDeadline = null;
 }
 
-/** Clear timers but keep armed state and deadlines (tab backgrounded). */
+/** Clear timers but keep armed state (tab backgrounded). */
 export function pauseGhostSchedule(schedule: GhostSchedule) {
-  if (schedule.pingTimer) clearTimeout(schedule.pingTimer);
-  if (schedule.skipTimer) clearTimeout(schedule.skipTimer);
-  schedule.pingTimer = null;
-  schedule.skipTimer = null;
+  clearGhostTimers(schedule);
 }
 
 function countUserMessages(messages: GhostMessage[], selfId: string): number {
+  if (!selfId) return 0;
   return messages.filter((m) => !isBotMessage(m) && m.user_id === selfId).length;
+}
+
+function userRepliedSinceArm(ctx: GhostScheduleContext): boolean {
+  const msgs = ctx.getMessages();
+  const selfId = ctx.selfId;
+  if (!selfId) return true;
+
+  const botId = ctx.schedule.armedForBotMessageId;
+  if (botId) {
+    const botIdx = msgs.findIndex((m) => m.id === botId);
+    if (botIdx < 0) return true;
+    return msgs.slice(botIdx + 1).some((m) => !isBotMessage(m) && m.user_id === selfId);
+  }
+
+  return countUserMessages(msgs, selfId) > ctx.schedule.userMessageCountAtArm;
 }
 
 async function deliverGhostLine(
@@ -94,43 +118,107 @@ export type GhostScheduleContext = {
   ghostSkipMs?: number;
 };
 
-/** Schedule fn at a wall-clock deadline; pauses while the tab is hidden. */
-function scheduleAtDeadline(
-  deadlineMs: number,
-  isActive: () => boolean,
+function scheduleIn(
+  schedule: GhostSchedule,
+  delayMs: number,
   onFire: () => void,
-): number | null {
-  let handle: number | null = null;
-  const tick = () => {
-    if (!isActive()) return;
-    if (document.visibilityState === "hidden") {
-      const onVisible = () => {
-        document.removeEventListener("visibilitychange", onVisible);
-        tick();
-      };
-      document.addEventListener("visibilitychange", onVisible);
+): number {
+  const epoch = schedule.timerEpoch;
+  const delay = Math.max(0, delayMs);
+  return window.setTimeout(() => {
+    if (schedule.timerEpoch !== epoch || !schedule.armed) return;
+    onFire();
+  }, delay);
+}
+
+function scheduleSkipTimer(ctx: GhostScheduleContext) {
+  const s = ctx.schedule;
+  const ghostSkipMs = ctx.ghostSkipMs ?? GHOST_SKIP_MS;
+  const skipDeadline = s.skipDeadline ?? Date.now() + ghostSkipMs;
+  s.skipDeadline = skipDeadline;
+  const delayMs = skipDeadline - Date.now();
+
+  s.skipTimer = scheduleIn(s, delayMs, () => {
+    if (!ctx.isActive() || !s.armed) return;
+    if (userRepliedSinceArm(ctx)) {
+      disarmGhostSchedule(s);
       return;
     }
-    const remaining = deadlineMs - Date.now();
-    if (remaining <= 0) {
-      onFire();
+
+    void (async () => {
+      try {
+        await deliverGhostLine(ctx.client, ctx.roomId, pickGhostSkipParting(), ctx.setPeerTyping);
+        disarmGhostSchedule(s);
+        await ctx.endRoom();
+      } catch (e) {
+        ctx.onError(e instanceof Error ? e.message : "Ghost skip failed");
+      } finally {
+        ctx.setPeerTyping(false);
+      }
+    })();
+  });
+}
+
+function schedulePingTimer(ctx: GhostScheduleContext) {
+  const s = ctx.schedule;
+  const ghostPingMs = ctx.ghostPingMs ?? GHOST_PING_MS;
+  const ghostSkipMs = ctx.ghostSkipMs ?? GHOST_SKIP_MS;
+  const pingDeadline = s.pingDeadline ?? Date.now() + ghostPingMs;
+  s.pingDeadline = pingDeadline;
+  const delayMs = pingDeadline - Date.now();
+
+  const firePing = () => {
+    if (!ctx.isActive() || !s.armed) return;
+    if (userRepliedSinceArm(ctx)) {
+      disarmGhostSchedule(s);
       return;
     }
-    handle = window.setTimeout(tick, Math.min(remaining, 800));
+
+    s.pingSentAt = Date.now();
+    s.pingDeadline = null;
+    s.skipDeadline = Date.now() + ghostSkipMs;
+
+    void (async () => {
+      try {
+        await deliverGhostLine(ctx.client, ctx.roomId, pickGhostPing(), ctx.setPeerTyping);
+      } catch (e) {
+        ctx.onError(e instanceof Error ? e.message : "Ghost ping failed");
+        disarmGhostSchedule(s);
+        return;
+      } finally {
+        ctx.setPeerTyping(false);
+      }
+
+      if (!ctx.isActive() || !s.armed) return;
+      if (userRepliedSinceArm(ctx)) {
+        disarmGhostSchedule(s);
+        return;
+      }
+
+      scheduleSkipTimer(ctx);
+    })();
   };
-  tick();
-  return handle;
+
+  s.pingTimer = scheduleIn(s, delayMs, firePing);
+}
+
+/** Push the idle ping back while the user is still composing. */
+export function extendGhostPingDeadline(ctx: GhostScheduleContext) {
+  const s = ctx.schedule;
+  if (!s.armed || s.pingSentAt !== null || !ctx.selfId) return;
+
+  const ghostPingMs = ctx.ghostPingMs ?? GHOST_PING_MS;
+  pauseGhostSchedule(s);
+  s.pingDeadline = Date.now() + ghostPingMs;
+  schedulePingTimer(ctx);
 }
 
 /**
- * Arm ghost timers when the bot finishes a turn. Fires ping at 10s and skip 6s later
- * unless the user sends a message in the meantime.
+ * Arm ghost timers when the bot finishes a turn. Fires ping after idle time,
+ * then skip parting if still no reply.
  */
 export function armGhostSchedule(ctx: GhostScheduleContext) {
-  if (!ctx.isActive()) return;
-
-  const ghostPingMs = ctx.ghostPingMs ?? GHOST_PING_MS;
-  const ghostSkipMs = ctx.ghostSkipMs ?? GHOST_SKIP_MS;
+  if (!ctx.isActive() || !ctx.selfId) return;
 
   const botId = ctx.botMessageId ?? null;
   if (botId && ctx.schedule.armed && ctx.schedule.armedForBotMessageId === botId) {
@@ -141,115 +229,50 @@ export function armGhostSchedule(ctx: GhostScheduleContext) {
     return;
   }
 
+  const msgs = ctx.getMessages();
+  const last = msgs[msgs.length - 1];
+  if (!last || !isBotMessage(last)) return;
+
   disarmGhostSchedule(ctx.schedule);
   if (!ctx.isActive()) return;
 
-  ctx.schedule.armedForBotMessageId = botId;
-  ctx.schedule.userMessageCountAtArm = countUserMessages(ctx.getMessages(), ctx.selfId);
+  ctx.schedule.armedForBotMessageId = botId ?? last.id;
+  ctx.schedule.userMessageCountAtArm = countUserMessages(msgs, ctx.selfId);
   ctx.schedule.armed = true;
-  ctx.schedule.pingDeadline = Date.now() + ghostPingMs;
+  ctx.schedule.pingDeadline = Date.now() + (ctx.ghostPingMs ?? GHOST_PING_MS);
 
-  const firePing = () => {
-    if (!ctx.isActive() || !ctx.schedule.armed) return;
-    if (countUserMessages(ctx.getMessages(), ctx.selfId) > ctx.schedule.userMessageCountAtArm) {
-      disarmGhostSchedule(ctx.schedule);
-      return;
-    }
-
-    ctx.schedule.pingSentAt = Date.now();
-    ctx.schedule.pingDeadline = null;
-    ctx.schedule.skipDeadline = Date.now() + ghostSkipMs;
-
-    void (async () => {
-      try {
-        await deliverGhostLine(ctx.client, ctx.roomId, pickGhostPing(), ctx.setPeerTyping);
-      } catch (e) {
-        ctx.onError(e instanceof Error ? e.message : "Ghost ping failed");
-        disarmGhostSchedule(ctx.schedule);
-        return;
-      } finally {
-        ctx.setPeerTyping(false);
-      }
-
-      if (!ctx.isActive() || !ctx.schedule.armed) return;
-      if (countUserMessages(ctx.getMessages(), ctx.selfId) > ctx.schedule.userMessageCountAtArm) {
-        disarmGhostSchedule(ctx.schedule);
-        return;
-      }
-
-      const skipDeadline = ctx.schedule.skipDeadline ?? Date.now() + ghostSkipMs;
-      ctx.schedule.skipTimer = scheduleAtDeadline(skipDeadline, ctx.isActive, () => {
-        if (!ctx.isActive() || !ctx.schedule.armed) return;
-        if (countUserMessages(ctx.getMessages(), ctx.selfId) > ctx.schedule.userMessageCountAtArm) {
-          disarmGhostSchedule(ctx.schedule);
-          return;
-        }
-
-        void (async () => {
-          try {
-            await deliverGhostLine(ctx.client, ctx.roomId, pickGhostSkipParting(), ctx.setPeerTyping);
-            disarmGhostSchedule(ctx.schedule);
-            await ctx.endRoom();
-          } catch (e) {
-            ctx.onError(e instanceof Error ? e.message : "Ghost skip failed");
-          } finally {
-            ctx.setPeerTyping(false);
-          }
-        })();
-      });
-    })();
-  };
-
-  const pingDeadline = ctx.schedule.pingDeadline ?? Date.now() + ghostPingMs;
-  ctx.schedule.pingTimer = scheduleAtDeadline(pingDeadline, ctx.isActive, firePing);
+  schedulePingTimer(ctx);
 }
 
-/** Resume ghost wait timers after returning from background (deadline-based). */
-export function resumeGhostSchedule(ctx: GhostScheduleContext) {
-  if (!ctx.isActive() || !ctx.schedule.armed) return;
+/**
+ * After returning from background: never fire overdue pings immediately.
+ * Give a fresh idle window so brief Android app switches don't trigger "hello??".
+ */
+export function refreshGhostAfterForeground(ctx: GhostScheduleContext) {
+  if (!ctx.isActive() || !ctx.schedule.armed || !ctx.selfId) return;
 
-  const userReplied =
-    countUserMessages(ctx.getMessages(), ctx.selfId) > ctx.schedule.userMessageCountAtArm;
-  if (userReplied) {
+  if (userRepliedSinceArm(ctx)) {
     disarmGhostSchedule(ctx.schedule);
     return;
   }
 
-  const now = Date.now();
   const s = ctx.schedule;
-
-  if (s.pingSentAt === null && s.pingDeadline !== null && now >= s.pingDeadline) {
-    pauseGhostSchedule(s);
-    disarmGhostSchedule(s);
-    armGhostSchedule(ctx);
-    return;
-  }
-
-  if (s.pingSentAt !== null && s.skipDeadline !== null && now >= s.skipDeadline) {
-    pauseGhostSchedule(s);
-    disarmGhostSchedule(s);
-    armGhostSchedule({ ...ctx, botMessageId: s.armedForBotMessageId });
-    return;
-  }
+  const ghostPingMs = ctx.ghostPingMs ?? GHOST_PING_MS;
+  const ghostSkipMs = ctx.ghostSkipMs ?? GHOST_SKIP_MS;
 
   pauseGhostSchedule(s);
 
-  if (s.pingSentAt === null && s.pingDeadline !== null) {
-    const firePing = () => {
-      pauseGhostSchedule(s);
-      disarmGhostSchedule(s);
-      armGhostSchedule(ctx);
-    };
-    s.pingTimer = scheduleAtDeadline(s.pingDeadline, ctx.isActive, firePing);
+  if (s.pingSentAt === null) {
+    s.pingDeadline = Date.now() + ghostPingMs;
+    schedulePingTimer(ctx);
     return;
   }
 
-  if (s.pingSentAt !== null && s.skipDeadline !== null) {
-    const fireSkip = () => {
-      pauseGhostSchedule(s);
-      disarmGhostSchedule(s);
-      armGhostSchedule({ ...ctx, botMessageId: s.armedForBotMessageId });
-    };
-    s.skipTimer = scheduleAtDeadline(s.skipDeadline, ctx.isActive, fireSkip);
-  }
+  s.skipDeadline = Date.now() + ghostSkipMs;
+  scheduleSkipTimer(ctx);
+}
+
+/** @deprecated Use refreshGhostAfterForeground */
+export function resumeGhostSchedule(ctx: GhostScheduleContext) {
+  refreshGhostAfterForeground(ctx);
 }

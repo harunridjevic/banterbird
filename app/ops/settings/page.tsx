@@ -698,7 +698,7 @@ export default function OpsBotSettingsPage() {
                 label="History turns sent to LLM"
                 value={botSettings.llmHistoryTurns}
                 min={4}
-                max={40}
+                max={80}
                 onChange={(llmHistoryTurns) => patch({ llmHistoryTurns })}
               />
             </div>
