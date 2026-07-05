@@ -7,7 +7,7 @@ import {
   PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT,
 } from "@/lib/ai-practice-bot/instructions";
 import { shouldUseLocalReply } from "@/lib/ai-practice-bot/llm-routing";
-import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock, midChatStubReply } from "@/lib/ai-practice-bot/memory";
+import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock, isUserLeavingConversation, midChatStubReply } from "@/lib/ai-practice-bot/memory";
 import {
   buildBotPersona,
   formatPersonaPrompt,
@@ -24,6 +24,7 @@ import {
   applySessionPolicy,
   decideFallbackTurn,
   GEMINI_OPENER_USER_TURN,
+  goodbyeContextOverlay,
   jsonBody,
   parseModelTurn,
   sessionContextOverlay,
@@ -429,7 +430,12 @@ export async function POST(req: Request) {
     const memory = buildUserMemory(history);
     const trimmedHistory = history.slice(-historyLimit);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
-    const sessionBlock = sessionContextOverlay(memory, persona, botSettings);
+    const sessionBlock = [
+      sessionContextOverlay(memory, persona, botSettings),
+      isUserLeavingConversation(trimmedHistory) ? goodbyeContextOverlay() : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     const personaBlock = useCompactPrompts()
       ? formatPersonaPromptCompact(persona)
       : formatPersonaPrompt(persona);

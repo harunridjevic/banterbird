@@ -129,11 +129,31 @@ export function isAggressiveConversation(history: ChatTurn[]): boolean {
 }
 
 const LEAVING_RE =
-  /\b(wait.*(gtg|gotta go|go do|do something)|gtg|g2g|gotta go|got to go|have to go|need to go|brb|be right back|i'?m leaving|im leaving|leaving now|something came up|do something|busy now|afk|talk later|ttyl|cya|see ya)\b/i;
+  /\b(wait.*(gtg|gotta go|go do|do something)|gtg|g2g|gotta go|got to go|have to go|need to go|brb|be right back|i'?m leaving|im leaving|leaving now|something came up|do something|busy now|afk|talk later|ttyl|cya|see ya|see you|goodbye|good bye|bye bye|goodnight|good night)\b/i;
 
 export function isUserLeavingConversation(history: ChatTurn[]): boolean {
-  const last = lastUserLines(history).pop() ?? "";
-  return LEAVING_RE.test(last);
+  const last = lastUserLines(history).pop()?.trim() ?? "";
+  if (!last) return false;
+  if (LEAVING_RE.test(last)) return true;
+  const t = last.toLowerCase();
+  if (/^(bye+|byee+|cya|later|gn|night)$/.test(t)) return true;
+  if (t.length <= 24 && /\b(bye|goodbye)\b/.test(t)) return true;
+  return false;
+}
+
+const GOODBYE_STAY_LINES = [
+  "wait why",
+  "aw already?",
+  "stay a bit",
+  "where u going",
+  "noo wait",
+  "why u leaving",
+];
+
+export function pickGoodbyeStayLine(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return GOODBYE_STAY_LINES[h % GOODBYE_STAY_LINES.length] ?? "wait why";
 }
 
 export function isAnnoyingConversation(history: ChatTurn[]): boolean {
@@ -152,7 +172,7 @@ export function countSexualUserTurns(history: ChatTurn[]): number {
 export const SKIP_PARTINGS = [
   "maybe ill catch u here again im on this site alot",
   "gotta go but im often on here lol",
-  "bored ngl imma hop — catch u on here sometime",
+  "bored ngl imma hop, catch u on here sometime",
   "ok im bouncing im on here a lot tho",
   "chat dying lol bye im usually on here",
 ];

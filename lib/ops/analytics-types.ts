@@ -27,10 +27,14 @@ export type AnalyticsSnapshot = {
   avgBotRoomMinutes: number | null;
   onlineUsersNow: number;
   recurringUsers: number;
-  /** Share of new users (first-ever chat started in window) who never rematched or returned another day. */
+  /** Share of new users who finished their first-ever chat in this period and never opened another. */
   bounceRate: number | null;
   bouncedUsers: number;
   firstChatUsers: number;
+  /** New users whose first-ever chat in this period has ended (churn denominator). */
+  firstChatEndedUsers: number;
+  /** New users who finished their first chat and started at least one more room. */
+  firstChatRetainedUsers: number;
   /** Ended human room left in <30s or with no messages (legacy room metric). */
   roomBounceRate: number | null;
   bouncedRooms: number;
@@ -75,9 +79,15 @@ export const METRIC_TOOLTIPS = {
   totalUserSessionMinutes:
     "Combined time all users spent in rooms during the window — sum of every room session.",
   bounceRate:
-    "Share of users whose first-ever chat started in this period, finished it, then never started another chat or visited on a later day (UTC).",
-  bouncedUsers: "Users who left after their first ended chat (no rematch, no return day).",
-  firstChatUsers: "Users whose first-ever chat started and ended in this period.",
+    "Share of new users (first-ever chat started in this period) who finished that chat and never opened another. Not total bot/human room count.",
+  bouncedUsers:
+    "New users who ended their first-ever chat in this period and never started a second room.",
+  firstChatUsers:
+    "Users whose very first chat on BanterBird started in this period (bot or human).",
+  firstChatEndedUsers:
+    "New users whose first-ever chat started in this period and has ended. Churn denominator, not total rooms.",
+  firstChatRetainedUsers:
+    "New users who finished their first chat and then started at least one more room.",
   roomBounceRate:
     "Share of ended human-human rooms where someone left within 30 seconds or no one sent a message.",
   apiTotalCalls: "Total AI reply API calls (Groq/Gemini/OpenAI/local) during the window.",

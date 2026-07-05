@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sanitizeBotChatLine } from "@/lib/ai-practice-bot/sanitize";
 import {
   preTypingHesitation,
   readDelayBeforeReplyMs,
@@ -7,6 +8,7 @@ import {
   typingDurationForReply,
   type TimingScale,
 } from "./typing";
+import { delayMs } from "@/lib/hooks/visibility-delay";
 
 export type BotApiBody = {
   action?: string;
@@ -30,24 +32,11 @@ class BotTurnAbortedError extends Error {
 }
 
 function sleep(ms: number, shouldAbort?: () => boolean) {
-  if (!shouldAbort) {
-    return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-  }
-  return new Promise<void>((resolve, reject) => {
-    const start = Date.now();
-    const tick = () => {
-      if (shouldAbort()) {
-        reject(new BotTurnAbortedError());
-        return;
-      }
-      const remaining = ms - (Date.now() - start);
-      if (remaining <= 0) {
-        resolve();
-        return;
-      }
-      window.setTimeout(tick, Math.min(250, remaining));
-    };
-    window.setTimeout(tick, Math.min(250, ms));
+  return delayMs(ms, shouldAbort).catch((e) => {
+    if (e instanceof Error && e.message === "aborted") {
+      throw new BotTurnAbortedError();
+    }
+    throw e;
   });
 }
 
@@ -66,7 +55,7 @@ async function insertBotLine(
 ) {
   const { error } = await client.rpc("insert_ai_chat_message", {
     p_room_id: roomId,
-    p_content: content,
+    p_content: sanitizeBotChatLine(content),
   });
   return error;
 }
@@ -84,11 +73,12 @@ async function deliverLines(
   for (let i = 0; i < lines.length; i++) {
     if (shouldAbort?.()) throw new BotTurnAbortedError();
     const line = lines[i]!;
-    await preTypingHesitation(scale);
+    await preTypingHesitation(scale, shouldAbort);
     await runHumanlikeTyping(
       setPeerTyping,
       typingDurationForReply(line, scale),
       line.length,
+      shouldAbort,
     );
     const err = await insertBotLine(client, roomId, line);
     if (err) onError(err.message);

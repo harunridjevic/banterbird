@@ -361,13 +361,26 @@ export default function OpsAnalyticsPage() {
                       accent="rose"
                     />
                     <MetricCard
-                      label="Churned after 1st chat"
+                      label="New users (1st chat)"
+                      value={fmtNum(snapshot.firstChatUsers)}
+                      tooltip={METRIC_TOOLTIPS.firstChatUsers}
+                    />
+                    <MetricCard
+                      label="Churned / finished 1st"
                       value={
-                        snapshot.firstChatUsers > 0
-                          ? `${fmtNum(snapshot.bouncedUsers)} / ${fmtNum(snapshot.firstChatUsers)}`
-                          : "-"
+                        snapshot.firstChatEndedUsers > 0
+                          ? `${fmtNum(snapshot.bouncedUsers)} / ${fmtNum(snapshot.firstChatEndedUsers)}`
+                          : snapshot.firstChatUsers > 0
+                            ? `0 / ${fmtNum(snapshot.firstChatUsers)} (in progress)`
+                            : "-"
                       }
                       tooltip={METRIC_TOOLTIPS.bouncedUsers}
+                    />
+                    <MetricCard
+                      label="Rematched after 1st"
+                      value={fmtNum(snapshot.firstChatRetainedUsers ?? 0)}
+                      tooltip={METRIC_TOOLTIPS.firstChatRetainedUsers}
+                      accent="emerald"
                     />
                   </dl>
                 </section>

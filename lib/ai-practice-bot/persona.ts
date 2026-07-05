@@ -210,6 +210,7 @@ Your fixed identity this session (v${persona.version})
 - Match filter says the other person is ${persona.userGender} — they might be lying; react naturally if vibes don't match.
 - ${eslLine}
 - Writing: ${styleLine}. ${msgLine}
+- NEVER use em dashes (—) or en dashes (–) in chat. Use commas or separate messages.
 - Typing vibe: ${persona.replySpeed < 0.85 ? "pretty fast replier" : persona.replySpeed > 1.25 ? "slower, thinks before typing" : "average speed"}.
 - Typos: ${typoLine}. Corrections look like "*you're" or "wait meant you're" — still in messages[].
 

@@ -16,11 +16,13 @@ import {
   pickBoringSkipParting,
   pickGhostPing,
   pickGhostSkipParting,
+  pickGoodbyeStayLine,
   pickLeavingSkipParting,
   pickSkipParting,
   pickStrictSexualSkipParting,
   type UserMemory,
 } from "@/lib/ai-practice-bot/memory";
+import { sanitizeBotChatLine } from "@/lib/ai-practice-bot/sanitize";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -60,8 +62,9 @@ function normalizeLines(raw: unknown, max = 3): string[] {
   for (const item of raw) {
     if (typeof item !== "string") continue;
     const t = item.replace(/\s+/g, " ").trim().slice(0, MAX_CHAT_LINE);
-    if (!isAcceptableChatLine(t)) continue;
-    out.push(t);
+    const clean = sanitizeBotChatLine(t);
+    if (!isAcceptableChatLine(clean)) continue;
+    out.push(clean);
     if (out.length >= max) break;
   }
   return out;
@@ -108,7 +111,7 @@ export function parseModelTurn(
     if (o.action === "skip") {
       const p = o.parting;
       if (typeof p === "string") {
-        const t = p.replace(/\s+/g, " ").trim().slice(0, MAX_CHAT_LINE);
+        const t = sanitizeBotChatLine(p.replace(/\s+/g, " ").trim().slice(0, MAX_CHAT_LINE));
         return withTiming(persona, {
           action: "skip",
           parting: isAcceptableChatLine(t) ? t : null,
@@ -210,10 +213,17 @@ export function decideFallbackTurn(
   const last = users[users.length - 1]?.content ?? "";
 
   if (isUserLeavingConversation(history)) {
+    if (Math.random() < 0.38) {
+      return withTiming(
+        persona,
+        { action: "reply", messages: [pickGoodbyeStayLine(seed)] },
+        settings,
+      );
+    }
     return withTiming(persona, { action: "skip", parting: pickLeavingSkipParting() }, settings);
   }
 
-  if (isAnnoyingConversation(history)) {
+  if (isAggressiveConversation(history) || isAnnoyingConversation(history)) {
     return withTiming(persona, { action: "skip", parting: pickBoringSkipParting(seed) }, settings);
   }
 
@@ -254,7 +264,21 @@ export function applySessionPolicy(
   }
 
   if (isUserLeavingConversation(history)) {
-    return withTiming(persona, { action: "skip", parting: pickLeavingSkipParting() }, settings);
+    if (result.action === "reply") {
+      const combined = result.messages.join(" ").toLowerCase();
+      const stayAttempt = /\b(wait|stay|why|wya|where u|dont go|don't go|one more|hold on|noo|already)\b/.test(
+        combined,
+      );
+      if (!stayAttempt) {
+        const lastLine = result.messages[result.messages.length - 1]?.trim();
+        const parting =
+          lastLine && /\b(bye|cya|later|gn|night|see ya)\b/i.test(lastLine)
+            ? lastLine
+            : pickLeavingSkipParting();
+        return withTiming(persona, { action: "skip", parting }, settings);
+      }
+    }
+    return result;
   }
 
   if (isAggressiveConversation(history) || isAnnoyingConversation(history)) {
@@ -324,6 +348,15 @@ export function sessionContextOverlay(
     );
   }
   return lines.join("\n");
+}
+
+export function goodbyeContextOverlay(): string {
+  return [
+    "They said goodbye or are leaving.",
+    "Pick ONE: reply with ONE short line trying to get them to stay (e.g. wait why, stay a bit),",
+    "OR use skip action with a short bye parting (e.g. aight bye, cya).",
+    "If you say bye you MUST use skip action. Do not lecture them.",
+  ].join(" ");
 }
 
 export function triggerOverlay(trigger: AiReplyTrigger, settings?: BotSettings | null): string {

@@ -10,7 +10,10 @@ import {
   armGhostSchedule,
   createGhostSchedule,
   disarmGhostSchedule,
+  pauseGhostSchedule,
+  resumeGhostSchedule,
   isBotMessage,
+  type GhostScheduleContext,
 } from "@/components/chat/ghost-watch";
 import { shouldClientSkipChat } from "@/lib/ai-practice-bot/client-skip";
 import { buildBotPersona, type BotPersona } from "@/lib/ai-practice-bot/persona";
@@ -76,7 +79,19 @@ export function ChatRoom({ roomId }: Props) {
   const skipEndingRef = useRef(false);
   const abortBotTurnRef = useRef(false);
   const resumeReplyAfterBackgroundRef = useRef(false);
+  const hiddenAtRef = useRef<number | null>(null);
   const flushReplyQueueRef = useRef<() => void>(() => {});
+  const ghostCtxRef = useRef<(botMessageId?: string | null) => GhostScheduleContext>(() => ({
+    schedule: ghostSchedule.current,
+    getMessages: () => messagesRef.current,
+    selfId: "",
+    client,
+    roomId,
+    setPeerTyping,
+    onError: setError,
+    endRoom: async () => {},
+    isActive: () => false,
+  }));
 
   const [hideBotUi, setHideBotUi] = useState(globalBotSettings.matchMode === "hidden_bots");
   const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
@@ -352,9 +367,10 @@ export function ChatRoom({ roomId }: Props) {
     const onBeforeUnload = () => endRoomBeacon();
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
         abortBotTurnRef.current = true;
         cancelOpener();
-        disarmGhostSchedule(ghostSchedule.current);
+        pauseGhostSchedule(ghostSchedule.current);
         if (aiBusyRef.current || flushLockRef.current) {
           resumeReplyAfterBackgroundRef.current = true;
         }
@@ -362,6 +378,21 @@ export function ChatRoom({ roomId }: Props) {
       }
 
       abortBotTurnRef.current = false;
+      const hiddenMs =
+        hiddenAtRef.current !== null ? Date.now() - hiddenAtRef.current : 0;
+      hiddenAtRef.current = null;
+
+      if (isAiRoomRef.current && ghostSchedule.current.armed) {
+        if (hiddenMs > 45_000) {
+          disarmGhostSchedule(ghostSchedule.current);
+        } else {
+          resumeGhostSchedule({
+            ...ghostCtxRef.current(ghostSchedule.current.armedForBotMessageId),
+            selfId: selfIdRef.current ?? "",
+          });
+        }
+      }
+
       if (!resumeReplyAfterBackgroundRef.current) return;
       resumeReplyAfterBackgroundRef.current = false;
 
@@ -571,6 +602,10 @@ export function ChatRoom({ roomId }: Props) {
     [client, roomId, finishBotSkipAndLeave],
   );
 
+  useEffect(() => {
+    ghostCtxRef.current = ghostCtx;
+  }, [ghostCtx]);
+
   const armGhostAfterBot = useCallback(
     (botMessageId?: string | null) => {
       const self = selfIdRef.current;
@@ -742,7 +777,7 @@ export function ChatRoom({ roomId }: Props) {
   useEffect(() => {
     if (!ready || !isAiRoom || loading || !selfId || exitInFlightRef.current || skipEndingRef.current) return;
     if (aiBusyRef.current || flushLockRef.current) return;
-    if (ghostSchedule.current.pingSentAt !== null || ghostSchedule.current.skipTimer !== null) return;
+    if (ghostSchedule.current.armed || ghostSchedule.current.pingSentAt !== null) return;
 
     const last = messages[messages.length - 1];
     if (!last || !isBotMessage(last)) return;
