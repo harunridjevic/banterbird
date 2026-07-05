@@ -14,7 +14,7 @@ export type UserMemory = {
 };
 
 const SEXUAL_RE =
-  /\b(horny|sexy|nude|naked|dick|cock|pussy|fuck|fucking|cum|orgasm|kink|bdsm|daddy|mommy|slut|dirty|sext|nudes|turn me on|roleplay|rp\b|sub\b|dom\b)\b/i;
+  /\b(horny|sexy|nude|naked|dick|cock|pussy|fuck|fucking|cum|orgasm|kink|bdsm|daddy|mommy|slut|dirty|sext|sex|nudes|turn me on|roleplay|rp\b|sub\b|dom\b)\b/i;
 
 const BORING_RE = /^(k|ok|okay|yeah|yea|yep|mhm|hm+|lol|haha|idk|sure|nice|cool|same|true|wow|omg|ah+|uh+|\?+)$/i;
 
@@ -231,7 +231,24 @@ const HEATED_FALLBACKS = [
 export function isGenericCannedLine(text: string): boolean {
   const t = text.trim().toLowerCase();
   return (
-    ["hey", "yo", "sup", "heyy", "lol fair", "same honestly", "wild", "mhm", "nice", "damn", "fr?", "lowkey yeah"].includes(t)
+    [
+      "hey",
+      "yo",
+      "sup",
+      "heyy",
+      "lol fair",
+      "same honestly",
+      "wild",
+      "mhm",
+      "nice",
+      "damn",
+      "fr?",
+      "lowkey yeah",
+      "cool",
+      "nothin'",
+      "nothin",
+      "nothing",
+    ].includes(t)
   );
 }
 
@@ -252,6 +269,30 @@ export function contextualFallbackReply(
 
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const casual = ["hey", "yo", "heyy", "wild", "damn", "fr?", "nice", "mhm"];
-  return [casual[h % casual.length] ?? "hey"];
+  const openers = ["hey", "yo", "heyy", "sup", "hii", "hello"];
+  return [openers[h % openers.length] ?? "hey"];
+}
+
+/** Last-resort stub when the LLM fails mid-chat — not random one-word vibes. */
+export function midChatStubReply(history: ChatTurn[], allowSexual: boolean): string[] {
+  const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
+  const t = lastUser.trim();
+  const lower = t.toLowerCase();
+  let h = 0;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+
+  if (allowSexual && detectSexualVibe(t)) {
+    const heated = ["lol ur bold", "mm ok", "damn ok tell me more"];
+    return [heated[h % heated.length] ?? "lol ur bold"];
+  }
+  if (/\?$/.test(t) || lower.includes("what") || lower.includes("why") || lower.includes("how")) {
+    const replies = ["hm idk wbu", "lol good question", "wait what do u mean"];
+    return [replies[h % replies.length] ?? "hm idk wbu"];
+  }
+  if (t.length <= 12) {
+    const replies = ["lol what", "hm?", "say more"];
+    return [replies[h % replies.length] ?? "lol what"];
+  }
+  const replies = ["lol fair", "mhm", "yeah fr"];
+  return [replies[h % replies.length] ?? "lol fair"];
 }

@@ -5,6 +5,7 @@ import {
   saveBotSettingsToDb,
   parseBotSettings,
   DEFAULT_BOT_SETTINGS,
+  invalidateBotSettingsCache,
 } from "@/lib/ops/bot-settings";
 import { cookieSecret, verifyAnalyticsCookie, COOKIE_NAME } from "@/lib/ops/analytics-cookie";
 
@@ -30,6 +31,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Invalid settings" }, { status: 400 });
   }
   const saved = await saveBotSettingsToDb(parsed);
+  invalidateBotSettingsCache();
   return NextResponse.json(saved);
 }
 
@@ -40,5 +42,6 @@ export async function DELETE() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const saved = await saveBotSettingsToDb(DEFAULT_BOT_SETTINGS);
+  invalidateBotSettingsCache();
   return NextResponse.json(saved);
 }

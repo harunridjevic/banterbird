@@ -116,7 +116,7 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   maxOutputTokens: 160,
   maxOutputTokensSexual: 256,
   /** Max chat turns sent to the LLM per request. */
-  llmHistoryTurns: 8,
+  llmHistoryTurns: 20,
   maxOutputTokensOpener: 96,
 
   displayOnlineCountOverride: false,
@@ -159,6 +159,13 @@ function normalizeMatchMode(v: unknown): MatchMode {
 }
 
 const OPENER_DELAY_MODES = ["fixed", "random"] as const;
+const SEXUAL_DISPOSITION_MODES = ["random", "strict", "persuadable", "horny"] as const;
+
+function normalizeSexualDisposition(v: unknown): BotSettings["sexualDisposition"] {
+  return SEXUAL_DISPOSITION_MODES.includes(v as BotSettings["sexualDisposition"])
+    ? (v as BotSettings["sexualDisposition"])
+    : DEFAULT_BOT_SETTINGS.sexualDisposition;
+}
 
 function normalizeOpenerDelayMode(v: unknown): BotSettings["openerDelayMode"] {
   return OPENER_DELAY_MODES.includes(v as BotSettings["openerDelayMode"])
@@ -174,6 +181,7 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     ...merged,
     matchMode: normalizeMatchMode(merged.matchMode),
     hideGenderFilters: Boolean(merged.hideGenderFilters),
+    sexualDisposition: normalizeSexualDisposition(merged.sexualDisposition),
     openerDelayMode: normalizeOpenerDelayMode(merged.openerDelayMode),
     strictWeight: clamp(merged.strictWeight, 0, 100),
     persuadableWeight: clamp(merged.persuadableWeight, 0, 100),

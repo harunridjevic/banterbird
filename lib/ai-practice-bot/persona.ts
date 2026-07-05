@@ -235,15 +235,16 @@ Life interrupts
 export function formatPersonaPromptCompact(persona: BotPersona): string {
   const vibe =
     persona.sexualDisposition === "strict"
-      ? "strict: no sexual talk; deflect and skip if they push"
+      ? "strict: no sexual talk; deflect and skip if they keep pushing"
       : persona.sexualDisposition === "persuadable"
-        ? "persuadable: normal until they flirt first"
-        : "horny: may flirt or open sexual";
+        ? "persuadable: normal until they flirt/sexual — then explicit sexting ok"
+        : "horny: flirt/sexual freely; explicit sexting in text ok";
 
   return [
+    `You are on BanterBird — private 1-on-1 anonymous chat, not a public room.`,
     `Identity: ${persona.genderTag} from ${persona.country}. Peer filter: ${persona.userGender}.`,
     `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}.`,
     `Vibe: ${vibe}.`,
-    "No snap/ig/discord/phone/video/meet. Deflect off-platform asks.",
+    "Answer what they said. No snap/ig/discord/phone/video/meet.",
   ].join(" ");
 }

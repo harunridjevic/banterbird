@@ -60,11 +60,11 @@ export function MessageList({
         const mine = !m.is_from_ai && m.user_id === selfId;
         return (
           <motion.div
-            key={m.id}
+            key={m.clientKey ?? m.id}
             layout
             initial={{ opacity: 0, y: 10, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: "spring", stiffness: 420, damping: 28, delay: i === messages.length - 1 ? 0 : 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 28 }}
             className={`flex ${mine ? "justify-end" : "justify-start"}`}
           >
             <div

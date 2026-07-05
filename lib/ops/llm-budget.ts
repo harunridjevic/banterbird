@@ -66,7 +66,9 @@ export async function roomLlmCallCount(roomId: string): Promise<number> {
   }
 }
 
-export async function shouldSkipLlmForBudget(roomId: string): Promise<boolean> {
+export async function shouldSkipLlmForBudget(roomId: string, isOpener = false): Promise<boolean> {
+  // Never downgrade mid-conversation replies to canned fallbacks for budget.
+  if (!isOpener) return false;
   if (await isLlmDailyBudgetExceeded()) return true;
   const count = await roomLlmCallCount(roomId);
   return count >= llmMaxCallsPerRoom();

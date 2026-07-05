@@ -35,6 +35,7 @@ import {
   recordInactivitySkip,
   resetInactivityStrikes,
 } from "@/lib/moderation/inactivity-strikes";
+import { networkErrorMessage } from "@/lib/network-error";
 
 type Props = { roomId: string };
 
@@ -73,6 +74,9 @@ export function ChatRoom({ roomId }: Props) {
 
   const aiBusyRef = useRef(false);
   const skipEndingRef = useRef(false);
+  const abortBotTurnRef = useRef(false);
+  const resumeReplyAfterBackgroundRef = useRef(false);
+  const flushReplyQueueRef = useRef<() => void>(() => {});
 
   const [hideBotUi, setHideBotUi] = useState(globalBotSettings.matchMode === "hidden_bots");
   const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
@@ -152,9 +156,12 @@ export function ChatRoom({ roomId }: Props) {
     });
   }, []);
 
+  const shouldAbortBotTurn = useCallback(() => abortBotTurnRef.current, []);
+
   useEffect(() => {
+    if (keyboardInset > 0) return;
     scrollToBottom();
-  }, [messages.length, peerTyping, scrollToBottom]);
+  }, [messages.length, peerTyping, keyboardInset, scrollToBottom]);
 
   useEffect(() => {
     if (keyboardInset > 0) {
@@ -280,6 +287,20 @@ export function ChatRoom({ roomId }: Props) {
           const row = payload.new as MessageRow;
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) return prev;
+            // Remove optimistic message with same content if it exists
+            const optimisticIndex = prev.findIndex(
+              (m) => m.id.startsWith("temp-") && m.content === row.content && m.user_id === row.user_id,
+            );
+            if (optimisticIndex >= 0) {
+              const clientKey = prev[optimisticIndex]!.clientKey ?? prev[optimisticIndex]!.id;
+              const updated = [...prev];
+              updated[optimisticIndex] = {
+                ...row,
+                clientKey,
+                is_from_ai: Boolean(row.is_from_ai) || row.user_id == null,
+              };
+              return updated;
+            }
             const merged: MessageRow = {
               ...row,
               is_from_ai: Boolean(row.is_from_ai) || row.user_id == null,
@@ -329,15 +350,50 @@ export function ChatRoom({ roomId }: Props) {
 
     const onPageHide = () => endRoomBeacon();
     const onBeforeUnload = () => endRoomBeacon();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        abortBotTurnRef.current = true;
+        cancelOpener();
+        disarmGhostSchedule(ghostSchedule.current);
+        if (aiBusyRef.current || flushLockRef.current) {
+          resumeReplyAfterBackgroundRef.current = true;
+        }
+        return;
+      }
+
+      abortBotTurnRef.current = false;
+      if (!resumeReplyAfterBackgroundRef.current) return;
+      resumeReplyAfterBackgroundRef.current = false;
+
+      const self = selfIdRef.current;
+      if (!self || !isAiRoomRef.current) return;
+      const snapshot = messagesRef.current;
+      const lastUser = [...snapshot].reverse().find((m) => !isBotMessage(m) && m.user_id === self);
+      if (!lastUser || lastUser.id.startsWith("temp-")) return;
+      if (answeredHumanIdsRef.current.has(lastUser.id)) return;
+
+      const lastBot = [...snapshot].reverse().find((m) => isBotMessage(m));
+      const lastBotIdx = lastBot ? snapshot.findIndex((m) => m.id === lastBot.id) : -1;
+      const userAfterBot = snapshot
+        .slice(lastBotIdx + 1)
+        .some((m) => !isBotMessage(m) && m.user_id === self);
+      if (!userAfterBot) return;
+
+      answeredHumanIdsRef.current.add(lastUser.id);
+      replyQueueRef.current = [lastUser.id];
+      flushReplyQueueRef.current();
+    };
 
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [endRoomBeacon, ready, roomId]);
+  }, [endRoomBeacon, ready, roomId, cancelOpener]);
 
   useEffect(() => {
     if (!ready || !roomId) return;
@@ -408,20 +464,18 @@ export function ChatRoom({ roomId }: Props) {
   }, [client, ready, roomId, selfId, peerId, isAiRoom]);
 
   const sendTypingBroadcast = useCallback(
-    async (active: boolean) => {
+    (active: boolean) => {
       if (isAiRoomRef.current) return;
       const ch = typingChannelRef.current;
-      const {
-        data: { session },
-      } = await client.auth.getSession();
-      if (!ch || !session?.user?.id) return;
-      await ch.send({
+      const uid = selfIdRef.current;
+      if (!ch || !uid) return;
+      void ch.send({
         type: "broadcast",
         event: "typing",
-        payload: { userId: session.user.id, active },
+        payload: { userId: uid, active },
       });
     },
-    [client],
+    [],
   );
 
   const endRoomAndGoMatch = useCallback(async (clearFilters: boolean) => {
@@ -532,10 +586,12 @@ export function ChatRoom({ roomId }: Props) {
 
   const flushReplyQueue = useCallback(async () => {
     if (flushLockRef.current) return;
-    const targetId = replyQueueRef.current.shift();
+    const targetId = replyQueueRef.current.at(-1);
+    replyQueueRef.current = [];
     if (!targetId) return;
     flushLockRef.current = true;
     aiBusyRef.current = true;
+    abortBotTurnRef.current = false;
     try {
       const snapshot = messagesRef.current;
       const idx = snapshot.findIndex((m) => m.id === targetId);
@@ -561,7 +617,12 @@ export function ChatRoom({ roomId }: Props) {
           setPeerTyping,
           onError: setError,
           userMessageLen: triggeringLen,
+          shouldAbort: shouldAbortBotTurn,
         });
+        if (outcome === "aborted") {
+          replyQueueRef.current = [targetId];
+          return;
+        }
         if (outcome === "skip") {
           await finishBotSkipAndLeave();
         }
@@ -587,8 +648,13 @@ export function ChatRoom({ roomId }: Props) {
         setPeerTyping,
         onError: setError,
         userMessageLen: triggeringLen,
+        shouldAbort: shouldAbortBotTurn,
       });
 
+      if (outcome === "aborted") {
+        replyQueueRef.current = [targetId];
+        return;
+      }
       if (outcome === "skip") {
         await finishBotSkipAndLeave();
         return;
@@ -604,10 +670,18 @@ export function ChatRoom({ roomId }: Props) {
         });
       }
     }
-  }, [client, roomId, transcriptFromSnapshot, armGhostAfterBot, finishBotSkipAndLeave]);
+  }, [client, roomId, transcriptFromSnapshot, armGhostAfterBot, finishBotSkipAndLeave, shouldAbortBotTurn]);
+
+  useEffect(() => {
+    flushReplyQueueRef.current = () => {
+      void flushReplyQueue();
+    };
+  }, [flushReplyQueue]);
 
   useEffect(() => {
     if (!ready || !isAiRoom || loading) return;
+    if (openerDoneRef.current || openerTimerRef.current !== null) return;
+    if (messagesRef.current.some((m) => isBotMessage(m))) return;
     const openerDelay = resolveOpenerDelayMs(botSettingsRef.current);
     openerTimerRef.current = window.setTimeout(async () => {
       openerTimerRef.current = null;
@@ -616,6 +690,7 @@ export function ChatRoom({ roomId }: Props) {
       if (userHasSpoken()) return;
       openerDoneRef.current = true;
       aiBusyRef.current = true;
+      abortBotTurnRef.current = false;
 
       try {
         const res = await fetch("/api/chat/ai-reply", {
@@ -639,7 +714,12 @@ export function ChatRoom({ roomId }: Props) {
           setPeerTyping,
           onError: setError,
           isOpener: true,
+          shouldAbort: shouldAbortBotTurn,
         });
+        if (outcome === "aborted") {
+          openerDoneRef.current = false;
+          return;
+        }
         if (outcome === "skip") {
           await finishBotSkipAndLeave();
           return;
@@ -656,7 +736,7 @@ export function ChatRoom({ roomId }: Props) {
         openerTimerRef.current = null;
       }
     };
-  }, [ready, isAiRoom, loading, roomId, client, finishBotSkipAndLeave, armGhostAfterBot, userHasSpoken]);
+  }, [ready, isAiRoom, loading, roomId, client, finishBotSkipAndLeave, armGhostAfterBot, userHasSpoken, shouldAbortBotTurn]);
 
   // Re-arm ghost when bot message lands (covers missed arms + page reload mid-wait).
   useEffect(() => {
@@ -683,8 +763,9 @@ export function ChatRoom({ roomId }: Props) {
     cancelOpener();
     disarmGhostSchedule(ghostSchedule.current);
     if (answeredHumanIdsRef.current.has(last.id)) return;
+    if (last.id.startsWith("temp-")) return;
     answeredHumanIdsRef.current.add(last.id);
-    replyQueueRef.current.push(last.id);
+    replyQueueRef.current = [last.id];
     void flushReplyQueue();
   }, [messages, ready, isAiRoom, loading, selfId, flushReplyQueue, cancelOpener]);
 
@@ -693,29 +774,53 @@ export function ChatRoom({ roomId }: Props) {
       resetInactivityStrikes();
       if (isAiRoomRef.current) cancelOpener();
       disarmGhostSchedule(ghostSchedule.current);
-      const res = await fetch("/api/chat/send-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomId,
-          content: text,
-          deviceId: getDeviceId(),
-        }),
-      });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
-        if (res.status === 403) {
-          router.replace("/match");
-          return;
-        }
-        if (res.status === 429) {
-          setError(j.error ?? "Slow down. Messages sent too quickly.");
-          if (j.reason === "rate_limit" || j.reason === "burst_limit") {
+
+      // Optimistic UI: show message immediately
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const clientKey = `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const optimisticMessage: MessageRow = {
+        id: tempId,
+        clientKey,
+        room_id: roomId,
+        user_id: selfIdRef.current!,
+        content: text,
+        created_at: new Date().toISOString(),
+        is_from_ai: false,
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+
+      try {
+        const res = await fetch("/api/chat/send-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomId,
+            content: text,
+            deviceId: getDeviceId(),
+          }),
+        });
+        if (!res.ok) {
+          const j = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
+          // Remove optimistic message on error
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
+          if (res.status === 403) {
             router.replace("/match");
+            return;
           }
-          return;
+          if (res.status === 429) {
+            setError(j.error ?? "Slow down. Messages sent too quickly.");
+            if (j.reason === "rate_limit" || j.reason === "burst_limit") {
+              router.replace("/match");
+            }
+            return;
+          }
+          setError(j.error ?? "Could not send message");
         }
-        setError(j.error ?? "Could not send message");
+        // Optimistic message will be replaced by real message via realtime subscription
+      } catch (err) {
+        // Remove optimistic message on network error
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setError(networkErrorMessage(err));
       }
     },
     [roomId, cancelOpener, router],
@@ -897,7 +1002,7 @@ export function ChatRoom({ roomId }: Props) {
       <div className="shrink-0 border-t border-navy-200/50 bg-[var(--page-bg)]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10">
         <ChatComposer
           onSend={sendMessage}
-          onTypingChange={(typing) => void sendTypingBroadcast(typing)}
+          onTypingChange={sendTypingBroadcast}
           onFocus={() => scrollToBottom(true)}
         />
       </div>

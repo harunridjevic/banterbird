@@ -14,6 +14,7 @@ type Props = {
 export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Props) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTypingTimer = () => {
@@ -49,7 +50,7 @@ export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Prop
     }
   };
 
-  const submit = async () => {
+  const submit = () => {
     const t = value.trim();
     if (!t || sending || disabled) return;
     const messageToSend = t;
@@ -57,19 +58,22 @@ export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Prop
     setSending(true);
     clearTypingTimer();
     onTypingChange(false);
-    try {
-      await onSend(messageToSend);
-    } finally {
+
+    void onSend(messageToSend).finally(() => {
       setSending(false);
-    }
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus({ preventScroll: true });
+      });
+    });
   };
 
   return (
     <div className="glass-panel rounded-3xl p-2 sm:p-3">
       <div className="flex items-end gap-2">
         <textarea
+          ref={textareaRef}
           rows={1}
-          disabled={disabled || sending}
+          disabled={disabled}
           placeholder="Say something nice…"
           enterKeyHint="send"
           className="max-h-32 min-h-[44px] flex-1 resize-none rounded-2xl border border-navy-200/80 bg-white/80 px-4 py-3 text-[16px] text-navy-950 outline-none ring-navy-900/10 placeholder:text-navy-400 focus:ring-2 dark:border-white/10 dark:bg-navy-950/60 dark:text-navy-50 dark:placeholder:text-navy-500"
@@ -77,8 +81,6 @@ export function ChatComposer({ disabled, onSend, onTypingChange, onFocus }: Prop
           onChange={(e) => handleChange(e.target.value)}
           onFocus={() => {
             onFocus?.();
-            window.setTimeout(() => onFocus?.(), 150);
-            window.setTimeout(() => onFocus?.(), 400);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

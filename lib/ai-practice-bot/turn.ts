@@ -12,6 +12,7 @@ import {
   isDryConversation,
   isGenericCannedLine,
   isUserLeavingConversation,
+  midChatStubReply,
   pickBoringSkipParting,
   pickGhostPing,
   pickGhostSkipParting,
@@ -149,6 +150,12 @@ export function parseModelTurn(
       }
       if (lines.length > 0) {
         const first = lines[0]!;
+        const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
+        const userAskedSomething =
+          lastUser.includes("?") || lastUser.trim().split(/\s+/).length >= 3;
+        if (userAskedSomething && isGenericCannedLine(first)) {
+          return null;
+        }
         if (
           memory.sexualVibe &&
           personaAllowsSexualChat(persona, true) &&
@@ -224,13 +231,10 @@ export function decideFallbackTurn(
     }, settings);
   }
 
+  // Mid-chat should use the LLM — callers must not route here for normal replies.
   return withTiming(persona, {
     action: "reply",
-    messages: contextualFallbackReply(
-      history,
-      memory,
-      personaAllowsSexualChat(persona, memory.sexualVibe),
-    ),
+    messages: midChatStubReply(history, personaAllowsSexualChat(persona, memory.sexualVibe)),
   }, settings);
 }
 
@@ -306,14 +310,14 @@ export function sessionContextOverlay(
   }
   if (persona.sexualDisposition === "horny") {
     lines.push(
-      "You are a horny stranger (~20%) — you may flirt/escalate sexually. No socials/video/meetup.",
+      "You are horny this session — flirt and escalate sexually when it fits. Explicit sexting in text is ok. No socials/video/meetup.",
     );
   } else if (persona.sexualDisposition === "persuadable" && memory.sexualVibe) {
     lines.push(
-      "They flirted first — you are persuadable (~30%) so explicit dirty text ok now. No socials/video/meetup.",
+      "They flirted or got sexual — you are persuadable so explicit dirty text and sexting ok now. Match their energy. No socials/video/meetup.",
     );
   } else if (persona.sexualDisposition === "persuadable") {
-    lines.push("Persuadable bot — stay normal until they flirt; then you can go sexual.");
+    lines.push("Persuadable bot — stay normal until they flirt; then match with flirty/sexual text.");
   } else if (memory.sexualVibe) {
     lines.push(
       'Strict bot (~50%) — deflect sexual stuff ("idk", "i dont wanna talk about that") or skip if they keep pushing.',

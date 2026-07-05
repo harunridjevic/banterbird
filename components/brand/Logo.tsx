@@ -5,12 +5,34 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 
 type LogoProps = {
   showWordmark?: boolean;
   className?: string;
   priority?: boolean;
 };
+
+function LogoImage({ isDark, priority }: { isDark: boolean; priority: boolean }) {
+  return (
+    <motion.div
+      whileHover={{ y: -2 }}
+      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+      className="relative h-12 w-36 sm:h-14 sm:w-44"
+    >
+      <Image
+        src="/banterbird-logo.png"
+        alt="BanterBird"
+        fill
+        className={`object-contain object-left transition-[filter] duration-200 ${
+          isDark ? "" : "invert"
+        }`}
+        sizes="(max-width: 640px) 144px, 176px"
+        priority={priority}
+      />
+    </motion.div>
+  );
+}
 
 export function Logo({
   showWordmark = true,
@@ -24,28 +46,31 @@ export function Logo({
     () => false,
   );
   const isDark = !mounted || resolvedTheme === "dark";
+  const pathname = usePathname();
+  const onMatchPage = pathname === "/match" || pathname.startsWith("/match/");
+
+  const startMatching = () => {
+    window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
+  };
+
+  if (onMatchPage) {
+    return (
+      <button
+        type="button"
+        onClick={startMatching}
+        className={`group inline-flex flex-col items-center gap-1 ${className}`}
+        aria-label="Start matching on BanterBird"
+      >
+        <LogoImage isDark={isDark} priority={priority} />
+        {!showWordmark ? <span className="sr-only">BanterBird</span> : null}
+      </button>
+    );
+  }
 
   return (
     <Link href="/match" className={`group inline-flex flex-col items-center gap-1 ${className}`}>
-      <motion.div
-        whileHover={{ y: -2 }}
-        transition={{ type: "spring", stiffness: 400, damping: 22 }}
-        className="relative h-12 w-36 sm:h-14 sm:w-44"
-      >
-        <Image
-          src="/banterbird-logo.png"
-          alt="BanterBird"
-          fill
-          className={`object-contain object-left transition-[filter] duration-200 ${
-            isDark ? "" : "invert"
-          }`}
-          sizes="(max-width: 640px) 144px, 176px"
-          priority={priority}
-        />
-      </motion.div>
-      {!showWordmark ? (
-        <span className="sr-only">BanterBird</span>
-      ) : null}
+      <LogoImage isDark={isDark} priority={priority} />
+      {!showWordmark ? <span className="sr-only">BanterBird</span> : null}
     </Link>
   );
 }
