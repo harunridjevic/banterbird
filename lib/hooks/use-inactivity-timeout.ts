@@ -28,11 +28,22 @@ export function useInactivityTimeout(onIdle: () => void, enabled: boolean, timeo
       window.addEventListener(event, bumpActivity, { passive: true });
     }
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = null;
+        return;
+      }
+      bumpActivity();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       for (const event of events) {
         window.removeEventListener(event, bumpActivity);
       }
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [enabled, bumpActivity]);
 

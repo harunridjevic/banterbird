@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sanitizeBotChatLine } from "@/lib/ai-practice-bot/sanitize";
 import {
   preTypingHesitation,
   readDelayBeforeReplyMs,
@@ -7,6 +8,7 @@ import {
   typingDurationForReply,
   type TimingScale,
 } from "./typing";
+import { delayMs } from "@/lib/hooks/visibility-delay";
 
 export type BotApiBody = {
   action?: string;
@@ -22,8 +24,20 @@ export type BotApiBody = {
   };
 };
 
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+class BotTurnAbortedError extends Error {
+  constructor() {
+    super("aborted");
+    this.name = "BotTurnAbortedError";
+  }
+}
+
+function sleep(ms: number, shouldAbort?: () => boolean) {
+  return delayMs(ms, shouldAbort).catch((e) => {
+    if (e instanceof Error && e.message === "aborted") {
+      throw new BotTurnAbortedError();
+    }
+    throw e;
+  });
 }
 
 function linesFromBody(body: BotApiBody): string[] {
@@ -41,7 +55,7 @@ async function insertBotLine(
 ) {
   const { error } = await client.rpc("insert_ai_chat_message", {
     p_room_id: roomId,
-    p_content: content,
+    p_content: sanitizeBotChatLine(content),
   });
   return error;
 }
@@ -54,19 +68,22 @@ async function deliverLines(
   client: SupabaseClient,
   roomId: string,
   onError: (msg: string) => void,
+  shouldAbort?: () => boolean,
 ) {
   for (let i = 0; i < lines.length; i++) {
+    if (shouldAbort?.()) throw new BotTurnAbortedError();
     const line = lines[i]!;
-    await preTypingHesitation(scale);
+    await preTypingHesitation(scale, shouldAbort);
     await runHumanlikeTyping(
       setPeerTyping,
       typingDurationForReply(line, scale),
       line.length,
+      shouldAbort,
     );
     const err = await insertBotLine(client, roomId, line);
     if (err) onError(err.message);
     if (i < lines.length - 1 && burstGapMs > 0) {
-      await sleep(burstGapMs + Math.random() * 420);
+      await sleep(burstGapMs + Math.random() * 420, shouldAbort);
     }
   }
 }
@@ -79,58 +96,65 @@ export async function executeBotTurn(opts: {
   onError: (msg: string) => void;
   userMessageLen?: number;
   isOpener?: boolean;
-}): Promise<"skip" | "done"> {
-  const { body, client, roomId, setPeerTyping, onError, userMessageLen = 0, isOpener } = opts;
+  shouldAbort?: () => boolean;
+}): Promise<"skip" | "done" | "aborted"> {
+  const { body, client, roomId, setPeerTyping, onError, userMessageLen = 0, isOpener, shouldAbort } = opts;
   const scale: TimingScale = {
     readScale: body.timing?.readScale ?? 1,
     typingScale: body.timing?.typingScale ?? 1,
   };
   const burstGapMs = body.timing?.burstGapMs ?? 0;
 
-  if (body.action === "skip") {
-    const parting =
-      typeof body.parting === "string" && body.parting.trim().length > 0
-        ? body.parting.trim()
-        : null;
-    if (parting) {
-      await deliverLines([parting], scale, 0, setPeerTyping, client, roomId, onError);
-    } else {
-      await sleep(500 + Math.random() * 1400);
-      setPeerTyping(true);
-      await sleep(650 + Math.random() * 1700);
+  try {
+    if (body.action === "skip") {
+      const parting =
+        typeof body.parting === "string" && body.parting.trim().length > 0
+          ? body.parting.trim()
+          : null;
+      if (parting) {
+        await deliverLines([parting], scale, 0, setPeerTyping, client, roomId, onError, shouldAbort);
+      } else {
+        await sleep(500 + Math.random() * 1400, shouldAbort);
+        setPeerTyping(true);
+        await sleep(650 + Math.random() * 1700, shouldAbort);
+        setPeerTyping(false);
+      }
+      return "skip";
+    }
+
+    if (body.action === "away") {
+      const awayLines = linesFromBody(body);
+      const returnLines =
+        Array.isArray(body.returnMessages) && body.returnMessages.length > 0
+          ? body.returnMessages.map((m) => m.trim()).filter(Boolean)
+          : ["im back"];
+      const awayMs = typeof body.awayMs === "number" ? body.awayMs : 45_000;
+
+      if (awayLines.length > 0) {
+        await deliverLines(awayLines, scale, burstGapMs, setPeerTyping, client, roomId, onError, shouldAbort);
+      }
       setPeerTyping(false);
+      await sleep(awayMs, shouldAbort);
+      await deliverLines(returnLines, scale, burstGapMs, setPeerTyping, client, roomId, onError, shouldAbort);
+      return "done";
     }
-    return "skip";
-  }
 
-  if (body.action === "away") {
-    const awayLines = linesFromBody(body);
-    const returnLines =
-      Array.isArray(body.returnMessages) && body.returnMessages.length > 0
-        ? body.returnMessages.map((m) => m.trim()).filter(Boolean)
-        : ["im back"];
-    const awayMs = typeof body.awayMs === "number" ? body.awayMs : 45_000;
+    const lines = linesFromBody(body);
+    if (lines.length === 0) return "done";
 
-    if (awayLines.length > 0) {
-      await deliverLines(awayLines, scale, burstGapMs, setPeerTyping, client, roomId, onError);
+    if (!isOpener) {
+      await sleep(readDelayBeforeReplyMs(userMessageLen, scale), shouldAbort);
+    } else {
+      await sleep(readDelayOpenerMs(scale), shouldAbort);
     }
-    setPeerTyping(false);
-    await sleep(awayMs);
-    await deliverLines(returnLines, scale, burstGapMs, setPeerTyping, client, roomId, onError);
+
+    await deliverLines(lines, scale, burstGapMs, setPeerTyping, client, roomId, onError, shouldAbort);
     return "done";
+  } catch (e) {
+    setPeerTyping(false);
+    if (e instanceof BotTurnAbortedError) return "aborted";
+    throw e;
   }
-
-  const lines = linesFromBody(body);
-  if (lines.length === 0) return "done";
-
-  if (!isOpener) {
-    await sleep(readDelayBeforeReplyMs(userMessageLen, scale));
-  } else {
-    await sleep(readDelayOpenerMs(scale));
-  }
-
-  await deliverLines(lines, scale, burstGapMs, setPeerTyping, client, roomId, onError);
-  return "done";
 }
 
 export type { TimingScale };

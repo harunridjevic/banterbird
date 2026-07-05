@@ -92,6 +92,19 @@ export function MatchLobby() {
   }, [globalSettingsLoaded, hideGenderFilters, matchingPaused, selfGender, wantsGender]);
 
   useEffect(() => {
+    const handleStartMatchingEvent = () => {
+      if (isMatching) return;
+      if (hideGenderFilters) {
+        matchGendersRef.current = anonymousMatchGenders();
+      }
+      setMatchRequested(true);
+    };
+
+    window.addEventListener("banterbird:start-matching", handleStartMatchingEvent);
+    return () => window.removeEventListener("banterbird:start-matching", handleStartMatchingEvent);
+  }, [hideGenderFilters, isMatching]);
+
+  useEffect(() => {
     const refresh = () => {
       if (globalSettingsLoaded) {
         setMatchMode(globalBotSettings.matchMode);

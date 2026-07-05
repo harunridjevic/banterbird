@@ -6,9 +6,7 @@ import {
   isAggressiveConversation,
   isAnnoyingConversation,
   isDryConversation,
-  isUserLeavingConversation,
   pickBoringSkipParting,
-  pickLeavingSkipParting,
   pickSkipParting,
   pickStrictSexualSkipParting,
 } from "@/lib/ai-practice-bot/memory";
@@ -24,10 +22,6 @@ export function shouldClientSkipChat(
   const userLines = history.filter((m) => m.role === "user");
   const n = userLines.length;
   const seed = history.map((m) => m.content).join("|");
-
-  if (isUserLeavingConversation(history)) {
-    return { skip: true, parting: pickLeavingSkipParting() };
-  }
 
   if (isAggressiveConversation(history) || isAnnoyingConversation(history)) {
     return { skip: true, parting: pickBoringSkipParting(seed) };

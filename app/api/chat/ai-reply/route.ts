@@ -7,7 +7,7 @@ import {
   PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT,
 } from "@/lib/ai-practice-bot/instructions";
 import { shouldUseLocalReply } from "@/lib/ai-practice-bot/llm-routing";
-import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock } from "@/lib/ai-practice-bot/memory";
+import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock, isUserLeavingConversation, midChatStubReply } from "@/lib/ai-practice-bot/memory";
 import {
   buildBotPersona,
   formatPersonaPrompt,
@@ -24,6 +24,7 @@ import {
   applySessionPolicy,
   decideFallbackTurn,
   GEMINI_OPENER_USER_TURN,
+  goodbyeContextOverlay,
   jsonBody,
   parseModelTurn,
   sessionContextOverlay,
@@ -351,13 +352,31 @@ async function callLlm(
     logProviderUsage({ raw: null }, false);
   }
 
+  // Retry once on parse/network failure before any fallback.
+  const retry = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
+  if (retry.raw) {
+    const parsed = parseModelTurn(retry.raw, history, persona, memory, settings);
+    if (parsed) {
+      logProviderUsage(retry, true);
+      return parsed;
+    }
+    logProviderUsage(retry, true);
+  } else {
+    logProviderUsage({ raw: null }, false);
+  }
+
+  const allowSexual = personaAllowsSexualChat(persona, memory.sexualVibe);
+  if (opener) {
+    return {
+      action: "reply",
+      messages: contextualFallbackReply(history, memory, allowSexual),
+      timing: personaTiming(persona, settings),
+    };
+  }
+
   return {
     action: "reply",
-    messages: contextualFallbackReply(
-      history,
-      memory,
-      personaAllowsSexualChat(persona, memory.sexualVibe),
-    ),
+    messages: midChatStubReply(history, allowSexual),
     timing: personaTiming(persona, settings),
   };
 }
@@ -408,10 +427,15 @@ export async function POST(req: Request) {
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
     const historyLimit = botSettings.llmHistoryTurns;
+    const memory = buildUserMemory(history);
     const trimmedHistory = history.slice(-historyLimit);
-    const memory = buildUserMemory(trimmedHistory);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
-    const sessionBlock = sessionContextOverlay(memory, persona, botSettings);
+    const sessionBlock = [
+      sessionContextOverlay(memory, persona, botSettings),
+      isUserLeavingConversation(trimmedHistory) ? goodbyeContextOverlay() : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     const personaBlock = useCompactPrompts()
       ? formatPersonaPromptCompact(persona)
       : formatPersonaPrompt(persona);
@@ -459,7 +483,7 @@ export async function POST(req: Request) {
       return respondLocal(result);
     }
 
-    if (await shouldSkipLlmForBudget(roomId)) {
+    if (await shouldSkipLlmForBudget(roomId, isOpener)) {
       const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
       return respondLocal(result);
     }

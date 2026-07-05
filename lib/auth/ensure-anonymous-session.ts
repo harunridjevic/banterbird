@@ -80,7 +80,7 @@ async function ensureAnonymousSessionInner(
   }
 
   if (userErr && isNetworkError(userErr)) {
-    return { ok: false, error: userErr.message };
+    return { ok: false, error: "oops, you disconnected" };
   }
 
   if (userErr && !isInvalidSessionError(userErr)) {
@@ -114,7 +114,13 @@ export async function hasAuthenticatedSession(client: SupabaseClient): Promise<b
 export function formatAuthError(error: unknown): string {
   if (error && typeof error === "object") {
     const e = error as { message?: string; code?: string };
-    if (e.message) return e.message;
+    if (e.message) {
+      const m = e.message.toLowerCase();
+      if (m.includes("failed to fetch") || m.includes("network") || m.includes("load failed")) {
+        return "oops, you disconnected";
+      }
+      return e.message;
+    }
     if (e.code) return e.code;
     try {
       return JSON.stringify(error);

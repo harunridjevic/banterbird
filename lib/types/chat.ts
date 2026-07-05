@@ -8,6 +8,8 @@ export type MessageRow = {
   content: string;
   created_at: string;
   is_from_ai?: boolean;
+  /** Stable React key — survives optimistic → server id swap without re-animating. */
+  clientKey?: string;
 };
 
 export type RoomRow = {
