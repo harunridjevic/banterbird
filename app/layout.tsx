@@ -59,7 +59,7 @@ export const metadata: Metadata = {
     siteName: "BanterBird",
     images: [
       {
-        url: "/banterbird-logo.png",
+        url: "/logo_search.png",
         width: 1200,
         height: 630,
         alt: "BanterBird - Anonymous Random Chat",
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "BanterBird - Anonymous Random Chat with Strangers",
     description: "Chat with random strangers instantly. Anonymous, no registration required. Fast, safe, and free random text chat worldwide.",
-    images: ["/banterbird-logo.png"],
+    images: ["/logo_search.png"],
     creator: "@banterbird",
   },
   robots: {
@@ -148,7 +148,7 @@ export default function RootLayout({
         url: baseUrl,
         logo: {
           "@type": "ImageObject",
-          url: `${baseUrl}/banterbird-logo.png`,
+          url: `${baseUrl}/logo_search.png`,
           width: 1200,
           height: 630,
         },
