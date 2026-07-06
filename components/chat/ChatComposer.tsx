@@ -91,6 +91,8 @@ export function ChatComposer({ disabled, onSend, onTypingChange, onFocus, onBlur
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.96 }}
           disabled={!value.trim() || sending || disabled}
+          onMouseDown={(e) => e.preventDefault()}
+          onTouchStart={(e) => e.preventDefault()}
           onClick={() => void submit()}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-navy-900 text-white shadow-md transition enabled:hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-navy-100 dark:text-navy-950 dark:enabled:hover:bg-white"
           aria-label="Send message"
