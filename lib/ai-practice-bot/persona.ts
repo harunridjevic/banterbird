@@ -159,6 +159,7 @@ export function personaTiming(persona: BotPersona, settings?: BotSettings | null
     burstGapMs,
     idlePingMs: settings?.ghostPingMs ?? 45_000,
     idleSkipMs: settings?.ghostSkipMs ?? 20_000,
+    postSkipDelayMs: settings?.postSkipDelayMs ?? 3000,
   };
 }
 

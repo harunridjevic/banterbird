@@ -7,6 +7,7 @@ import {
   isAnnoyingConversation,
   isDryConversation,
   pickBoringSkipParting,
+  pickExcuseSkipParting,
   pickSkipParting,
   pickStrictSexualSkipParting,
 } from "@/lib/ai-practice-bot/memory";
@@ -35,11 +36,13 @@ export function shouldClientSkipChat(
   }
 
   if (n >= policy.maxUserTurnsBeforeSkip) {
-    return { skip: true, parting: pickSkipParting(seed) };
+    const useExcuse = Math.random() < policy.excuseSkipChance / 100;
+    return { skip: true, parting: useExcuse ? pickExcuseSkipParting(seed) : pickSkipParting(seed) };
   }
 
   if (isDryConversation(history) && n >= policy.drySkipMinUserTurns) {
-    return { skip: true, parting: pickBoringSkipParting("dry") };
+    const useExcuse = Math.random() < policy.excuseSkipChance / 100;
+    return { skip: true, parting: useExcuse ? pickExcuseSkipParting("dry") : pickBoringSkipParting("dry") };
   }
 
   return { skip: false, parting: null };

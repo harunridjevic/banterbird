@@ -177,6 +177,17 @@ export const SKIP_PARTINGS = [
   "chat dying lol bye im usually on here",
 ];
 
+export const EXCUSE_SKIP_PARTINGS = [
+  "gotta do something ttyl",
+  "busy rn catch u later",
+  "gotta go do something",
+  "have to do something real quick",
+  "something came up gotta go",
+  "gotta run ttyl",
+  "busy now catch u later",
+  "gotta handle something ttyl",
+];
+
 export function pickSkipParting(seed: string): string {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
@@ -235,6 +246,12 @@ export function pickStrictSexualSkipParting(seed = "sexual"): string {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return STRICT_SEXUAL_SKIP_PARTINGS[h % STRICT_SEXUAL_SKIP_PARTINGS.length] ?? STRICT_SEXUAL_SKIP_PARTINGS[0]!;
+}
+
+export function pickExcuseSkipParting(seed = "excuse"): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return EXCUSE_SKIP_PARTINGS[h % EXCUSE_SKIP_PARTINGS.length] ?? EXCUSE_SKIP_PARTINGS[0]!;
 }
 
 const HEATED_FALLBACKS = [

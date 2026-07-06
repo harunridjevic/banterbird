@@ -440,7 +440,17 @@ export default function OpsBotSettingsPage() {
                   min={0}
                   max={100}
                   step={1}
-                  onChange={(strictWeight) => patch({ strictWeight })}
+                  onChange={(strictWeight) => {
+                    const remaining = 100 - strictWeight;
+                    const totalOthers = botSettings.persuadableWeight + botSettings.hornyWeight;
+                    if (totalOthers === 0) {
+                      patch({ strictWeight, persuadableWeight: remaining / 2, hornyWeight: remaining / 2 });
+                    } else {
+                      const persuadableWeight = Math.round((botSettings.persuadableWeight / totalOthers) * remaining);
+                      const hornyWeight = remaining - persuadableWeight;
+                      patch({ strictWeight, persuadableWeight, hornyWeight });
+                    }
+                  }}
                 />
                 <SliderField
                   label="Persuadable %"
@@ -448,7 +458,17 @@ export default function OpsBotSettingsPage() {
                   min={0}
                   max={100}
                   step={1}
-                  onChange={(persuadableWeight) => patch({ persuadableWeight })}
+                  onChange={(persuadableWeight) => {
+                    const remaining = 100 - persuadableWeight;
+                    const totalOthers = botSettings.strictWeight + botSettings.hornyWeight;
+                    if (totalOthers === 0) {
+                      patch({ persuadableWeight, strictWeight: remaining / 2, hornyWeight: remaining / 2 });
+                    } else {
+                      const strictWeight = Math.round((botSettings.strictWeight / totalOthers) * remaining);
+                      const hornyWeight = remaining - strictWeight;
+                      patch({ persuadableWeight, strictWeight, hornyWeight });
+                    }
+                  }}
                 />
                 <SliderField
                   label="Horny %"
@@ -456,7 +476,17 @@ export default function OpsBotSettingsPage() {
                   min={0}
                   max={100}
                   step={1}
-                  onChange={(hornyWeight) => patch({ hornyWeight })}
+                  onChange={(hornyWeight) => {
+                    const remaining = 100 - hornyWeight;
+                    const totalOthers = botSettings.strictWeight + botSettings.persuadableWeight;
+                    if (totalOthers === 0) {
+                      patch({ hornyWeight, strictWeight: remaining / 2, persuadableWeight: remaining / 2 });
+                    } else {
+                      const strictWeight = Math.round((botSettings.strictWeight / totalOthers) * remaining);
+                      const persuadableWeight = remaining - strictWeight;
+                      patch({ hornyWeight, strictWeight, persuadableWeight });
+                    }
+                  }}
                 />
               </div>
             ) : null}
@@ -593,6 +623,15 @@ export default function OpsBotSettingsPage() {
                 onChange={(ghostSkipMs) => patch({ ghostSkipMs })}
               />
               <NumberField
+                label="Post-skip delay"
+                hint={`≈ ${(botSettings.postSkipDelayMs / 1000).toFixed(1)}s wait after excuse before chat ends`}
+                value={botSettings.postSkipDelayMs}
+                min={0}
+                max={60000}
+                step={500}
+                onChange={(postSkipDelayMs) => patch({ postSkipDelayMs })}
+              />
+              <NumberField
                 label="AI match delay min"
                 value={botSettings.aiMatchDelayMinMs}
                 min={0}
@@ -648,6 +687,15 @@ export default function OpsBotSettingsPage() {
                 max={100}
                 step={1}
                 onChange={(longChatSkipChance) => patch({ longChatSkipChance })}
+              />
+              <SliderField
+                label="Excuse skip chance %"
+                hint="When skipping, use excuse (gotta go) vs generic parting"
+                value={botSettings.excuseSkipChance}
+                min={0}
+                max={100}
+                step={1}
+                onChange={(excuseSkipChance) => patch({ excuseSkipChance })}
               />
               <NumberField
                 label="Session hint at (user turns)"

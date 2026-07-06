@@ -150,6 +150,7 @@ type LlmFetchResult = {
   raw: string | null;
   inputTokens?: number;
   outputTokens?: number;
+  rateLimited?: boolean;
 };
 
 async function fetchGeminiRaw(
@@ -185,6 +186,14 @@ async function fetchGeminiRaw(
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("Gemini error:", res.status, errText);
+    if (res.status === 429) {
+      void logError({
+        source: "/api/chat/ai-reply",
+        message: `Gemini rate limit error (429)`,
+        metadata: { status: res.status, body: errText.slice(0, 500) },
+      });
+      return { raw: null, rateLimited: true };
+    }
     return { raw: null };
   }
 
@@ -235,6 +244,14 @@ async function fetchGroqRaw(
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("Groq error:", res.status, errText);
+    if (res.status === 429) {
+      void logError({
+        source: "/api/chat/ai-reply",
+        message: `Groq rate limit error (429)`,
+        metadata: { status: res.status, body: errText.slice(0, 500) },
+      });
+      return { raw: null, rateLimited: true };
+    }
     void logError({
       source: "/api/chat/ai-reply",
       message: `Groq API error ${res.status}`,
@@ -281,6 +298,14 @@ async function fetchOpenAIRaw(
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("OpenAI error:", res.status, errText);
+    if (res.status === 429) {
+      void logError({
+        source: "/api/chat/ai-reply",
+        message: `OpenAI rate limit error (429)`,
+        metadata: { status: res.status, body: errText.slice(0, 500) },
+      });
+      return { raw: null, rateLimited: true };
+    }
     return { raw: null };
   }
 
@@ -341,6 +366,14 @@ async function callLlm(
   };
 
   const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
+  if (result.rateLimited) {
+    logProviderUsage({ raw: null }, false);
+    return {
+      action: "skip",
+      parting: null,
+      timing: personaTiming(persona, settings),
+    };
+  }
   if (result.raw) {
     const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
     if (parsed) {
@@ -354,6 +387,14 @@ async function callLlm(
 
   // Retry once on parse/network failure before any fallback.
   const retry = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
+  if (retry.rateLimited) {
+    logProviderUsage({ raw: null }, false);
+    return {
+      action: "skip",
+      parting: null,
+      timing: personaTiming(persona, settings),
+    };
+  }
   if (retry.raw) {
     const parsed = parseModelTurn(retry.raw, history, persona, memory, settings);
     if (parsed) {

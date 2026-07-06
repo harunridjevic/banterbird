@@ -21,6 +21,7 @@ export type BotApiBody = {
     burstGapMs?: number;
     idlePingMs?: number;
     idleSkipMs?: number;
+    postSkipDelayMs?: number;
   };
 };
 
@@ -113,6 +114,10 @@ export async function executeBotTurn(opts: {
           : null;
       if (parting) {
         await deliverLines([parting], scale, 0, setPeerTyping, client, roomId, onError, shouldAbort);
+        const postSkipDelay = body.timing?.postSkipDelayMs ?? 3000;
+        if (postSkipDelay > 0) {
+          await sleep(postSkipDelay, shouldAbort);
+        }
       } else {
         await sleep(500 + Math.random() * 1400, shouldAbort);
         setPeerTyping(true);

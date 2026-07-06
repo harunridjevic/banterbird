@@ -47,6 +47,7 @@ export type BotSettings = {
 
   ghostPingMs: number;
   ghostSkipMs: number;
+  postSkipDelayMs: number;
   /** Fixed wait before bot sends opener when user has not messaged yet. */
   openerDelayMode: "fixed" | "random";
   openerDelayMs: number;
@@ -60,6 +61,7 @@ export type BotSettings = {
   strictSexualSkipAt: number;
   longChatSkipAt: number;
   longChatSkipChance: number;
+  excuseSkipChance: number;
   sessionHintAt: number;
 
   llmTemperature: number;
@@ -98,6 +100,7 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
 
   ghostPingMs: 45_000,
   ghostSkipMs: 20_000,
+  postSkipDelayMs: 3000,
   openerDelayMode: "fixed",
   openerDelayMs: 5000,
   openerDelayMinMs: 3000,
@@ -110,6 +113,7 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   strictSexualSkipAt: 2,
   longChatSkipAt: 12,
   longChatSkipChance: 12,
+  excuseSkipChance: 50,
   sessionHintAt: 5,
 
   llmTemperature: 1.08,
@@ -133,6 +137,7 @@ export type SessionPolicy = Pick<
   | "strictSexualSkipAt"
   | "longChatSkipAt"
   | "longChatSkipChance"
+  | "excuseSkipChance"
   | "sessionHintAt"
 >;
 
@@ -144,6 +149,7 @@ export function sessionPolicyFromSettings(settings?: BotSettings | null): Sessio
     strictSexualSkipAt: s.strictSexualSkipAt,
     longChatSkipAt: s.longChatSkipAt,
     longChatSkipChance: s.longChatSkipChance,
+    excuseSkipChance: s.excuseSkipChance,
     sessionHintAt: s.sessionHintAt,
   };
 }
@@ -189,6 +195,7 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     replySpeed: clamp(merged.replySpeed, 0.55, 1.65),
     ghostPingMs: clamp(merged.ghostPingMs, 1000, 120_000),
     ghostSkipMs: clamp(merged.ghostSkipMs, 1000, 120_000),
+    postSkipDelayMs: clamp(merged.postSkipDelayMs, 0, 60_000),
     openerDelayMs: clamp(merged.openerDelayMs, 0, 60_000),
     openerDelayMinMs,
     openerDelayMaxMs,
@@ -199,6 +206,7 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     strictSexualSkipAt: clamp(Math.round(merged.strictSexualSkipAt), 1, 10),
     longChatSkipAt: clamp(Math.round(merged.longChatSkipAt), 1, 50),
     longChatSkipChance: clamp(merged.longChatSkipChance, 0, 100),
+    excuseSkipChance: clamp(merged.excuseSkipChance, 0, 100),
     sessionHintAt: clamp(Math.round(merged.sessionHintAt), 1, 30),
     llmTemperature: clamp(merged.llmTemperature, 0, 2),
     maxOutputTokens: clamp(Math.round(merged.maxOutputTokens), 64, 4096),

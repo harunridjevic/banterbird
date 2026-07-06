@@ -14,6 +14,7 @@ import {
   isUserLeavingConversation,
   midChatStubReply,
   pickBoringSkipParting,
+  pickExcuseSkipParting,
   pickGhostPing,
   pickGhostSkipParting,
   pickGoodbyeStayLine,
@@ -235,9 +236,10 @@ export function decideFallbackTurn(
     users.length >= policy.longChatSkipAt &&
     (isDryConversation(history) || Math.random() < policy.longChatSkipChance / 100)
   ) {
+    const useExcuse = Math.random() < policy.excuseSkipChance / 100;
     return withTiming(persona, {
       action: "skip",
-      parting: pickSkipParting(seed),
+      parting: useExcuse ? pickExcuseSkipParting(seed) : pickSkipParting(seed),
     }, settings);
   }
 
@@ -304,16 +306,18 @@ export function applySessionPolicy(
   const n = memory.userTurnCount;
 
   if (n >= policy.maxUserTurnsBeforeSkip) {
+    const useExcuse = Math.random() < policy.excuseSkipChance / 100;
     return withTiming(persona, {
       action: "skip",
-      parting: pickSkipParting(seed),
+      parting: useExcuse ? pickExcuseSkipParting(seed) : pickSkipParting(seed),
     }, settings);
   }
 
   if (dry && n >= policy.drySkipMinUserTurns) {
+    const useExcuse = Math.random() < policy.excuseSkipChance / 100;
     return withTiming(persona, {
       action: "skip",
-      parting: pickBoringSkipParting("dry"),
+      parting: useExcuse ? pickExcuseSkipParting("dry") : pickBoringSkipParting("dry"),
     }, settings);
   }
 
