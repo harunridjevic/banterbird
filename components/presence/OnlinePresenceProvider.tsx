@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useSupabase } from "@/app/providers";
 import { formatAuthError } from "@/lib/auth/ensure-anonymous-session";
@@ -21,6 +22,7 @@ const OnlinePresenceContext = createContext<OnlinePresenceCtx>({ onlineCount: 0 
 
 export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
   const { client, ready } = useSupabase();
+  const pathname = usePathname();
   const [onlineCount, setOnlineCount] = useState(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const leavingRef = useRef(false);
@@ -48,6 +50,8 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
     const pingHeartbeat = async () => {
       if (!sessionUserIdRef.current) return;
+      // Skip heartbeat if user is viewing ops analytics
+      if (pathname?.startsWith("/ops")) return;
       const { error } = await client.rpc("heartbeat_presence");
       if (error) console.error("Heartbeat error:", formatAuthError(error));
     };
@@ -77,8 +81,11 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
       channel.subscribe(async (status) => {
         if (cancelled || status !== "SUBSCRIBED") return;
-        await channel.track({ online_at: new Date().toISOString() });
-        await pingHeartbeat();
+        // Don't track presence if user is viewing ops analytics
+        if (!pathname?.startsWith("/ops")) {
+          await channel.track({ online_at: new Date().toISOString() });
+          await pingHeartbeat();
+        }
       });
     })();
 
