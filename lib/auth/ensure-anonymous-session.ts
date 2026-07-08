@@ -34,6 +34,16 @@ function isNetworkError(error: AuthError | null): boolean {
   return m.includes("failed to fetch") || m.includes("network");
 }
 
+/** DB rejected auth.uid() — common after ops reset deletes auth users while tabs stay open. */
+export function isStaleUserDbError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("foreign key constraint") ||
+    m.includes("user_heartbeats_user_id_fkey") ||
+    m.includes("violates foreign key")
+  );
+}
+
 async function signInFresh(client: SupabaseClient): Promise<EnsureSessionResult> {
   if (Date.now() < rateLimitedUntil) {
     const waitSec = Math.ceil((rateLimitedUntil - Date.now()) / 1000);

@@ -11,7 +11,6 @@ import {
   createGhostSchedule,
   disarmGhostSchedule,
   extendGhostPingDeadline,
-  pauseGhostSchedule,
   refreshGhostAfterForeground,
   isBotMessage,
   type GhostScheduleContext,
@@ -79,7 +78,6 @@ export function ChatRoom({ roomId }: Props) {
   const aiBusyRef = useRef(false);
   const skipEndingRef = useRef(false);
   const abortBotTurnRef = useRef(false);
-  const resumeReplyAfterBackgroundRef = useRef(false);
   const flushReplyQueueRef = useRef<() => void>(() => {});
   const ghostCtxRef = useRef<(botMessageId?: string | null) => GhostScheduleContext>(() => ({
     schedule: ghostSchedule.current,
@@ -370,17 +368,7 @@ export function ChatRoom({ roomId }: Props) {
     const onPageHide = () => endRoomBeacon();
     const onBeforeUnload = () => endRoomBeacon();
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        abortBotTurnRef.current = true;
-        cancelOpener();
-        pauseGhostSchedule(ghostSchedule.current);
-        if (aiBusyRef.current || flushLockRef.current) {
-          resumeReplyAfterBackgroundRef.current = true;
-        }
-        return;
-      }
-
-      abortBotTurnRef.current = false;
+      if (document.visibilityState !== "visible") return;
 
       if (isAiRoomRef.current && ghostSchedule.current.armed && selfIdRef.current) {
         refreshGhostAfterForeground({
@@ -388,27 +376,6 @@ export function ChatRoom({ roomId }: Props) {
           selfId: selfIdRef.current,
         });
       }
-
-      if (!resumeReplyAfterBackgroundRef.current) return;
-      resumeReplyAfterBackgroundRef.current = false;
-
-      const self = selfIdRef.current;
-      if (!self || !isAiRoomRef.current) return;
-      const snapshot = messagesRef.current;
-      const lastUser = [...snapshot].reverse().find((m) => !isBotMessage(m) && m.user_id === self);
-      if (!lastUser || lastUser.id.startsWith("temp-")) return;
-      if (answeredHumanIdsRef.current.has(lastUser.id)) return;
-
-      const lastBot = [...snapshot].reverse().find((m) => isBotMessage(m));
-      const lastBotIdx = lastBot ? snapshot.findIndex((m) => m.id === lastBot.id) : -1;
-      const userAfterBot = snapshot
-        .slice(lastBotIdx + 1)
-        .some((m) => !isBotMessage(m) && m.user_id === self);
-      if (!userAfterBot) return;
-
-      answeredHumanIdsRef.current.add(lastUser.id);
-      replyQueueRef.current = [lastUser.id];
-      flushReplyQueueRef.current();
     };
 
     window.addEventListener("pagehide", onPageHide);
@@ -781,7 +748,6 @@ export function ChatRoom({ roomId }: Props) {
     if (!ready || !isAiRoom || loading || !selfId || exitInFlightRef.current || skipEndingRef.current) return;
     if (aiBusyRef.current || flushLockRef.current || peerTyping) return;
     if (ghostSchedule.current.armed || ghostSchedule.current.pingSentAt !== null) return;
-    if (document.visibilityState === "hidden") return;
 
     const last = messages[messages.length - 1];
     if (!last || !isBotMessage(last) || last.id.startsWith("temp-")) return;

@@ -245,8 +245,8 @@ export function armGhostSchedule(ctx: GhostScheduleContext) {
 }
 
 /**
- * After returning from background: never fire overdue pings immediately.
- * Give a fresh idle window so brief Android app switches don't trigger "hello??".
+ * After returning from background: re-schedule from stored deadlines. Overdue
+ * timers fire immediately instead of resetting the idle window.
  */
 export function refreshGhostAfterForeground(ctx: GhostScheduleContext) {
   if (!ctx.isActive() || !ctx.schedule.armed || !ctx.selfId) return;
@@ -256,19 +256,13 @@ export function refreshGhostAfterForeground(ctx: GhostScheduleContext) {
     return;
   }
 
-  const s = ctx.schedule;
-  const ghostPingMs = ctx.ghostPingMs ?? GHOST_PING_MS;
-  const ghostSkipMs = ctx.ghostSkipMs ?? GHOST_SKIP_MS;
+  pauseGhostSchedule(ctx.schedule);
 
-  pauseGhostSchedule(s);
-
-  if (s.pingSentAt === null) {
-    s.pingDeadline = Date.now() + ghostPingMs;
+  if (ctx.schedule.pingSentAt === null) {
     schedulePingTimer(ctx);
     return;
   }
 
-  s.skipDeadline = Date.now() + ghostSkipMs;
   scheduleSkipTimer(ctx);
 }
 

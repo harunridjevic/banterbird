@@ -1,34 +1,15 @@
-/** Promise that resolves when the tab becomes visible again. */
-export function waitUntilVisible(): Promise<void> {
-  if (typeof document === "undefined" || document.visibilityState !== "hidden") {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const onVisible = () => {
-      if (document.visibilityState === "hidden") return;
-      document.removeEventListener("visibilitychange", onVisible);
-      resolve();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-  });
-}
-
 /**
- * Delay that pauses while the tab is hidden (mobile background).
- * Does not count background time toward the delay.
+ * Wall-clock delay. Keeps counting while the tab is hidden or the app is backgrounded
+ * (timers may be throttled, but elapsed time catches up when the tab wakes).
  */
 export async function delayMs(totalMs: number, shouldAbort?: () => boolean): Promise<void> {
-  let remaining = totalMs;
-  while (remaining > 0) {
+  const deadline = Date.now() + totalMs;
+  while (true) {
     if (shouldAbort?.()) {
       throw new Error("aborted");
     }
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-      await waitUntilVisible();
-      continue;
-    }
-    const step = Math.min(remaining, 280);
-    await new Promise<void>((resolve) => window.setTimeout(resolve, step));
-    remaining -= step;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, Math.min(remaining, 280)));
   }
 }

@@ -12,16 +12,12 @@ import {
   periodLabel,
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
+import { fmtDurationMinutes } from "@/lib/ops/format-duration";
 import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 function fmtNum(n: number | null | undefined, suffix = ""): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "-";
   return `${n}${suffix}`;
-}
-
-function fmtMinutes(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "-";
-  return n.toFixed(2);
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -172,7 +168,7 @@ export default function OpsAnalyticsPage() {
 
   useEffect(() => {
     if (!unlocked) return;
-    const id = setInterval(() => void load(true), 15_000);
+    const id = setInterval(() => void load(true), 5_000);
     return () => clearInterval(id);
   }, [unlocked, load]);
 
@@ -353,12 +349,12 @@ export default function OpsAnalyticsPage() {
                     />
                     <MetricCard
                       label="Avg time per user"
-                      value={`${fmtMinutes(snapshot.avgUserSessionMinutes)} min`}
+                      value={fmtDurationMinutes(snapshot.avgUserSessionMinutes)}
                       tooltip={METRIC_TOOLTIPS.avgUserSessionMinutes}
                     />
                     <MetricCard
                       label="Total time (all users)"
-                      value={`${fmtMinutes(snapshot.totalUserSessionMinutes)} min`}
+                      value={fmtDurationMinutes(snapshot.totalUserSessionMinutes)}
                       tooltip={METRIC_TOOLTIPS.totalUserSessionMinutes}
                       accent="violet"
                     />

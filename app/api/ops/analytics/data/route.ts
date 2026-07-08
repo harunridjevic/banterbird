@@ -4,9 +4,15 @@ import { COOKIE_NAME, cookieSecret, verifyAnalyticsCookie } from "@/lib/ops/anal
 import { analyticsPasswordConfigured } from "@/lib/ops/analytics-password";
 import {
   type AnalyticsPeriod,
+  type AnalyticsSnapshot,
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+
+type SessionMinutesRow = {
+  avg_minutes: number | null;
+  total_minutes: number;
+};
 
 export async function GET(req: Request) {
   if (!analyticsPasswordConfigured()) {
@@ -45,7 +51,21 @@ export async function GET(req: Request) {
       console.error("ops_analytics_snapshot", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ snapshot: data });
+
+    const snapshot = data as AnalyticsSnapshot;
+    const { data: timeRows, error: timeErr } = await admin.rpc("ops_user_session_minutes", {
+      p_since: snapshot.sinceUtc,
+      p_except: null,
+    });
+    if (!timeErr && Array.isArray(timeRows) && timeRows.length > 0) {
+      const row = timeRows[0] as SessionMinutesRow;
+      snapshot.avgUserSessionMinutes = row.avg_minutes;
+      snapshot.totalUserSessionMinutes = row.total_minutes;
+    } else if (timeErr) {
+      console.error("ops_user_session_minutes", timeErr);
+    }
+
+    return NextResponse.json({ snapshot });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Server error";
     if (msg.includes("SUPABASE_SERVICE_ROLE_KEY")) {
