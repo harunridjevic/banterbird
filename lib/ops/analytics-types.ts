@@ -64,7 +64,7 @@ export const METRIC_TOOLTIPS = {
   uniqueUsers:
     "Distinct users who created a room or sent a message during the selected time window (UTC).",
   avgUserSessionMinutes:
-    "Average total time each user spent in all their rooms combined — from room open to close (or now if still active).",
+    "Average app-wide online time per user — accumulated from heartbeats while browsing (not only in rooms).",
   humanChats: "Rooms matched with a real person (is_ai_room = false).",
   botChats: "Practice bot rooms created when no human match was found.",
   totalRooms: "All rooms created during the selected window, human + bot.",
@@ -77,7 +77,7 @@ export const METRIC_TOOLTIPS = {
   recurringUsers:
     "Users who visited or chatted on 2 or more different calendar days (UTC) in the window.",
   totalUserSessionMinutes:
-    "Combined time all users spent in rooms during the window — sum of every room session.",
+    "Combined app-wide online time for all users — accumulated from heartbeats while browsing (not only in rooms).",
   bounceRate:
     "Share of new users (first-ever chat started in this period) who finished that chat and never opened another. Not total bot/human room count.",
   bouncedUsers:

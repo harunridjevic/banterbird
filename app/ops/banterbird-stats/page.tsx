@@ -12,10 +12,16 @@ import {
   periodLabel,
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
+import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 function fmtNum(n: number | null | undefined, suffix = ""): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "-";
   return `${n}${suffix}`;
+}
+
+function fmtMinutes(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
+  return n.toFixed(2);
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -45,6 +51,7 @@ const PERIODS: { id: AnalyticsPeriod; label: string }[] = [
 ];
 
 export default function OpsAnalyticsPage() {
+  const liveOnlineCount = useOnlineCount();
   const [password, setPassword] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -59,12 +66,15 @@ export default function OpsAnalyticsPage() {
 
   const days = resolvePeriodDays(period, customDays);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     setError(null);
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const qs = new URLSearchParams({ period, days: String(days) });
-      const res = await fetch(`/api/ops/analytics/data?${qs}`, { method: "GET" });
+      const res = await fetch(`/api/ops/analytics/data?${qs}`, {
+        method: "GET",
+        cache: "no-store",
+      });
       if (res.status === 401) {
         setUnlocked(false);
         setSnapshot(null);
@@ -81,7 +91,7 @@ export default function OpsAnalyticsPage() {
     } catch {
       setError("Network error");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [period, days]);
 
@@ -162,7 +172,7 @@ export default function OpsAnalyticsPage() {
 
   useEffect(() => {
     if (!unlocked) return;
-    const id = setInterval(() => void load(), 60_000);
+    const id = setInterval(() => void load(true), 15_000);
     return () => clearInterval(id);
   }, [unlocked, load]);
 
@@ -326,7 +336,7 @@ export default function OpsAnalyticsPage() {
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <MetricCard
                       label="Online now"
-                      value={fmtNum(snapshot.onlineUsersNow)}
+                      value={fmtNum(liveOnlineCount)}
                       tooltip={METRIC_TOOLTIPS.onlineUsersNow}
                       accent="emerald"
                     />
@@ -343,12 +353,12 @@ export default function OpsAnalyticsPage() {
                     />
                     <MetricCard
                       label="Avg time per user"
-                      value={`${fmtNum(snapshot.avgUserSessionMinutes)} min`}
+                      value={`${fmtMinutes(snapshot.avgUserSessionMinutes)} min`}
                       tooltip={METRIC_TOOLTIPS.avgUserSessionMinutes}
                     />
                     <MetricCard
                       label="Total time (all users)"
-                      value={`${fmtNum(snapshot.totalUserSessionMinutes)} min`}
+                      value={`${fmtMinutes(snapshot.totalUserSessionMinutes)} min`}
                       tooltip={METRIC_TOOLTIPS.totalUserSessionMinutes}
                       accent="violet"
                     />

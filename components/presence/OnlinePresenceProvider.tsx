@@ -34,6 +34,7 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     leavingRef.current = false;
     sessionUserIdRef.current = null;
+    const isOpsPage = pathname?.startsWith("/ops") ?? false;
 
     const leaveOnline = () => {
       if (leavingRef.current) return;
@@ -49,10 +50,20 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
     };
 
     const pingHeartbeat = async () => {
-      if (!sessionUserIdRef.current) return;
-      const isOps = pathname?.startsWith("/ops") ?? false;
-      const { error } = await client.rpc("heartbeat_presence", { p_is_ops: isOps });
-      if (error) console.error("Heartbeat error:", formatAuthError(error));
+      if (!sessionUserIdRef.current) {
+        // Self-heal: anonymous session creation can race initial load on some pages.
+        // Re-check auth so heartbeats still run while idling on the main app.
+        const { data: { user } } = await client.auth.getUser();
+        if (!user?.id) return;
+        sessionUserIdRef.current = user.id;
+      }
+      const { error } = await client.rpc("heartbeat_presence", { p_is_ops: isOpsPage });
+      if (error) {
+        const msg = formatAuthError(error);
+        // Transient during tab/network disconnect; avoid noisy console errors.
+        if (msg.toLowerCase().includes("disconnected")) return;
+        console.error("Heartbeat error:", msg);
+      }
     };
 
     void (async () => {
@@ -80,14 +91,17 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
       channel.subscribe(async (status) => {
         if (cancelled || status !== "SUBSCRIBED") return;
-        await channel.track({ online_at: new Date().toISOString() });
+        // In ops, only observe presence (don't track self).
+        if (!isOpsPage) {
+          await channel.track({ online_at: new Date().toISOString() });
+        }
         await pingHeartbeat();
       });
     })();
 
     const heartbeat = setInterval(() => {
       if (!cancelled && !leavingRef.current) void pingHeartbeat();
-    }, 60_000);
+    }, 30_000);
 
     const onPageHide = () => leaveOnline();
     const onBeforeUnload = () => leaveOnline();
