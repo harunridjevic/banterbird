@@ -7,7 +7,6 @@ import {
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import { createClient } from "@/utils/supabase/server";
 
 export async function GET(req: Request) {
   if (!analyticsPasswordConfigured()) {
@@ -36,13 +35,11 @@ export async function GET(req: Request) {
 
   try {
     const admin = createServiceRoleClient();
-    const client = createClient(cookieStore);
-    const { data: { user } } = await client.auth.getUser();
-    const currentUserId = user?.id || null;
     const { data, error } = await admin.rpc("ops_analytics_snapshot", {
       p_days: days,
       p_calendar_today: period === "today",
-      p_current_user_id: currentUserId,
+      // Viewer exclusion is handled inside the snapshot via `user_heartbeats.is_ops`.
+      p_current_user_id: null,
     });
     if (error) {
       console.error("ops_analytics_snapshot", error);

@@ -12,7 +12,6 @@ import {
   periodLabel,
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
-import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 function fmtNum(n: number | null | undefined, suffix = ""): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "-";
@@ -46,7 +45,6 @@ const PERIODS: { id: AnalyticsPeriod; label: string }[] = [
 ];
 
 export default function OpsAnalyticsPage() {
-  const liveOnlineCount = useOnlineCount();
   const [password, setPassword] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -328,7 +326,7 @@ export default function OpsAnalyticsPage() {
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <MetricCard
                       label="Online now"
-                      value={fmtNum(liveOnlineCount)}
+                      value={fmtNum(snapshot.onlineUsersNow)}
                       tooltip={METRIC_TOOLTIPS.onlineUsersNow}
                       accent="emerald"
                     />

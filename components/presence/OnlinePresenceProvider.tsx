@@ -50,9 +50,8 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
     const pingHeartbeat = async () => {
       if (!sessionUserIdRef.current) return;
-      // Skip heartbeat if user is viewing ops analytics
-      if (pathname?.startsWith("/ops")) return;
-      const { error } = await client.rpc("heartbeat_presence");
+      const isOps = pathname?.startsWith("/ops") ?? false;
+      const { error } = await client.rpc("heartbeat_presence", { p_is_ops: isOps });
       if (error) console.error("Heartbeat error:", formatAuthError(error));
     };
 
@@ -81,11 +80,8 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
       channel.subscribe(async (status) => {
         if (cancelled || status !== "SUBSCRIBED") return;
-        // Don't track presence if user is viewing ops analytics
-        if (!pathname?.startsWith("/ops")) {
-          await channel.track({ online_at: new Date().toISOString() });
-          await pingHeartbeat();
-        }
+        await channel.track({ online_at: new Date().toISOString() });
+        await pingHeartbeat();
       });
     })();
 
@@ -111,7 +107,7 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
         void client.removeChannel(ch);
       }
     };
-  }, [client, ready]);
+  }, [client, ready, pathname]);
 
   return (
     <OnlinePresenceContext.Provider value={{ onlineCount }}>

@@ -158,6 +158,9 @@ export async function executeBotTurn(opts: {
   } catch (e) {
     setPeerTyping(false);
     if (e instanceof BotTurnAbortedError) return "aborted";
+    // Some typing delays call `delayMs` directly and may throw the raw abort error.
+    // Treat it the same as an intentional bot-turn abort (tab hidden, navigation, etc).
+    if (e instanceof Error && e.message === "aborted") return "aborted";
     throw e;
   }
 }
