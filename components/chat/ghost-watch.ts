@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pickGhostPing, pickGhostSkipParting } from "@/lib/ai-practice-bot/memory";
-import { runHumanlikeTyping, typingDurationForReply } from "@/components/chat/typing";
+import { typeThenDeliver } from "@/components/chat/typing";
 
 export const GHOST_PING_MS = 45_000;
 export const GHOST_SKIP_MS = 20_000;
@@ -95,12 +95,13 @@ async function deliverGhostLine(
   line: string,
   setPeerTyping: (v: boolean) => void,
 ) {
-  await runHumanlikeTyping(setPeerTyping, typingDurationForReply(line), line.length);
-  const { error } = await client.rpc("insert_ai_chat_message", {
-    p_room_id: roomId,
-    p_content: line,
+  await typeThenDeliver(setPeerTyping, line, {}, async () => {
+    const { error } = await client.rpc("insert_ai_chat_message", {
+      p_room_id: roomId,
+      p_content: line,
+    });
+    if (error) throw new Error(error.message);
   });
-  if (error) throw new Error(error.message);
 }
 
 export type GhostScheduleContext = {
