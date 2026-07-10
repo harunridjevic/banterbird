@@ -1,11 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sanitizeBotChatLine } from "@/lib/ai-practice-bot/sanitize";
 import {
-  preTypingHesitation,
   readDelayBeforeReplyMs,
   readDelayOpenerMs,
-  runHumanlikeTyping,
-  typingDurationForReply,
+  typeThenDeliver,
   type TimingScale,
 } from "./typing";
 import { delayMs } from "@/lib/hooks/visibility-delay";
@@ -74,15 +72,16 @@ async function deliverLines(
   for (let i = 0; i < lines.length; i++) {
     if (shouldAbort?.()) throw new BotTurnAbortedError();
     const line = lines[i]!;
-    await preTypingHesitation(scale, shouldAbort);
-    await runHumanlikeTyping(
+    await typeThenDeliver(
       setPeerTyping,
-      typingDurationForReply(line, scale),
-      line.length,
+      line,
+      scale,
+      async () => {
+        const err = await insertBotLine(client, roomId, line);
+        if (err) onError(err.message);
+      },
       shouldAbort,
     );
-    const err = await insertBotLine(client, roomId, line);
-    if (err) onError(err.message);
     if (i < lines.length - 1 && burstGapMs > 0) {
       await sleep(burstGapMs + Math.random() * 420, shouldAbort);
     }
@@ -119,9 +118,9 @@ export async function executeBotTurn(opts: {
           await sleep(postSkipDelay, shouldAbort);
         }
       } else {
-        await sleep(500 + Math.random() * 1400, shouldAbort);
+        const pauseMs = Math.round(500 + Math.random() * 1400);
         setPeerTyping(true);
-        await sleep(650 + Math.random() * 1700, shouldAbort);
+        await sleep(pauseMs, shouldAbort);
         setPeerTyping(false);
       }
       return "skip";

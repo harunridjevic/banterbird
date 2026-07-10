@@ -250,6 +250,13 @@ export function ChatRoom({ roomId }: Props) {
     }
 
     const meIsUserA = room.user_a === session.user.id;
+
+    const msgsPromise = client
+      .from("messages")
+      .select("id,room_id,user_id,content,created_at,is_from_ai")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: true });
+
     setPeerId(meIsUserA ? room.user_b : room.user_a);
     if (isAi && meIsUserA) {
       setPeerGender((room.user_b_gender as SelfGender | null) ?? (room.bot_gender as SelfGender | null) ?? null);
@@ -257,11 +264,7 @@ export function ChatRoom({ roomId }: Props) {
       setPeerGender((meIsUserA ? room.user_b_gender : room.user_a_gender) ?? null);
     }
 
-    const { data: msgs, error: msgErr } = await client
-      .from("messages")
-      .select("id,room_id,user_id,content,created_at,is_from_ai")
-      .eq("room_id", roomId)
-      .order("created_at", { ascending: true });
+    const { data: msgs, error: msgErr } = await msgsPromise;
 
     if (msgErr) {
       setPeerId(null);

@@ -7,10 +7,12 @@ import {
 import {
   contextualFallbackReply,
   countSexualUserTurns,
+  filterRedundantSelfDisclosure,
   isAggressiveConversation,
   isAnnoyingConversation,
   isDryConversation,
   isGenericCannedLine,
+  isNonResponsiveBotReply,
   isUserLeavingConversation,
   midChatStubReply,
   pickBoringSkipParting,
@@ -21,6 +23,7 @@ import {
   pickLeavingSkipParting,
   pickSkipParting,
   pickStrictSexualSkipParting,
+  type BotSelfMemory,
   type UserMemory,
 } from "@/lib/ai-practice-bot/memory";
 import { sanitizeBotChatLine } from "@/lib/ai-practice-bot/sanitize";
@@ -88,6 +91,7 @@ export function parseModelTurn(
   persona: BotPersona,
   memory: UserMemory,
   settings?: BotSettings | null,
+  botSelf?: BotSelfMemory,
 ): AiPracticeTurnResult | null {
   let obj: unknown;
   try {
@@ -153,11 +157,16 @@ export function parseModelTurn(
         }
       }
       if (lines.length > 0) {
+        const self = botSelf ?? { disclosedAge: undefined, disclosedCountry: undefined };
+        lines = filterRedundantSelfDisclosure(lines, self, persona);
         const first = lines[0]!;
         const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
         const userAskedSomething =
           lastUser.includes("?") || lastUser.trim().split(/\s+/).length >= 3;
         if (userAskedSomething && isGenericCannedLine(first)) {
+          return null;
+        }
+        if (isNonResponsiveBotReply(first, lastUser)) {
           return null;
         }
         if (
@@ -200,13 +209,14 @@ export function decideFallbackTurn(
     }, settings);
   }
 
-  if (users.length === 0) {
+  if (users.length === 0 || !history.some((m) => m.role === "assistant")) {
     return withTiming(persona, {
       action: "reply",
       messages: contextualFallbackReply(
         history,
         memory,
         personaAllowsSexualChat(persona, memory.sexualVibe),
+        persona.flirtyStarter,
       ),
     }, settings);
   }

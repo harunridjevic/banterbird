@@ -7,7 +7,17 @@ import {
   PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT,
 } from "@/lib/ai-practice-bot/instructions";
 import { shouldUseLocalReply } from "@/lib/ai-practice-bot/llm-routing";
-import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock, isUserLeavingConversation, midChatStubReply } from "@/lib/ai-practice-bot/memory";
+import {
+  buildUserMemory,
+  buildBotSelfMemory,
+  contextualFallbackReply,
+  filterRedundantSelfDisclosure,
+  formatBotSelfMemoryBlock,
+  formatUserMemoryBlock,
+  isUserLeavingConversation,
+  midChatStubReply,
+  type BotSelfMemory,
+} from "@/lib/ai-practice-bot/memory";
 import {
   buildBotPersona,
   formatPersonaPrompt,
@@ -103,8 +113,8 @@ function geminiSystemPrompt(
   if (!isOpener) return base;
   const opener =
     flirtyStarter && chatMode === "flirty"
-      ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi. messages array.'
-      : 'Opening turn (user msg is only "."): casual friendly hi. messages array.';
+      ? 'Opening turn: use a short flirty/suggestive hi from your persona. Never mirror their greeting. messages array.'
+      : 'Opening turn: use a short casual hi from your persona. Never say "hello back" or mirror their greeting. messages array.';
   return `${base}\n\n${opener}`;
 }
 
@@ -328,6 +338,7 @@ async function callLlm(
   settings?: BotSettings | null,
   logCtx?: { roomId: string; userId: string },
   isOpener?: boolean,
+  botSelf?: BotSelfMemory,
 ): Promise<AiPracticeTurnResult> {
   const hasUserTurn = history.some((m) => m.role === "user");
   const opener = isOpener ?? !hasUserTurn;
@@ -375,7 +386,7 @@ async function callLlm(
     };
   }
   if (result.raw) {
-    const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
+    const parsed = parseModelTurn(result.raw, history, persona, memory, settings, botSelf);
     if (parsed) {
       logProviderUsage(result, true);
       return parsed;
@@ -396,7 +407,7 @@ async function callLlm(
     };
   }
   if (retry.raw) {
-    const parsed = parseModelTurn(retry.raw, history, persona, memory, settings);
+    const parsed = parseModelTurn(retry.raw, history, persona, memory, settings, botSelf);
     if (parsed) {
       logProviderUsage(retry, true);
       return parsed;
@@ -468,19 +479,22 @@ export async function POST(req: Request) {
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
     const historyLimit = botSettings.llmHistoryTurns;
-    const memory = buildUserMemory(history);
     const trimmedHistory = history.slice(-historyLimit);
+    const memory = buildUserMemory(trimmedHistory);
+    const botSelf = buildBotSelfMemory(trimmedHistory, persona);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
+    const botSelfBlock = formatBotSelfMemoryBlock(botSelf, persona);
     const sessionBlock = [
       sessionContextOverlay(memory, persona, botSettings),
       isUserLeavingConversation(trimmedHistory) ? goodbyeContextOverlay() : "",
+      botSelfBlock,
     ]
       .filter(Boolean)
       .join("\n");
     const personaBlock = useCompactPrompts()
       ? formatPersonaPromptCompact(persona)
       : formatPersonaPrompt(persona);
-    const isOpener = !trimmedHistory.some((m) => m.role === "user");
+    const isOpener = !trimmedHistory.some((m) => m.role === "assistant");
 
     const logLocal = () => {
       void logApiUsage({
@@ -545,7 +559,7 @@ export async function POST(req: Request) {
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,
       userId: user.id,
-    }, isOpener);
+    }, isOpener, botSelf);
 
     result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger, botSettings);
 

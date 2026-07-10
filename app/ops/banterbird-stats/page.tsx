@@ -58,6 +58,7 @@ export default function OpsAnalyticsPage() {
   const [period, setPeriod] = useState<AnalyticsPeriod>("month");
   const [customDays, setCustomDays] = useState(30);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState("");
   const [isCheckingCookie, setIsCheckingCookie] = useState(true);
 
   const days = resolvePeriodDays(period, customDays);
@@ -132,6 +133,7 @@ export default function OpsAnalyticsPage() {
       }
       const j = (await res.json()) as { usersDeleted?: number };
       setConfirmReset(false);
+      setResetConfirmText("");
       setResetMsg(`All test data reset. ${j.usersDeleted ?? 0} auth users removed.`);
       await load();
     } catch {
@@ -288,11 +290,21 @@ export default function OpsAnalyticsPage() {
                   Reset test data
                 </button>
               ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-rose-300">Delete all rooms, messages, users?</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-rose-300">
+                    Type <strong>RESET</strong> to delete all rooms, messages, and users.
+                  </span>
+                  <input
+                    type="text"
+                    value={resetConfirmText}
+                    onChange={(e) => setResetConfirmText(e.target.value)}
+                    placeholder="Type RESET"
+                    disabled={resetting}
+                    className="rounded-lg border border-rose-500/30 bg-rose-950/20 px-3 py-1.5 text-sm text-white placeholder:text-rose-400/50 focus:border-rose-400 focus:outline-none disabled:opacity-50"
+                  />
                   <button
                     type="button"
-                    disabled={resetting}
+                    disabled={resetting || resetConfirmText !== "RESET"}
                     onClick={() => void resetData()}
                     className="rounded-xl bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
                   >
@@ -301,7 +313,10 @@ export default function OpsAnalyticsPage() {
                   <button
                     type="button"
                     disabled={resetting}
-                    onClick={() => setConfirmReset(false)}
+                    onClick={() => {
+                      setConfirmReset(false);
+                      setResetConfirmText("");
+                    }}
                     className="text-sm text-navy-400 hover:text-navy-200"
                   >
                     Cancel
