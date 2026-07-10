@@ -50,7 +50,115 @@ function extractAge(line: string): { age?: number; tag?: string } {
     const age = Number.parseInt(bare[1]!, 10);
     if (age >= 15 && age <= 99) return { age };
   }
+  const wordAge = extractWordAge(line);
+  if (wordAge) return { age: wordAge };
   return {};
+}
+
+const WORD_AGE_MAP: Record<string, number> = {
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  twentyone: 21,
+  twentytwo: 22,
+  twentythree: 23,
+  twentyfour: 24,
+  twentyfive: 25,
+  twentysix: 26,
+  twentyseven: 27,
+  twentyeight: 28,
+  twentynine: 29,
+  thirty: 30,
+  thirtyone: 31,
+  thirtytwo: 32,
+  thirtythree: 33,
+  thirtyfour: 34,
+  thirtyfive: 35,
+};
+
+function extractWordAge(line: string): number | undefined {
+  const normalized = line.toLowerCase().replace(/[\s'-]+/g, "");
+  for (const [word, age] of Object.entries(WORD_AGE_MAP)) {
+    if (normalized.includes(word)) return age;
+  }
+  return undefined;
+}
+
+export type BotSelfMemory = {
+  disclosedAge?: number;
+  disclosedCountry?: string;
+};
+
+export function buildBotSelfMemory(
+  history: ChatTurn[],
+  persona: BotPersona,
+): BotSelfMemory {
+  const self: BotSelfMemory = {};
+  for (const turn of history) {
+    if (turn.role !== "assistant") continue;
+    const line = turn.content;
+    const ageInfo = extractAge(line);
+    if (ageInfo.age) self.disclosedAge = ageInfo.age;
+    const country = extractCountry(line);
+    if (country) self.disclosedCountry = country;
+    if (persona.country && line.toLowerCase().includes(persona.country.toLowerCase())) {
+      self.disclosedCountry = persona.country;
+    }
+  }
+  return self;
+}
+
+export function formatBotSelfMemoryBlock(
+  self: BotSelfMemory,
+  persona: BotPersona,
+): string {
+  const parts: string[] = [];
+  if (self.disclosedAge) parts.push(`your age (${self.disclosedAge})`);
+  if (self.disclosedCountry) parts.push(`where you're from (${self.disclosedCountry})`);
+
+  if (parts.length === 0) {
+    return [
+      `Your identity: ${persona.genderTag} from ${persona.country}.`,
+      "Share age or location only when they ask — once each per chat, never volunteer the same fact twice.",
+    ].join(" ");
+  }
+
+  return [
+    `Already told them this chat — DO NOT repeat: ${parts.join(", ")}.`,
+    'If they ask again, tease ("lol i already said") instead of re-stating the same number.',
+    "You may share NEW facts you have not mentioned yet, but never re-introduce age/location you already gave.",
+  ].join(" ");
+}
+
+function lineMentionsAge(line: string): boolean {
+  return extractAge(line).age !== undefined;
+}
+
+function lineMentionsCountry(line: string, persona: BotPersona): boolean {
+  if (extractCountry(line)) return true;
+  return persona.country
+    ? line.toLowerCase().includes(persona.country.toLowerCase())
+    : false;
+}
+
+/** Drop reply lines that re-state age/location the bot already shared. */
+export function filterRedundantSelfDisclosure(
+  lines: string[],
+  self: BotSelfMemory,
+  persona: BotPersona,
+): string[] {
+  if (!self.disclosedAge && !self.disclosedCountry) return lines;
+
+  const filtered = lines.filter((line) => {
+    if (self.disclosedAge && lineMentionsAge(line)) return false;
+    if (self.disclosedCountry && lineMentionsCountry(line, persona)) return false;
+    return true;
+  });
+
+  return filtered.length > 0 ? filtered : lines;
 }
 
 function extractCountry(line: string): string | undefined {
@@ -286,8 +394,50 @@ export function isGenericCannedLine(text: string): boolean {
       "nothin'",
       "nothin",
       "nothing",
+      "say more",
+      "lol what",
+      "hm?",
     ].includes(t)
   );
+}
+
+/** User is reacting/acknowledging ("that's cool", "nice", "lol yeah") — not being vague. */
+export function isUserReactionOrAck(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[!?.]+$/g, "").trim();
+  if (!t || t.length > 32) return false;
+  if (/^(that'?s\s+)?(cool|nice|sweet|sick|dope|fair|wild|great|awesome|amazing|lit|valid)\b/.test(t)) {
+    return true;
+  }
+  if (
+    /^(oh\s+)?(nice|cool|ok|okay|yeah|yea|yep|lol|haha|same|true|bet|fr|mhm|ikr|right|for\s+sure|totally)(\s|$)/.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+const NON_RESPONSIVE_BOT_LINES = new Set([
+  "say more",
+  "say more?",
+  "lol what",
+  "hm?",
+  "what",
+  "huh",
+  "huh?",
+]);
+
+/** Bot line that ignores what the user actually said (e.g. "say more" after "that's cool"). */
+export function isNonResponsiveBotReply(botLine: string, lastUser: string): boolean {
+  const bot = botLine.trim().toLowerCase();
+  if (!NON_RESPONSIVE_BOT_LINES.has(bot)) return false;
+  if (isUserReactionOrAck(lastUser)) return true;
+  const user = lastUser.trim();
+  if (!user.includes("?") && user.split(/\s+/).length <= 4 && !detectSexualVibe(user)) {
+    return true;
+  }
+  return false;
 }
 
 export function contextualFallbackReply(
@@ -326,13 +476,24 @@ export function midChatStubReply(history: ChatTurn[], allowSexual: boolean): str
     const heated = ["lol ur bold", "mm ok", "damn ok tell me more"];
     return [heated[h % heated.length] ?? "lol ur bold"];
   }
+  if (isUserReactionOrAck(t)) {
+    const replies = [
+      "lol yeah wbu",
+      "mhm what r u into",
+      "lol u seem chill",
+      "nice lol what do u do for fun",
+      "yeah fr",
+      "lol fair what about u",
+    ];
+    return [replies[h % replies.length] ?? "lol yeah wbu"];
+  }
   if (/\?$/.test(t) || lower.includes("what") || lower.includes("why") || lower.includes("how")) {
     const replies = ["hm idk wbu", "lol good question", "wait what do u mean"];
     return [replies[h % replies.length] ?? "hm idk wbu"];
   }
   if (t.length <= 12) {
-    const replies = ["lol what", "hm?", "say more"];
-    return [replies[h % replies.length] ?? "lol what"];
+    const replies = ["mhm", "lol fair", "yeah"];
+    return [replies[h % replies.length] ?? "mhm"];
   }
   const replies = ["lol fair", "mhm", "yeah fr"];
   return [replies[h % replies.length] ?? "lol fair"];

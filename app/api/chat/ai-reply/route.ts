@@ -7,7 +7,17 @@ import {
   PRACTICE_BOT_SYSTEM_INSTRUCTIONS_COMPACT,
 } from "@/lib/ai-practice-bot/instructions";
 import { shouldUseLocalReply } from "@/lib/ai-practice-bot/llm-routing";
-import { buildUserMemory, contextualFallbackReply, formatUserMemoryBlock, isUserLeavingConversation, midChatStubReply } from "@/lib/ai-practice-bot/memory";
+import {
+  buildUserMemory,
+  buildBotSelfMemory,
+  contextualFallbackReply,
+  filterRedundantSelfDisclosure,
+  formatBotSelfMemoryBlock,
+  formatUserMemoryBlock,
+  isUserLeavingConversation,
+  midChatStubReply,
+  type BotSelfMemory,
+} from "@/lib/ai-practice-bot/memory";
 import {
   buildBotPersona,
   formatPersonaPrompt,
@@ -328,6 +338,7 @@ async function callLlm(
   settings?: BotSettings | null,
   logCtx?: { roomId: string; userId: string },
   isOpener?: boolean,
+  botSelf?: BotSelfMemory,
 ): Promise<AiPracticeTurnResult> {
   const hasUserTurn = history.some((m) => m.role === "user");
   const opener = isOpener ?? !hasUserTurn;
@@ -375,7 +386,7 @@ async function callLlm(
     };
   }
   if (result.raw) {
-    const parsed = parseModelTurn(result.raw, history, persona, memory, settings);
+    const parsed = parseModelTurn(result.raw, history, persona, memory, settings, botSelf);
     if (parsed) {
       logProviderUsage(result, true);
       return parsed;
@@ -396,7 +407,7 @@ async function callLlm(
     };
   }
   if (retry.raw) {
-    const parsed = parseModelTurn(retry.raw, history, persona, memory, settings);
+    const parsed = parseModelTurn(retry.raw, history, persona, memory, settings, botSelf);
     if (parsed) {
       logProviderUsage(retry, true);
       return parsed;
@@ -468,12 +479,15 @@ export async function POST(req: Request) {
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
     const historyLimit = botSettings.llmHistoryTurns;
-    const memory = buildUserMemory(history);
     const trimmedHistory = history.slice(-historyLimit);
+    const memory = buildUserMemory(trimmedHistory);
+    const botSelf = buildBotSelfMemory(trimmedHistory, persona);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
+    const botSelfBlock = formatBotSelfMemoryBlock(botSelf, persona);
     const sessionBlock = [
       sessionContextOverlay(memory, persona, botSettings),
       isUserLeavingConversation(trimmedHistory) ? goodbyeContextOverlay() : "",
+      botSelfBlock,
     ]
       .filter(Boolean)
       .join("\n");
@@ -545,7 +559,7 @@ export async function POST(req: Request) {
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,
       userId: user.id,
-    }, isOpener);
+    }, isOpener, botSelf);
 
     result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger, botSettings);
 
