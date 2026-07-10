@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { APP_VERSION } from "@/lib/version";
 
 const LEGAL_LINKS = [
   { href: "/legal/terms", label: "Terms", title: "Terms of Service" },
@@ -27,7 +28,7 @@ export function SiteFooter() {
           ))}
         </nav>
         <p className="shrink-0 whitespace-nowrap text-[10px] text-navy-400 sm:text-xs dark:text-navy-500">
-          v0.8.0
+          v{APP_VERSION}
         </p>
       </div>
     </footer>

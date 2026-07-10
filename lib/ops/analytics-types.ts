@@ -69,9 +69,9 @@ export const METRIC_TOOLTIPS = {
   botChats: "Practice bot rooms created when no human match was found.",
   totalRooms: "All rooms created during the selected window, human + bot.",
   avgHumanRoomMinutes:
-    "Average duration of human-human rooms — from created_at to ended_at (or now if still open).",
+    "Average duration of ended human-human rooms — from created_at to ended_at. Open rooms are excluded.",
   avgBotRoomMinutes:
-    "Average duration of AI practice rooms — from created_at to ended_at (or now if still open).",
+    "Average duration of ended AI practice rooms — from created_at to ended_at. Open rooms are excluded.",
   onlineUsersNow:
     "Live count from Supabase Realtime presence — same source as the main app navbar.",
   recurringUsers:

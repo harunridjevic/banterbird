@@ -1,6 +1,7 @@
 import type { ChatTurn } from "@/lib/ai-practice-bot/turn";
 
-/** Local/canned replies are only for the opening intro — never mid-conversation. */
-export function shouldUseLocalReply(_history: ChatTurn[], isOpener: boolean): boolean {
-  return isOpener;
+/** Local/canned replies for the bot's first message — never mid-conversation. */
+export function shouldUseLocalReply(history: ChatTurn[], isOpener: boolean): boolean {
+  if (isOpener) return true;
+  return !history.some((m) => m.role === "assistant");
 }

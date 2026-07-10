@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { useAgeGateSettings } from "@/lib/ops/bot-settings-provider";
 
 type Props = {
   minimumAge: number;
@@ -56,39 +57,30 @@ export function AgeGateModal({ minimumAge, onConfirm }: Props) {
 const AGE_CONFIRMED_KEY = "banterbird:ageConfirmed";
 
 export function useAgeGate() {
+  const ageGateSettings = useAgeGateSettings();
   const [required, setRequired] = useState(false);
-  const [minimumAge, setMinimumAge] = useState(18);
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        if (localStorage.getItem(AGE_CONFIRMED_KEY) === "1") {
-          setChecked(true);
-          return;
-        }
-        const res = await fetch("/api/settings/public");
-        if (!res.ok) {
-          setChecked(true);
-          return;
-        }
-        const data = (await res.json()) as { ageGate?: { enabled?: boolean; minimumAge?: number } };
-        if (data.ageGate?.enabled) {
-          setMinimumAge(data.ageGate.minimumAge ?? 18);
-          setRequired(true);
-        }
-      } catch {
-        // fail open if settings unavailable
-      } finally {
-        setChecked(true);
-      }
-    })();
-  }, []);
+    if (localStorage.getItem(AGE_CONFIRMED_KEY) === "1") {
+      setChecked(true);
+      return;
+    }
+    if (ageGateSettings.enabled) {
+      setRequired(true);
+    }
+    setChecked(true);
+  }, [ageGateSettings.enabled, ageGateSettings.minimumAge]);
 
   const confirm = () => {
     localStorage.setItem(AGE_CONFIRMED_KEY, "1");
     setRequired(false);
   };
 
-  return { required, minimumAge, checked, confirm };
+  return {
+    required,
+    minimumAge: ageGateSettings.minimumAge,
+    checked,
+    confirm,
+  };
 }

@@ -1,5 +1,6 @@
 import type { BotPersona } from "@/lib/ai-practice-bot/persona";
 import { personaAllowsSexualChat } from "@/lib/ai-practice-bot/persona";
+import { pickPredefinedGreeting } from "@/lib/ai-practice-bot/greetings";
 
 type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -293,6 +294,7 @@ export function contextualFallbackReply(
   history: ChatTurn[],
   memory: UserMemory,
   allowSexual: boolean,
+  flirtyStarter = false,
 ): string[] {
   const seed = history.map((m) => m.content).join("|") || "open";
   const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
@@ -304,10 +306,12 @@ export function contextualFallbackReply(
     return [HEATED_FALLBACKS[h % HEATED_FALLBACKS.length] ?? "mm tell me more"];
   }
 
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const openers = ["hey", "yo", "heyy", "sup", "hii", "hello"];
-  return [openers[h % openers.length] ?? "hey"];
+  const botHasSpoken = history.some((m) => m.role === "assistant");
+  if (!botHasSpoken) {
+    return [pickPredefinedGreeting(seed, flirtyStarter && allowSexual)];
+  }
+
+  return ["hey"];
 }
 
 /** Last-resort stub when the LLM fails mid-chat — not random one-word vibes. */

@@ -103,8 +103,8 @@ function geminiSystemPrompt(
   if (!isOpener) return base;
   const opener =
     flirtyStarter && chatMode === "flirty"
-      ? 'Opening turn (user msg is only "."): flirty/suggestive opener OR casual hi. messages array.'
-      : 'Opening turn (user msg is only "."): casual friendly hi. messages array.';
+      ? 'Opening turn: use a short flirty/suggestive hi from your persona. Never mirror their greeting. messages array.'
+      : 'Opening turn: use a short casual hi from your persona. Never say "hello back" or mirror their greeting. messages array.';
   return `${base}\n\n${opener}`;
 }
 
@@ -480,7 +480,7 @@ export async function POST(req: Request) {
     const personaBlock = useCompactPrompts()
       ? formatPersonaPromptCompact(persona)
       : formatPersonaPrompt(persona);
-    const isOpener = !trimmedHistory.some((m) => m.role === "user");
+    const isOpener = !trimmedHistory.some((m) => m.role === "assistant");
 
     const logLocal = () => {
       void logApiUsage({

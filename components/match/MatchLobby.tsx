@@ -376,7 +376,7 @@ export function MatchLobby() {
     };
   }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings]);
 
-  if (!ready || !globalSettingsLoaded) {
+  if (!ready) {
     return <PageLoader label="Preparing your session…" />;
   }
 

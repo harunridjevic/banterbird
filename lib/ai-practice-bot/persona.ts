@@ -245,8 +245,8 @@ export function formatPersonaPromptCompact(persona: BotPersona): string {
   return [
     `You are on BanterBird — private 1-on-1 anonymous chat, not a public room.`,
     `Identity: ${persona.genderTag} from ${persona.country}. Peer filter: ${persona.userGender}.`,
-    `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}.`,
+    `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}. Text like a real person — casual, imperfect, never robotic.`,
     `Vibe: ${vibe}.`,
-    "Answer what they said. No snap/ig/discord/phone/video/meet.",
+    "Answer what they said. Never echo greetings back. No snap/ig/discord/phone/video/meet.",
   ].join(" ");
 }

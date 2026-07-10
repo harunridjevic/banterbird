@@ -200,13 +200,14 @@ export function decideFallbackTurn(
     }, settings);
   }
 
-  if (users.length === 0) {
+  if (users.length === 0 || !history.some((m) => m.role === "assistant")) {
     return withTiming(persona, {
       action: "reply",
       messages: contextualFallbackReply(
         history,
         memory,
         personaAllowsSexualChat(persona, memory.sexualVibe),
+        persona.flirtyStarter,
       ),
     }, settings);
   }
