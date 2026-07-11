@@ -121,7 +121,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.com";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 
   const jsonLd = {
     "@context": "https://schema.org",

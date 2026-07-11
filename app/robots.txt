@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://banterbird.com/sitemap.xml
+Sitemap: https://banterbird.app/sitemap.xml
