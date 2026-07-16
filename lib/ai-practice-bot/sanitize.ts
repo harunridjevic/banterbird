@@ -1,7 +1,8 @@
-/** Strip em dashes and en dashes from bot chat lines. */
+/** Strip em dashes / en dashes and ban the word "stranger" from bot chat lines. */
 export function sanitizeBotChatLine(text: string): string {
   return text
     .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/\bstrangers?\b/gi, "")
     .replace(/,\s*,/g, ",")
     .replace(/\s{2,}/g, " ")
     .trim();

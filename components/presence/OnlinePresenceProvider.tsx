@@ -62,9 +62,23 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
     const teardownChannel = async () => {
       const ch = channelRef.current;
       channelRef.current = null;
-      if (!ch) return;
-      await ch.untrack();
-      await client.removeChannel(ch);
+      if (ch) {
+        try {
+          await ch.untrack();
+        } catch {
+          /* channel may already be closed */
+        }
+        await client.removeChannel(ch);
+      }
+
+      // Supabase reuses channels by topic — remove leftovers before re-subscribing
+      // so we never call .on("presence") after subscribe().
+      for (const existing of client.getChannels()) {
+        const topic = existing.topic ?? "";
+        if (topic === "realtime:banterbird-online" || topic.endsWith(":banterbird-online")) {
+          await client.removeChannel(existing);
+        }
+      }
     };
 
     const setupPresenceChannel = async (userId: string) => {
@@ -74,17 +88,16 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
       const channel = client.channel("banterbird-online", {
         config: { presence: { key: userId } },
       });
-      channelRef.current = channel;
 
-      channel.on("presence", { event: "sync" }, () => {
+      // Presence callbacks must be registered before subscribe().
+      const refreshCount = () => {
         if (!cancelled) setOnlineCount(Object.keys(channel.presenceState()).length);
-      });
-      channel.on("presence", { event: "join" }, () => {
-        if (!cancelled) setOnlineCount(Object.keys(channel.presenceState()).length);
-      });
-      channel.on("presence", { event: "leave" }, () => {
-        if (!cancelled) setOnlineCount(Object.keys(channel.presenceState()).length);
-      });
+      };
+      channel.on("presence", { event: "sync" }, refreshCount);
+      channel.on("presence", { event: "join" }, refreshCount);
+      channel.on("presence", { event: "leave" }, refreshCount);
+
+      channelRef.current = channel;
 
       await new Promise<void>((resolve) => {
         channel.subscribe(async (status) => {

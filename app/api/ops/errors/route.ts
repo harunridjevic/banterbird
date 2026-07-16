@@ -56,3 +56,36 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ errors: data ?? [] });
 }
+
+export async function DELETE(req: Request) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (!verifyAnalyticsCookie(cookieSecret(), token)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id");
+  const clearAll = url.searchParams.get("all") === "1";
+
+  const admin = createServiceRoleClient();
+
+  if (clearAll) {
+    const { error } = await admin.from("error_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, cleared: "all" });
+  }
+
+  if (!id) {
+    return NextResponse.json({ error: "id or all=1 required" }, { status: 400 });
+  }
+
+  const { error } = await admin.from("error_logs").delete().eq("id", id);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, cleared: id });
+}

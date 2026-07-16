@@ -37,7 +37,36 @@ export async function GET(req: Request) {
     .eq("active", true)
     .order("created_at", { ascending: false });
 
-  return NextResponse.json({ reports: reports ?? [], blocks: blocks ?? [] });
+  const usageByUser: Record<
+    string,
+    { apiCalls: number; rooms: number; sessionMinutes: number }
+  > = {};
+
+  const userBlocks = (blocks ?? []).filter(
+    (b) => b.block_type === "user" && typeof b.block_value === "string",
+  );
+
+  await Promise.all(
+    userBlocks.map(async (b) => {
+      const { data } = await admin.rpc("ops_blocked_user_usage", {
+        p_user_id: b.block_value,
+      });
+      if (data && typeof data === "object") {
+        const row = data as { apiCalls?: number; rooms?: number; sessionMinutes?: number };
+        usageByUser[b.block_value] = {
+          apiCalls: Number(row.apiCalls ?? 0),
+          rooms: Number(row.rooms ?? 0),
+          sessionMinutes: Number(row.sessionMinutes ?? 0),
+        };
+      }
+    }),
+  );
+
+  return NextResponse.json({
+    reports: reports ?? [],
+    blocks: blocks ?? [],
+    usageByUser,
+  });
 }
 
 export async function POST(req: Request) {

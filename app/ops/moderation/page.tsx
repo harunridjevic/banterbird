@@ -23,6 +23,13 @@ type Block = {
   block_value: string;
   reason: string | null;
   created_at: string;
+  created_by: string | null;
+};
+
+type UserUsage = {
+  apiCalls: number;
+  rooms: number;
+  sessionMinutes: number;
 };
 
 export default function OpsModerationPage() {
@@ -33,6 +40,7 @@ export default function OpsModerationPage() {
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [usageByUser, setUsageByUser] = useState<Record<string, UserUsage>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const unlock = useCallback(async () => {
@@ -60,9 +68,14 @@ export default function OpsModerationPage() {
   const loadData = useCallback(async () => {
     const res = await fetch("/api/ops/moderation?status=open");
     if (!res.ok) return;
-    const data = (await res.json()) as { reports: Report[]; blocks: Block[] };
+    const data = (await res.json()) as {
+      reports: Report[];
+      blocks: Block[];
+      usageByUser?: Record<string, UserUsage>;
+    };
     setReports(data.reports ?? []);
     setBlocks(data.blocks ?? []);
+    setUsageByUser(data.usageByUser ?? {});
   }, []);
 
   useEffect(() => {
@@ -220,29 +233,46 @@ export default function OpsModerationPage() {
                 <p className="mt-4 text-sm text-navy-400">No active blocks.</p>
               ) : (
                 <ul className="mt-4 space-y-2">
-                  {blocks.map((b) => (
-                    <li
-                      key={b.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
-                    >
-                      <div>
-                        <span className="rounded bg-white/10 px-2 py-0.5 text-xs uppercase text-navy-300">
-                          {b.block_type}
-                        </span>
-                        <span className="ml-2 font-mono text-sm text-white">{b.block_value}</span>
-                        {b.reason ? (
-                          <p className="mt-1 text-xs text-navy-400">{b.reason}</p>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void modAction({ action: "unblock", blockId: b.id })}
-                        className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-navy-200 hover:bg-white/5"
+                  {blocks.map((b) => {
+                    const usage =
+                      b.block_type === "user" ? usageByUser[b.block_value] : undefined;
+                    const autoBlocked =
+                      b.created_by === "rate_limit" || b.created_by === "llm_overusage";
+                    return (
+                      <li
+                        key={b.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
                       >
-                        Unblock
-                      </button>
-                    </li>
-                  ))}
+                        <div>
+                          <span className="rounded bg-white/10 px-2 py-0.5 text-xs uppercase text-navy-300">
+                            {b.block_type}
+                          </span>
+                          {autoBlocked ? (
+                            <span className="ml-2 rounded bg-amber-500/20 px-2 py-0.5 text-xs uppercase text-amber-200">
+                              auto
+                            </span>
+                          ) : null}
+                          <span className="ml-2 font-mono text-sm text-white">{b.block_value}</span>
+                          {b.reason ? (
+                            <p className="mt-1 text-xs text-navy-400">{b.reason}</p>
+                          ) : null}
+                          {usage ? (
+                            <p className="mt-1 text-xs text-navy-300">
+                              API calls: {usage.apiCalls} · Rooms: {usage.rooms} · Online time:{" "}
+                              {usage.sessionMinutes} min
+                            </p>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void modAction({ action: "unblock", blockId: b.id })}
+                          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-navy-200 hover:bg-white/5"
+                        >
+                          Unblock
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
