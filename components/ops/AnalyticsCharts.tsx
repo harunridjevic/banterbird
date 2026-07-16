@@ -182,6 +182,48 @@ export function ApiUsageChart({ snapshot }: ChartProps) {
   );
 }
 
+export function OnlineUsersChart({ snapshot }: ChartProps) {
+  const data = (snapshot.series.onlineUsersByDay ?? []).map((p) => ({
+    date: shortDate(p.date),
+    Peak: p.peak,
+    Average: p.avg,
+  }));
+
+  if (data.length === 0) {
+    return <EmptyChart message="No concurrent-online samples yet. Data builds as users stay online." />;
+  }
+
+  return (
+    <ChartShell title="Concurrent online users by day">
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+          <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 11 }} tickLine={false} />
+          <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickLine={false} allowDecimals={false} />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
+          <Line
+            type="monotone"
+            dataKey="Peak"
+            name="Peak concurrent"
+            stroke="#34d399"
+            strokeWidth={2}
+            dot={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="Average"
+            name="Avg concurrent"
+            stroke="#38bdf8"
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartShell>
+  );
+}
+
 function ChartShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/20 p-4">

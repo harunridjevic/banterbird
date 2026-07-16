@@ -29,7 +29,8 @@ import {
 import { loadBotSettingsFromDb, type BotSettings } from "@/lib/ops/bot-settings";
 import { logApiUsage } from "@/lib/ops/api-usage-log";
 import { estimateLlmCostUsd } from "@/lib/ops/llm-cost";
-import { shouldSkipLlmForBudget } from "@/lib/ops/llm-budget";
+import { enforceLlmUsageGuards } from "@/lib/ops/llm-budget";
+
 import {
   applySessionPolicy,
   decideFallbackTurn,
@@ -538,7 +539,14 @@ export async function POST(req: Request) {
       return respondLocal(result);
     }
 
-    if (await shouldSkipLlmForBudget(roomId, isOpener)) {
+    const usageGuard = await enforceLlmUsageGuards(user.id, roomId, isOpener);
+    if (usageGuard.blocked) {
+      if (usageGuard.reason === "daily_cap") {
+        return NextResponse.json(
+          { error: "Usage limit exceeded", reason: "llm_overusage" },
+          { status: 429 },
+        );
+      }
       const result = decideFallbackTurn(trimmedHistory, persona, trigger, memory, botSettings);
       return respondLocal(result);
     }

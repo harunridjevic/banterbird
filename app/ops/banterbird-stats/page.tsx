@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ApiUsageChart, ApiCostChart, RoomsChart, UniqueUsersChart } from "@/components/ops/AnalyticsCharts";
+import {
+  ApiUsageChart,
+  ApiCostChart,
+  RoomsChart,
+  UniqueUsersChart,
+  OnlineUsersChart,
+} from "@/components/ops/AnalyticsCharts";
 import { MetricCard } from "@/components/ops/MetricCard";
 import {
   type AnalyticsPeriod,
@@ -522,6 +528,9 @@ export default function OpsAnalyticsPage() {
                   <div className="mt-3 grid gap-4 lg:grid-cols-2">
                     <UniqueUsersChart snapshot={snapshot} />
                     <RoomsChart snapshot={snapshot} />
+                    <div className="lg:col-span-2">
+                      <OnlineUsersChart snapshot={snapshot} />
+                    </div>
                     <div className="lg:col-span-2">
                       <ApiUsageChart snapshot={snapshot} />
                     </div>

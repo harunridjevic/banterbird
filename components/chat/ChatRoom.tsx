@@ -439,10 +439,19 @@ export function ChatRoom({ roomId }: Props) {
       setPeerPresence(online ? "online" : "offline");
     };
 
-    const presenceChannel = client.channel(`room:${roomId}:presence`, {
+    const topicName = `room:${roomId}:presence`;
+    for (const existing of client.getChannels()) {
+      const topic = existing.topic ?? "";
+      if (topic === `realtime:${topicName}` || topic.endsWith(`:${topicName}`)) {
+        void client.removeChannel(existing);
+      }
+    }
+
+    const presenceChannel = client.channel(topicName, {
       config: { presence: { key: selfId } },
     });
 
+    // Presence callbacks must be registered before subscribe().
     presenceChannel
       .on("presence", { event: "sync" }, () => applyPeerPresence(presenceChannel))
       .on("presence", { event: "join" }, () => applyPeerPresence(presenceChannel))

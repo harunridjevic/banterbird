@@ -4,7 +4,8 @@ import { AgeGateWrapper } from "@/components/legal/AgeGateWrapper";
 
 export const metadata: Metadata = {
   title: "Start Anonymous Chat",
-  description: "Start chatting with random strangers instantly. No registration required. Choose your preferences and begin anonymous chatting in seconds.",
+  description:
+    "Start free anonymous chat online instantly. No registration — choose preferences and begin 1-on-1 anonymous text chat in seconds.",
 };
 
 export default function MatchPage() {

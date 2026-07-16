@@ -359,6 +359,28 @@ export function MatchLobby() {
         if (access.reason === "blocked") setAccessBlocked(true);
         return;
       }
+
+      // Prefer a human still waiting in the queue before falling back to AI.
+      const humanRes = await fetch("/api/match/try", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selfGender: activeSelfGender,
+          wantsGender: activeWantsGender,
+          blockedUserIds: getSessionBlockedUsers(),
+          deviceId: getDeviceId(),
+        }),
+      });
+      if (!alive || cancelledRef.current || navigatedRef.current) return;
+      if (humanRes.ok) {
+        const hj = (await humanRes.json()) as { roomId?: string | null };
+        if (hj.roomId) {
+          navigatedRef.current = true;
+          router.replace(`/chat/${hj.roomId}`);
+          return;
+        }
+      }
+
       const { data, error } = await client.rpc("try_match_ai_practice", {
         p_self_gender: activeSelfGender,
         p_wants_gender: activeWantsGender,

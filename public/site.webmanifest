@@ -1,7 +1,7 @@
 {
-  "name": "BanterBird - Anonymous Random Chat",
+  "name": "BanterBird - Anonymous Chat",
   "short_name": "BanterBird",
-  "description": "Chat with random strangers instantly. Anonymous, no registration required. Fast, safe, and free random text chat worldwide.",
+  "description": "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c121c",

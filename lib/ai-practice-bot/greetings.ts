@@ -4,16 +4,14 @@ const CASUAL_OPENERS = [
   "heyy",
   "sup",
   "hii",
-  "hey stranger",
   "yo whats up",
   "hiii",
   "hey there",
-  "sup stranger",
   "heyyy",
   "hi",
-  "yo stranger",
   "hey :)",
-  "hii stranger",
+  "whats up",
+  "hey you",
 ] as const;
 
 const FLIRTY_OPENERS = [
@@ -23,7 +21,6 @@ const FLIRTY_OPENERS = [
   "mm heyy",
   "hey you",
   "well hi there",
-  "heyyy stranger",
   "hey handsome",
   "hi cutie",
   "heyy whats up",

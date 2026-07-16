@@ -7,6 +7,7 @@ import {
   type AnalyticsSnapshot,
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
+import { fetchOnlineUsersByDay } from "@/lib/ops/online-users-series";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 type SessionMinutesRow = {
@@ -53,6 +54,11 @@ export async function GET(req: Request) {
     }
 
     const snapshot = data as AnalyticsSnapshot;
+    snapshot.series = {
+      ...snapshot.series,
+      onlineUsersByDay: snapshot.series?.onlineUsersByDay ?? [],
+    };
+
     const { data: timeRows, error: timeErr } = await admin.rpc("ops_user_session_minutes", {
       p_since: snapshot.sinceUtc,
       p_except: null,
@@ -64,6 +70,8 @@ export async function GET(req: Request) {
     } else if (timeErr) {
       console.error("ops_user_session_minutes", timeErr);
     }
+
+    snapshot.series.onlineUsersByDay = await fetchOnlineUsersByDay(snapshot.sinceUtc);
 
     return NextResponse.json({ snapshot });
   } catch (e) {
