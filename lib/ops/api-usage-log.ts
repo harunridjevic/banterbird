@@ -7,6 +7,7 @@ type LogApiUsageInput = {
   latencyMs: number;
   roomId?: string;
   userId?: string;
+  clientIp?: string | null;
   inputTokens?: number;
   outputTokens?: number;
   estimatedCostUsd?: number;
@@ -22,6 +23,7 @@ export async function logApiUsage(input: LogApiUsageInput): Promise<void> {
       latency_ms: input.latencyMs,
       room_id: input.roomId ?? null,
       user_id: input.userId ?? null,
+      client_ip: input.clientIp?.trim() || null,
       input_tokens: input.inputTokens ?? null,
       output_tokens: input.outputTokens ?? null,
       estimated_cost_usd: input.estimatedCostUsd ?? null,

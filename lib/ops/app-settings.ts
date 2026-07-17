@@ -18,10 +18,21 @@ export type BlockedWordsSettings = {
   words: string[];
 };
 
+export type LlmGuardSensitivity = "low" | "medium" | "high";
+
+export type LlmGuardSettings = {
+  autoBlockEnabled: boolean;
+  sensitivity: LlmGuardSensitivity;
+  autoBlockCostUsdDay: number;
+  softHourlyCap: number;
+  softDailyCap: number;
+};
+
 export type AppSettings = {
   rateLimiting: RateLimitSettings;
   ageGate: AgeGateSettings;
   blockedWords: BlockedWordsSettings;
+  llmGuards: LlmGuardSettings;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -39,6 +50,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   blockedWords: {
     enabled: false,
     words: [],
+  },
+  llmGuards: {
+    autoBlockEnabled: true,
+    sensitivity: "medium",
+    autoBlockCostUsdDay: 5,
+    softHourlyCap: 100,
+    softDailyCap: 250,
   },
 };
 
@@ -73,15 +91,43 @@ export function normalizeBlockedWordsSettings(raw: Partial<BlockedWordsSettings>
   };
 }
 
+export function normalizeLlmGuardSettings(raw: Partial<LlmGuardSettings>): LlmGuardSettings {
+  const d = DEFAULT_APP_SETTINGS.llmGuards;
+  const sensitivity =
+    raw.sensitivity === "low" || raw.sensitivity === "high" || raw.sensitivity === "medium"
+      ? raw.sensitivity
+      : d.sensitivity;
+  return {
+    autoBlockEnabled: raw.autoBlockEnabled ?? d.autoBlockEnabled,
+    sensitivity,
+    autoBlockCostUsdDay: clamp(Number(raw.autoBlockCostUsdDay ?? d.autoBlockCostUsdDay), 0.5, 100),
+    softHourlyCap: clamp(Math.round(raw.softHourlyCap ?? d.softHourlyCap), 10, 1000),
+    softDailyCap: clamp(Math.round(raw.softDailyCap ?? d.softDailyCap), 20, 5000),
+  };
+}
+
+export function llmGuardSensitivityMultiplier(sensitivity: LlmGuardSensitivity): number {
+  switch (sensitivity) {
+    case "low":
+      return 2;
+    case "high":
+      return 0.5;
+    default:
+      return 1;
+  }
+}
+
 export function normalizeAppSettings(partial: {
   rateLimiting?: Partial<RateLimitSettings>;
   ageGate?: Partial<AgeGateSettings>;
   blockedWords?: Partial<BlockedWordsSettings>;
+  llmGuards?: Partial<LlmGuardSettings>;
 }): AppSettings {
   return {
     rateLimiting: normalizeRateLimitSettings(partial.rateLimiting ?? {}),
     ageGate: normalizeAgeGateSettings(partial.ageGate ?? {}),
     blockedWords: normalizeBlockedWordsSettings(partial.blockedWords ?? {}),
+    llmGuards: normalizeLlmGuardSettings(partial.llmGuards ?? {}),
   };
 }
 
@@ -96,6 +142,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
       rateLimiting: (map.rate_limiting ?? {}) as Partial<RateLimitSettings>,
       ageGate: (map.age_gate ?? {}) as Partial<AgeGateSettings>,
       blockedWords: (map.blocked_words ?? {}) as Partial<BlockedWordsSettings>,
+      llmGuards: (map.llm_guards ?? {}) as Partial<LlmGuardSettings>,
     });
   } catch {
     return DEFAULT_APP_SETTINGS;
@@ -111,6 +158,7 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
     { key: "rate_limiting", value: normalized.rateLimiting, updated_at: now },
     { key: "age_gate", value: normalized.ageGate, updated_at: now },
     { key: "blocked_words", value: normalized.blockedWords, updated_at: now },
+    { key: "llm_guards", value: normalized.llmGuards, updated_at: now },
   ]);
 
   return normalized;

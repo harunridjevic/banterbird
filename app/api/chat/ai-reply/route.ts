@@ -48,6 +48,8 @@ import {
 } from "@/lib/ai-practice-bot/turn";
 import { createClient } from "@/utils/supabase/server";
 import { logError } from "@/lib/ops/error-log";
+import { clientIp } from "@/lib/moderation/client-ip";
+import type { NextRequest } from "next/server";
 
 function groqApiKey(): string | undefined {
   return process.env.GROQ_API_KEY?.trim() || undefined;
@@ -339,7 +341,7 @@ async function callLlm(
   persona: ReturnType<typeof buildBotPersona>,
   memory: ReturnType<typeof buildUserMemory>,
   settings?: BotSettings | null,
-  logCtx?: { roomId: string; userId: string },
+  logCtx?: { roomId: string; userId: string; clientIp?: string | null },
   isOpener?: boolean,
   botSelf?: BotSelfMemory,
 ): Promise<AiPracticeTurnResult> {
@@ -370,6 +372,7 @@ async function callLlm(
       latencyMs: Date.now() - started,
       roomId: logCtx.roomId,
       userId: logCtx.userId,
+      clientIp: logCtx.clientIp,
       inputTokens: inputTokens || undefined,
       outputTokens: outputTokens || undefined,
       estimatedCostUsd:
@@ -447,6 +450,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const requestIp = clientIp(req as NextRequest);
+
     const body = (await req.json()) as {
       roomId?: string;
       messages?: ChatTurn[];
@@ -509,6 +514,7 @@ export async function POST(req: Request) {
         latencyMs: 0,
         roomId,
         userId: user.id,
+        clientIp: requestIp,
       });
     };
 
@@ -571,6 +577,7 @@ export async function POST(req: Request) {
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,
       userId: user.id,
+      clientIp: requestIp,
     }, isOpener, botSelf);
 
     result = applySessionPolicy(trimmedHistory, result, persona, memory, trigger, botSettings);

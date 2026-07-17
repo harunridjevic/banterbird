@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { cookieSecret, verifyAnalyticsCookie, COOKIE_NAME } from "@/lib/ops/analytics-cookie";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import { clientIp } from "@/lib/moderation/client-ip";
+import { loadAppSettings } from "@/lib/ops/app-settings";
 
 export async function GET(req: Request) {
   const cookieStore = await cookies();
@@ -16,6 +16,8 @@ export async function GET(req: Request) {
   const reportsLimit = Math.min(parseInt(url.searchParams.get("reportsLimit") ?? "50", 10), 200);
   const blocksLimit = Math.min(parseInt(url.searchParams.get("blocksLimit") ?? "25", 10), 100);
   const blocksOffset = Math.max(parseInt(url.searchParams.get("blocksOffset") ?? "0", 10), 0);
+  const ipHours = Math.min(Math.max(parseInt(url.searchParams.get("ipHours") ?? "24", 10), 1), 168);
+  const ipLimit = Math.min(Math.max(parseInt(url.searchParams.get("ipLimit") ?? "30", 10), 1), 100);
 
   const admin = createServiceRoleClient();
   let query = admin
@@ -77,6 +79,35 @@ export async function GET(req: Request) {
   const blockRows = blocks ?? [];
   const totalBlocks = blocksCountErr ? blockRows.length : (blocksTotal ?? blockRows.length);
 
+  const [{ data: topIpsRaw }, { data: ipBlocks }, llmGuards] = await Promise.all([
+    admin.rpc("ops_top_ips_by_usage", { p_hours: ipHours, p_limit: ipLimit }),
+    admin
+      .from("moderation_blocks")
+      .select("block_value")
+      .eq("active", true)
+      .eq("block_type", "ip"),
+    loadAppSettings(),
+  ]);
+
+  const blockedIpSet = new Set(
+    (ipBlocks ?? []).map((row) => String(row.block_value ?? "").trim()).filter(Boolean),
+  );
+
+  const topIps = ((topIpsRaw ?? []) as {
+    client_ip?: string;
+    api_calls?: number;
+    distinct_users?: number;
+    estimated_cost_usd?: number;
+    last_seen_at?: string;
+  }[]).map((row) => ({
+    clientIp: row.client_ip ?? "",
+    apiCalls: Number(row.api_calls ?? 0),
+    distinctUsers: Number(row.distinct_users ?? 0),
+    estimatedCostUsd: Number(row.estimated_cost_usd ?? 0),
+    lastSeenAt: row.last_seen_at ?? null,
+    blocked: blockedIpSet.has(row.client_ip ?? ""),
+  }));
+
   return NextResponse.json({
     reports: reports ?? [],
     blocks: blockRows,
@@ -85,6 +116,9 @@ export async function GET(req: Request) {
     blocksHasMore: blocksOffset + blockRows.length < totalBlocks,
     blocksOffset,
     blocksLimit,
+    topIps,
+    ipHours,
+    llmGuards: llmGuards.llmGuards,
   });
 }
 

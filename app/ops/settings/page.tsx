@@ -81,6 +81,7 @@ export default function OpsBotSettingsPage() {
         rateLimiting: { ...appSettings.rateLimiting, ...partial.rateLimiting },
         ageGate: { ...appSettings.ageGate, ...partial.ageGate },
         blockedWords: { ...appSettings.blockedWords, ...partial.blockedWords },
+        llmGuards: { ...appSettings.llmGuards, ...partial.llmGuards },
       };
       setAppSettings(next);
       setAppSettingsSaving(true);
@@ -287,6 +288,84 @@ export default function OpsBotSettingsPage() {
                     />
                   </div>
                 ) : null}
+              </Section>
+
+              <Section title="LLM abuse guards">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.llmGuards.autoBlockEnabled}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        llmGuards: { ...appSettings.llmGuards, autoBlockEnabled: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">
+                      Auto-block cost attackers
+                    </span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      Blocks users who match insane usage patterns. Also configurable on the moderation page.
+                    </span>
+                  </span>
+                </label>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-medium text-navy-200">Sensitivity</span>
+                    <select
+                      value={appSettings.llmGuards.sensitivity}
+                      onChange={(e) =>
+                        void patchAppSettings({
+                          llmGuards: {
+                            ...appSettings.llmGuards,
+                            sensitivity: e.target.value as AppSettings["llmGuards"]["sensitivity"],
+                          },
+                        })
+                      }
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </label>
+                  <NumberField
+                    label="Cost block threshold (USD / day)"
+                    value={appSettings.llmGuards.autoBlockCostUsdDay}
+                    min={0.5}
+                    max={100}
+                    step={0.5}
+                    onChange={(autoBlockCostUsdDay) =>
+                      void patchAppSettings({
+                        llmGuards: { ...appSettings.llmGuards, autoBlockCostUsdDay },
+                      })
+                    }
+                  />
+                  <NumberField
+                    label="Soft hourly cap"
+                    value={appSettings.llmGuards.softHourlyCap}
+                    min={10}
+                    max={1000}
+                    onChange={(softHourlyCap) =>
+                      void patchAppSettings({
+                        llmGuards: { ...appSettings.llmGuards, softHourlyCap },
+                      })
+                    }
+                  />
+                  <NumberField
+                    label="Soft daily cap"
+                    value={appSettings.llmGuards.softDailyCap}
+                    min={20}
+                    max={5000}
+                    onChange={(softDailyCap) =>
+                      void patchAppSettings({
+                        llmGuards: { ...appSettings.llmGuards, softDailyCap },
+                      })
+                    }
+                  />
+                </div>
               </Section>
 
               <Section title="Blocked words">

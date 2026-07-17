@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Shield, Ban, CheckCircle, XCircle } from "lucide-react";
 import { OpsLoadingPanel, PAGE_SIZE } from "@/components/ops/OpsLoadingPanel";
+import type { LlmGuardSettings } from "@/lib/ops/app-settings";
 
 type Report = {
   id: string;
@@ -33,6 +34,15 @@ type UserUsage = {
   sessionMinutes: number;
 };
 
+type TopIpUsage = {
+  clientIp: string;
+  apiCalls: number;
+  distinctUsers: number;
+  estimatedCostUsd: number;
+  lastSeenAt: string | null;
+  blocked: boolean;
+};
+
 export default function OpsModerationPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [isCheckingCookie, setIsCheckingCookie] = useState(true);
@@ -47,6 +57,10 @@ export default function OpsModerationPage() {
   const [loadingBlocks, setLoadingBlocks] = useState(false);
   const [loadingMoreBlocks, setLoadingMoreBlocks] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [topIps, setTopIps] = useState<TopIpUsage[]>([]);
+  const [ipHours, setIpHours] = useState(24);
+  const [llmGuards, setLlmGuards] = useState<LlmGuardSettings | null>(null);
+  const [llmGuardsSaving, setLlmGuardsSaving] = useState(false);
 
   const unlock = useCallback(async () => {
     setError(null);
@@ -70,7 +84,7 @@ export default function OpsModerationPage() {
     }
   }, [password]);
 
-  const loadBlocks = useCallback(async (offset = 0, append = false) => {
+  const loadBlocks = useCallback(async (offset = 0, append = false, hours = ipHours) => {
     if (append) setLoadingMoreBlocks(true);
     else setLoadingBlocks(true);
     try {
@@ -78,6 +92,7 @@ export default function OpsModerationPage() {
         status: "open",
         blocksLimit: String(PAGE_SIZE),
         blocksOffset: String(offset),
+        ipHours: String(hours),
       });
       const res = await fetch(`/api/ops/moderation?${qs}`);
       if (!res.ok) return;
@@ -87,17 +102,46 @@ export default function OpsModerationPage() {
         usageByUser?: Record<string, UserUsage>;
         blocksTotal?: number;
         blocksHasMore?: boolean;
+        topIps?: TopIpUsage[];
+        llmGuards?: LlmGuardSettings;
       };
       if (!append) setReports(data.reports ?? []);
       setBlocks((prev) => (append ? [...prev, ...(data.blocks ?? [])] : (data.blocks ?? [])));
       setUsageByUser((prev) => ({ ...prev, ...(data.usageByUser ?? {}) }));
       setBlocksTotal(data.blocksTotal ?? (data.blocks ?? []).length);
       setBlocksHasMore(data.blocksHasMore ?? false);
+      if (!append) {
+        setTopIps(data.topIps ?? []);
+        if (data.llmGuards) setLlmGuards(data.llmGuards);
+      }
     } finally {
       if (append) setLoadingMoreBlocks(false);
       else setLoadingBlocks(false);
     }
-  }, []);
+  }, [ipHours]);
+
+  const patchLlmGuards = useCallback(async (partial: Partial<LlmGuardSettings>) => {
+    if (!llmGuards) return;
+    const next = { ...llmGuards, ...partial };
+    setLlmGuards(next);
+    setLlmGuardsSaving(true);
+    try {
+      const res = await fetch("/api/ops/app-settings");
+      if (!res.ok) return;
+      const appSettings = (await res.json()) as { llmGuards?: LlmGuardSettings };
+      const saveRes = await fetch("/api/ops/app-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...appSettings, llmGuards: next }),
+      });
+      if (saveRes.ok) {
+        const saved = (await saveRes.json()) as { llmGuards: LlmGuardSettings };
+        setLlmGuards(saved.llmGuards);
+      }
+    } finally {
+      setLlmGuardsSaving(false);
+    }
+  }, [llmGuards]);
 
   useEffect(() => {
     void (async () => {
@@ -111,8 +155,8 @@ export default function OpsModerationPage() {
   }, []);
 
   useEffect(() => {
-    if (unlocked) void loadBlocks(0, false);
-  }, [unlocked, loadBlocks]);
+    if (unlocked) void loadBlocks(0, false, ipHours);
+  }, [unlocked, ipHours, loadBlocks]);
 
   const modAction = async (body: Record<string, unknown>) => {
     const res = await fetch("/api/ops/moderation", {
@@ -120,7 +164,7 @@ export default function OpsModerationPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (res.ok) void loadBlocks(0, false);
+    if (res.ok) void loadBlocks(0, false, ipHours);
   };
 
   return (
@@ -156,6 +200,169 @@ export default function OpsModerationPage() {
           </div>
         ) : (
           <div className="mt-10 space-y-10">
+            {llmGuards ? (
+              <section className="rounded-2xl border border-white/10 bg-navy-900/40 p-5">
+                <h2 className="text-lg font-semibold text-white">LLM auto-block</h2>
+                <p className="mt-1 text-sm text-navy-400">
+                  Only blocks obvious cost-attack patterns. Soft caps still fall back to canned bot replies.
+                </p>
+                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={llmGuards.autoBlockEnabled}
+                    onChange={(e) => void patchLlmGuards({ autoBlockEnabled: e.target.checked })}
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Enable automatic user blocks</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      When off, abuse patterns are logged but users are not auto-blocked.
+                    </span>
+                  </span>
+                </label>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-medium text-navy-200">Sensitivity</span>
+                    <select
+                      value={llmGuards.sensitivity}
+                      onChange={(e) =>
+                        void patchLlmGuards({
+                          sensitivity: e.target.value as LlmGuardSettings["sensitivity"],
+                        })
+                      }
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+                    >
+                      <option value="low">Low — only extreme abuse</option>
+                      <option value="medium">Medium — balanced</option>
+                      <option value="high">High — catch abuse sooner</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-navy-200">Cost block threshold (USD / day)</span>
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={100}
+                      step={0.5}
+                      value={llmGuards.autoBlockCostUsdDay}
+                      onChange={(e) =>
+                        void patchLlmGuards({
+                          autoBlockCostUsdDay: Number.parseFloat(e.target.value) || 5,
+                        })
+                      }
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-navy-200">Soft hourly cap (canned replies)</span>
+                    <input
+                      type="number"
+                      min={10}
+                      max={1000}
+                      value={llmGuards.softHourlyCap}
+                      onChange={(e) =>
+                        void patchLlmGuards({
+                          softHourlyCap: Number.parseInt(e.target.value, 10) || 100,
+                        })
+                      }
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-navy-200">Soft daily cap (canned replies)</span>
+                    <input
+                      type="number"
+                      min={20}
+                      max={5000}
+                      value={llmGuards.softDailyCap}
+                      onChange={(e) =>
+                        void patchLlmGuards({
+                          softDailyCap: Number.parseInt(e.target.value, 10) || 250,
+                        })
+                      }
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+                    />
+                  </label>
+                </div>
+                {llmGuardsSaving ? (
+                  <p className="mt-3 text-xs text-violet-300">Saving…</p>
+                ) : null}
+              </section>
+            ) : null}
+
+            <section>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-white">Highest usage IPs</h2>
+                <div className="flex gap-2">
+                  {[24, 168].map((hours) => (
+                    <button
+                      key={hours}
+                      type="button"
+                      onClick={() => setIpHours(hours)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                        ipHours === hours
+                          ? "bg-violet-600 text-white"
+                          : "border border-white/10 text-navy-300 hover:bg-white/5"
+                      }`}
+                    >
+                      {hours === 24 ? "24h" : "7d"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-1 text-sm text-navy-400">
+                Ranked by API calls. Block suspicious IPs manually below.
+              </p>
+              {loadingBlocks && topIps.length === 0 ? (
+                <OpsLoadingPanel label="Loading IP usage…" compact />
+              ) : topIps.length === 0 ? (
+                <p className="mt-4 text-sm text-navy-400">
+                  No IP usage logged yet. IPs appear after the migration runs and new API calls come in.
+                </p>
+              ) : (
+                <ul className="mt-4 space-y-2">
+                  {topIps.map((row) => (
+                    <li
+                      key={row.clientIp}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    >
+                      <div>
+                        <span className="font-mono text-sm text-white">{row.clientIp}</span>
+                        {row.blocked ? (
+                          <span className="ml-2 rounded bg-rose-500/20 px-2 py-0.5 text-xs uppercase text-rose-200">
+                            blocked
+                          </span>
+                        ) : null}
+                        <p className="mt-1 text-xs text-navy-300">
+                          {row.apiCalls} API calls · {row.distinctUsers} user
+                          {row.distinctUsers === 1 ? "" : "s"} · est. ${row.estimatedCostUsd.toFixed(4)}
+                          {row.lastSeenAt
+                            ? ` · last ${new Date(row.lastSeenAt).toLocaleString()}`
+                            : null}
+                        </p>
+                      </div>
+                      {!row.blocked ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void modAction({
+                              action: "block",
+                              blockType: "ip",
+                              blockValue: row.clientIp,
+                              reason: `High API usage (${row.apiCalls} calls in ${ipHours}h)`,
+                            })
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg bg-rose-600/80 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-600"
+                        >
+                          <Ban className="h-3 w-3" /> Block IP
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
             <section>
               <h2 className="text-lg font-semibold text-white">Open reports ({reports.length})</h2>
               {loadingBlocks && reports.length === 0 ? (

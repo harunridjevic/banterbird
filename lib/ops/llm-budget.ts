@@ -1,5 +1,10 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { sendOpsAlertEmail } from "@/lib/ops/alert-email";
+import {
+  loadAppSettings,
+  llmGuardSensitivityMultiplier,
+  type LlmGuardSettings,
+} from "@/lib/ops/app-settings";
 
 const LLM_PROVIDERS = ["groq", "gemini", "openai"] as const;
 
@@ -179,69 +184,87 @@ export async function getUserLlmUsageProfile(userId: string): Promise<UserLlmUsa
 }
 
 /** Only flag obvious cost-attack patterns — not normal heavy chatters. */
-export function isInsaneLlmAbuse(profile: UserLlmUsageProfile): {
+export function isInsaneLlmAbuse(
+  profile: UserLlmUsageProfile,
+  guards: LlmGuardSettings,
+): {
   insane: boolean;
   reason?: string;
 } {
+  const m = llmGuardSensitivityMultiplier(guards.sensitivity);
   const sessionMinutes = Math.max(profile.sessionMinutes, 0.1);
   const callsPerMinOnline = profile.callsDay / sessionMinutes;
   const callsPerRoom = profile.rooms > 0 ? profile.callsDay / profile.rooms : profile.callsDay;
 
-  if (profile.costDayUsd >= llmAutoBlockCostUsdDay()) {
+  const costThreshold = guards.autoBlockCostUsdDay * m;
+  const burst10Min = Math.round(60 * m);
+  const sustainedHourly = Math.round(100 * m);
+  const sustainedDensity = 6 / m;
+  const roomHopRooms = Math.round(15 * m);
+  const roomHopCalls = Math.round(80 * m);
+  const roomDensityRooms = Math.round(8 * m);
+  const roomDensityPerRoom = 15 / m;
+  const scriptedDayCalls = Math.round(120 * m);
+  const scriptedMaxMinutes = 10 * m;
+  const shortSessionMinutes = 3 * m;
+  const shortSessionHourly = Math.round(40 * m);
+  const extremeDayCalls = Math.round(500 * m);
+  const extremeCost = 1 / m;
+  const extremeDensity = 10 / m;
+
+  if (profile.costDayUsd >= costThreshold) {
     return {
       insane: true,
       reason: `estimated LLM cost $${profile.costDayUsd.toFixed(2)} today`,
     };
   }
 
-  if (profile.calls10Min >= 60) {
+  if (profile.calls10Min >= burst10Min) {
     return {
       insane: true,
       reason: `${profile.calls10Min} LLM calls in 10 minutes`,
     };
   }
 
-  // Sustained high volume with abnormal call density for time spent on site.
-  if (profile.callsHour >= 100 && callsPerMinOnline >= 6) {
+  if (profile.callsHour >= sustainedHourly && callsPerMinOnline >= sustainedDensity) {
     return {
       insane: true,
       reason: `${profile.callsHour} calls/hour (${callsPerMinOnline.toFixed(1)}/min online)`,
     };
   }
 
-  // Room-hopping API farming.
-  if (profile.rooms >= 15 && profile.callsHour >= 80) {
+  if (profile.rooms >= roomHopRooms && profile.callsHour >= roomHopCalls) {
     return {
       insane: true,
       reason: `${profile.callsHour} calls across ${profile.rooms} rooms in an hour`,
     };
   }
 
-  if (profile.rooms >= 8 && callsPerRoom >= 15) {
+  if (profile.rooms >= roomDensityRooms && callsPerRoom >= roomDensityPerRoom) {
     return {
       insane: true,
       reason: `${profile.callsDay} calls across ${profile.rooms} rooms (${callsPerRoom.toFixed(0)}/room)`,
     };
   }
 
-  // Scripted abuse: huge call volume with almost no real browsing time.
-  if (profile.callsDay >= 120 && profile.sessionMinutes < 10) {
+  if (profile.callsDay >= scriptedDayCalls && profile.sessionMinutes < scriptedMaxMinutes) {
     return {
       insane: true,
       reason: `${profile.callsDay} LLM calls with only ${profile.sessionMinutes} min online`,
     };
   }
 
-  // Very short sessions spamming API.
-  if (profile.sessionMinutes < 3 && profile.callsHour >= 40) {
+  if (profile.sessionMinutes < shortSessionMinutes && profile.callsHour >= shortSessionHourly) {
     return {
       insane: true,
-      reason: `${profile.callsHour} calls in under 3 min online`,
+      reason: `${profile.callsHour} calls in under ${Math.round(shortSessionMinutes)} min online`,
     };
   }
 
-  // Extreme absolute only when paired with meaningful cost or density.
-  if (profile.callsDay >= 500 && (profile.costDayUsd >= 1 || callsPerMinOnline >= 10)) {
+  if (
+    profile.callsDay >= extremeDayCalls &&
+    (profile.costDayUsd >= extremeCost || callsPerMinOnline >= extremeDensity)
+  ) {
     return {
       insane: true,
       reason: `${profile.callsDay} LLM calls today with abnormal usage pattern`,
@@ -324,14 +347,17 @@ export async function enforceLlmUsageGuards(
 ): Promise<LlmAbuseResult> {
   void maybeAlertLlmUsageSpike();
 
+  const appSettings = await loadAppSettings();
+  const guards = appSettings.llmGuards;
+
   const [profile, roomCount, budgetHit] = await Promise.all([
     getUserLlmUsageProfile(userId),
     roomLlmCallCount(roomId),
     isLlmDailyBudgetExceeded(),
   ]);
 
-  const abuse = isInsaneLlmAbuse(profile);
-  if (abuse.insane) {
+  const abuse = isInsaneLlmAbuse(profile, guards);
+  if (abuse.insane && guards.autoBlockEnabled) {
     await autoBlockUserForOverusage(userId, abuse.reason ?? "pattern match");
     await sendOpsAlertEmail(
       `[BanterBird] User auto-blocked for LLM abuse`,
@@ -351,11 +377,11 @@ export async function enforceLlmUsageGuards(
     return { blocked: true, reason: "abuse" };
   }
 
-  if (profile.callsHour >= llmSoftCallsPerUserHour()) {
+  if (profile.callsHour >= guards.softHourlyCap) {
     return { blocked: true, reason: "soft_hourly" };
   }
 
-  if (profile.callsDay >= llmSoftCallsPerUserDay()) {
+  if (profile.callsDay >= guards.softDailyCap) {
     return { blocked: true, reason: "soft_daily" };
   }
 
