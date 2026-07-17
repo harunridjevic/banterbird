@@ -250,6 +250,68 @@ export function isUserLeavingConversation(history: ChatTurn[]): boolean {
   return false;
 }
 
+/** User said goodbye earlier, bot asked why, they gave an explanation (not another goodbye). */
+export function isGoodbyeFollowUp(history: ChatTurn[]): boolean {
+  const users = lastUserLines(history);
+  if (users.length < 2) return false;
+
+  const last = users[users.length - 1] ?? "";
+  if (isUserLeavingConversation(history)) return false;
+
+  const hadGoodbyeBefore = users.slice(0, -1).some((line) => {
+    const t = line.trim().toLowerCase();
+    return LEAVING_RE.test(line) || /^(bye+|cya|later|gn|night)$/.test(t);
+  });
+  if (!hadGoodbyeBefore) return false;
+
+  const assistants = history.filter((m) => m.role === "assistant");
+  const lastBot = assistants[assistants.length - 1]?.content ?? "";
+  return /\b(why|where|wait|wya|already)\b/i.test(lastBot);
+}
+
+export function isGoodbyeContextActive(history: ChatTurn[]): boolean {
+  return isUserLeavingConversation(history) || isGoodbyeFollowUp(history);
+}
+
+export function isUserCallingOutContradiction(text: string): boolean {
+  return /\b(but you (just )?said|you said|you told me|didn't you say|didnt you say|u said|you literally)\b/i.test(
+    text,
+  );
+}
+
+export function isBotAnnouncingOwnLeave(messages: string[]): boolean {
+  const t = messages.join(" ").toLowerCase();
+  return /\b(i gotta go|im gonna go|gotta run|brb|be right back|something came up|busy now|ttyl)\b/.test(
+    t,
+  );
+}
+
+export function formatRecentBotLinesBlock(history: ChatTurn[]): string {
+  const botLines = history
+    .filter((m) => m.role === "assistant")
+    .slice(-4)
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+  if (botLines.length === 0) return "";
+  return [
+    "You already said in this chat (stay consistent — do NOT contradict):",
+    ...botLines.map((l) => `- "${l}"`),
+  ].join("\n");
+}
+
+const CONTRADICTION_CLARIFY_LINES = [
+  "lol fair my bad",
+  "true lol u got me",
+  "ok yeah fair point",
+  "lol ok u caught that",
+];
+
+export function pickContradictionClarifyLine(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return CONTRADICTION_CLARIFY_LINES[h % CONTRADICTION_CLARIFY_LINES.length] ?? "lol fair";
+}
+
 const GOODBYE_STAY_LINES = [
   "wait why",
   "aw already?",
@@ -327,6 +389,21 @@ export const LEAVING_SKIP_PARTINGS = [
   "bye",
 ];
 
+export const GOODBYE_ACK_PARTINGS = [
+  "ok fair cya",
+  "alright later",
+  "cool np bye",
+  "ok sounds good",
+  "aight fair",
+  "got it cya",
+];
+
+export function pickGoodbyeAckParting(seed = "bye"): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return GOODBYE_ACK_PARTINGS[h % GOODBYE_ACK_PARTINGS.length] ?? GOODBYE_ACK_PARTINGS[0]!;
+}
+
 export const STRICT_SEXUAL_SKIP_PARTINGS = [
   "i dont wanna talk about that stuff bye",
   "nah not into that bye",
@@ -349,6 +426,25 @@ export function pickBoringSkipParting(seed = "boring"): string {
 
 export function pickLeavingSkipParting(): string {
   return LEAVING_SKIP_PARTINGS[Math.floor(Math.random() * LEAVING_SKIP_PARTINGS.length)] ?? "bye";
+}
+
+const LOVE_SEARCH_RE =
+  /\b(looking for love|find love|love search|want love|here for love|searching for love)\b/i;
+const NO_LOVE_SEARCH_RE =
+  /\b(no love|not looking for love|not into love|no love search|not here for love|just hanging|just chill|not rn|not right now)\b/i;
+
+/** Multiple lines in one turn that contradict each other (e.g. "looking for love" + "no love search"). */
+export function hasContradictoryReplyBatch(lines: string[]): boolean {
+  if (lines.length < 2) return false;
+  const hasLove = lines.some((l) => LOVE_SEARCH_RE.test(l));
+  const deniesLove = lines.some((l) => NO_LOVE_SEARCH_RE.test(l));
+  return hasLove && deniesLove;
+}
+
+/** Drop contradictory follow-up lines — keep the first line only. */
+export function trimContradictoryReplyLines(lines: string[]): string[] {
+  if (!hasContradictoryReplyBatch(lines)) return lines;
+  return lines.length > 0 ? [lines[0]!] : lines;
 }
 
 export function pickStrictSexualSkipParting(seed = "sexual"): string {

@@ -14,6 +14,12 @@ import {
   isGenericCannedLine,
   isNonResponsiveBotReply,
   isUserLeavingConversation,
+  isGoodbyeFollowUp,
+  isGoodbyeContextActive,
+  isUserCallingOutContradiction,
+  isBotAnnouncingOwnLeave,
+  pickContradictionClarifyLine,
+  pickGoodbyeAckParting,
   midChatStubReply,
   pickBoringSkipParting,
   pickExcuseSkipParting,
@@ -23,6 +29,7 @@ import {
   pickLeavingSkipParting,
   pickSkipParting,
   pickStrictSexualSkipParting,
+  trimContradictoryReplyLines,
   type BotSelfMemory,
   type UserMemory,
 } from "@/lib/ai-practice-bot/memory";
@@ -59,6 +66,10 @@ export function isAcceptableChatLine(text: string): boolean {
 }
 
 const MAX_CHAT_LINE = 400;
+
+function seedFromHistory(history: ChatTurn[]): string {
+  return history.map((m) => m.content).join("|") || "open";
+}
 
 function normalizeLines(raw: unknown, max = 3): string[] {
   if (!Array.isArray(raw)) return [];
@@ -126,6 +137,13 @@ export function parseModelTurn(
     }
 
     if (o.action === "away") {
+      if (isGoodbyeContextActive(history)) {
+        return withTiming(
+          persona,
+          { action: "skip", parting: pickGoodbyeAckParting(seedFromHistory(history)) },
+          settings,
+        );
+      }
       const lines = normalizeLines(o.messages, 2);
       const returns = normalizeLines(o.returnMessages, 2);
       const awaySec =
@@ -159,6 +177,7 @@ export function parseModelTurn(
       if (lines.length > 0) {
         const self = botSelf ?? { disclosedAge: undefined, disclosedCountry: undefined };
         lines = filterRedundantSelfDisclosure(lines, self, persona);
+        lines = trimContradictoryReplyLines(lines);
         const first = lines[0]!;
         const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
         const userAskedSomething =
@@ -194,6 +213,7 @@ export function decideFallbackTurn(
   const policy = sessionPolicyFromSettings(settings);
   const users = history.filter((m) => m.role === "user");
   const seed = history.map((m) => m.content).join("|") || "open";
+  const lastUser = users[users.length - 1]?.content ?? "";
 
   if (trigger === "idle_skip") {
     return withTiming(persona, {
@@ -221,7 +241,21 @@ export function decideFallbackTurn(
     }, settings);
   }
 
-  const last = users[users.length - 1]?.content ?? "";
+  if (isUserCallingOutContradiction(lastUser)) {
+    return withTiming(
+      persona,
+      { action: "reply", messages: [pickContradictionClarifyLine(seed)] },
+      settings,
+    );
+  }
+
+  if (isGoodbyeFollowUp(history)) {
+    return withTiming(
+      persona,
+      { action: "skip", parting: pickGoodbyeAckParting(seed) },
+      settings,
+    );
+  }
 
   if (isUserLeavingConversation(history)) {
     if (Math.random() < 0.38) {
@@ -238,7 +272,7 @@ export function decideFallbackTurn(
     return withTiming(persona, { action: "skip", parting: pickBoringSkipParting(seed) }, settings);
   }
 
-  if (/\b(kill you|murder|rape|pedo|cp\b|suicid)\b/i.test(last)) {
+  if (/\b(kill you|murder|rape|pedo|cp\b|suicid)\b/i.test(lastUser)) {
     return withTiming(persona, { action: "skip", parting: "nah im out" }, settings);
   }
 
@@ -270,13 +304,66 @@ export function applySessionPolicy(
 ): AiPracticeTurnResult {
   const policy = sessionPolicyFromSettings(settings);
   const seed = history.map((m) => m.content).join("|");
+  const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
 
   if (trigger === "idle_skip") {
     return withTiming(persona, { action: "skip", parting: pickGhostSkipParting() }, settings);
   }
 
+  if (isUserCallingOutContradiction(lastUser)) {
+    if (result.action === "reply" && !isBotAnnouncingOwnLeave(result.messages)) {
+      return result;
+    }
+    return withTiming(
+      persona,
+      { action: "reply", messages: [pickContradictionClarifyLine(seed)] },
+      settings,
+    );
+  }
+
+  if (isGoodbyeFollowUp(history)) {
+    if (result.action === "away" || (result.action === "reply" && isBotAnnouncingOwnLeave(result.messages))) {
+      return withTiming(
+        persona,
+        { action: "skip", parting: pickGoodbyeAckParting(seed) },
+        settings,
+      );
+    }
+    if (result.action === "skip") {
+      return withTiming(
+        persona,
+        { action: "skip", parting: pickGoodbyeAckParting(seed) },
+        settings,
+      );
+    }
+    if (result.action === "reply") {
+      const combined = result.messages.join(" ").toLowerCase();
+      const acknowledges =
+        /\b(ok|okay|alright|fair|cya|bye|later|gn|cool|got it|np|no worries|sounds good)\b/.test(
+          combined,
+        );
+      if (acknowledges && !isBotAnnouncingOwnLeave(result.messages)) {
+        const parting =
+          result.messages[result.messages.length - 1]?.trim() || pickGoodbyeAckParting(seed);
+        return withTiming(persona, { action: "skip", parting }, settings);
+      }
+    }
+    return withTiming(
+      persona,
+      { action: "skip", parting: pickGoodbyeAckParting(seed) },
+      settings,
+    );
+  }
+
   if (isUserLeavingConversation(history)) {
     if (result.action === "reply") {
+      if (isBotAnnouncingOwnLeave(result.messages)) {
+        return withTiming(
+          persona,
+          { action: "skip", parting: pickGoodbyeAckParting(seed) },
+          settings,
+        );
+      }
       const combined = result.messages.join(" ").toLowerCase();
       const stayAttempt = /\b(wait|stay|why|wya|where u|dont go|don't go|one more|hold on|noo|already)\b/.test(
         combined,
@@ -310,7 +397,23 @@ export function applySessionPolicy(
     }, settings);
   }
 
-  if (result.action === "skip" || result.action === "away") return result;
+  if (result.action === "skip" || result.action === "away") {
+    if (isGoodbyeContextActive(history)) {
+      return withTiming(
+        persona,
+        { action: "skip", parting: pickGoodbyeAckParting(seed) },
+        settings,
+      );
+    }
+    return result;
+  }
+
+  if (result.action === "reply") {
+    const trimmed = trimContradictoryReplyLines(result.messages);
+    if (trimmed.length !== result.messages.length) {
+      return { ...result, messages: trimmed };
+    }
+  }
 
   const dry = isDryConversation(history);
   const n = memory.userTurnCount;
@@ -366,9 +469,10 @@ export function sessionContextOverlay(
 
 export function goodbyeContextOverlay(): string {
   return [
-    "They said goodbye or are leaving.",
-    "Pick ONE: reply with ONE short line trying to get them to stay (e.g. wait why, stay a bit),",
-    "OR use skip action with a short bye parting (e.g. aight bye, cya).",
+    "They are leaving or wrapping up the chat.",
+    "If you have NOT asked why yet: ONE short stay line is ok (e.g. wait why, aw already).",
+    "If you already asked why and they answered: say ONE short ok/bye (e.g. ok cya, alright fair) and use skip with that parting.",
+    "NEVER say YOU are leaving (no brb, gotta go, ttyl) when THEY are the one leaving.",
     "If you say bye you MUST use skip action. Do not lecture them.",
   ].join(" ");
 }

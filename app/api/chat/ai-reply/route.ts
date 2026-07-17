@@ -13,7 +13,9 @@ import {
   contextualFallbackReply,
   filterRedundantSelfDisclosure,
   formatBotSelfMemoryBlock,
+  formatRecentBotLinesBlock,
   formatUserMemoryBlock,
+  isGoodbyeContextActive,
   isUserLeavingConversation,
   midChatStubReply,
   type BotSelfMemory,
@@ -485,9 +487,11 @@ export async function POST(req: Request) {
     const botSelf = buildBotSelfMemory(trimmedHistory, persona);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
     const botSelfBlock = formatBotSelfMemoryBlock(botSelf, persona);
+    const recentBotBlock = formatRecentBotLinesBlock(trimmedHistory);
     const sessionBlock = [
       sessionContextOverlay(memory, persona, botSettings),
-      isUserLeavingConversation(trimmedHistory) ? goodbyeContextOverlay() : "",
+      isGoodbyeContextActive(trimmedHistory) ? goodbyeContextOverlay() : "",
+      recentBotBlock,
       botSelfBlock,
     ]
       .filter(Boolean)
@@ -541,7 +545,7 @@ export async function POST(req: Request) {
 
     const usageGuard = await enforceLlmUsageGuards(user.id, roomId, isOpener);
     if (usageGuard.blocked) {
-      if (usageGuard.reason === "daily_cap") {
+      if (usageGuard.reason === "abuse") {
         return NextResponse.json(
           { error: "Usage limit exceeded", reason: "llm_overusage" },
           { status: 429 },
