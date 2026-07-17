@@ -191,9 +191,6 @@ export function MatchLobby() {
           setAccessBlocked(true);
           return { data: null, error: { message: j.error ?? "Your access has been restricted." } };
         }
-        if (res.status === 429 && (j.reason === "rate_limit" || j.reason === "burst_limit")) {
-          return { data: null, error: { message: j.error ?? "Too many rematches. Wait a moment and try again." } };
-        }
         return { data: null, error: { message: j.error ?? `Match failed (${res.status})` } };
       }
       const j = (await res.json()) as { roomId?: string | null };

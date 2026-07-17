@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
-import { loadAppSettings } from "@/lib/ops/app-settings";
 import { logError } from "@/lib/ops/error-log";
 import { clientIp } from "@/lib/moderation/client-ip";
 
@@ -35,27 +34,6 @@ export async function POST(req: Request) {
       await supabase.rpc("leave_match_queue");
       await supabase.rpc("end_user_active_rooms");
       return NextResponse.json({ error: "Your access has been restricted." }, { status: 403 });
-    }
-
-    const settings = await loadAppSettings();
-    if (settings.rateLimiting.enabled) {
-      const { data: rateResult } = await supabase.rpc("check_rate_limit", {
-        p_user_id: user.id,
-        p_event_type: "rematch",
-        p_max_per_minute: settings.rateLimiting.maxRematchesPerMinute,
-        p_max_burst: null,
-        p_block_minutes: settings.rateLimiting.blockDurationMinutes,
-      });
-      const result = rateResult as { allowed?: boolean; reason?: string; blocked?: boolean } | null;
-      if (result && !result.allowed) {
-        return NextResponse.json(
-          {
-            error: "Too many rematches. Please wait a moment before trying again.",
-            reason: result.reason,
-          },
-          { status: 429 },
-        );
-      }
     }
 
     const blockedIds = Array.isArray(body.blockedUserIds)

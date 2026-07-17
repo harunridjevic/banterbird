@@ -244,7 +244,7 @@ export default function OpsBotSettingsPage() {
                   <span>
                     <span className="block text-sm font-medium text-navy-100">Enable rate limiting</span>
                     <span className="mt-1 block text-xs text-navy-400">
-                      Blocks spam by limiting messages and rematches. Restricted users cannot use the app.
+                      Blocks spam by limiting messages. Restricted users cannot use the app.
                     </span>
                   </span>
                 </label>
@@ -272,17 +272,6 @@ export default function OpsBotSettingsPage() {
                       onChange={(maxMessagesPer10Seconds) =>
                         void patchAppSettings({
                           rateLimiting: { ...appSettings.rateLimiting, maxMessagesPer10Seconds },
-                        })
-                      }
-                    />
-                    <NumberField
-                      label="Max rematches per minute"
-                      value={appSettings.rateLimiting.maxRematchesPerMinute}
-                      min={1}
-                      max={60}
-                      onChange={(maxRematchesPerMinute) =>
-                        void patchAppSettings({
-                          rateLimiting: { ...appSettings.rateLimiting, maxRematchesPerMinute },
                         })
                       }
                     />

@@ -4,7 +4,6 @@ export type RateLimitSettings = {
   enabled: boolean;
   maxMessagesPerMinute: number;
   maxMessagesPer10Seconds: number;
-  maxRematchesPerMinute: number;
   blockDurationMinutes: number;
 };
 
@@ -40,7 +39,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     enabled: true,
     maxMessagesPerMinute: 20,
     maxMessagesPer10Seconds: 5,
-    maxRematchesPerMinute: 30,
     blockDurationMinutes: 15,
   },
   ageGate: {
@@ -70,7 +68,6 @@ export function normalizeRateLimitSettings(raw: Partial<RateLimitSettings>): Rat
     enabled: raw.enabled ?? d.enabled,
     maxMessagesPerMinute: clamp(Math.round(raw.maxMessagesPerMinute ?? d.maxMessagesPerMinute), 1, 200),
     maxMessagesPer10Seconds: clamp(Math.round(raw.maxMessagesPer10Seconds ?? d.maxMessagesPer10Seconds), 1, 50),
-    maxRematchesPerMinute: clamp(Math.round(raw.maxRematchesPerMinute ?? d.maxRematchesPerMinute), 1, 60),
     blockDurationMinutes: clamp(Math.round(raw.blockDurationMinutes ?? d.blockDurationMinutes), 1, 1440),
   };
 }
