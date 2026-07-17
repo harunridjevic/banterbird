@@ -29,6 +29,7 @@ import { PageLoader } from "@/components/ui/Loading";
 import type { MessageRow, SelfGender } from "@/lib/types/chat";
 import { tabCloseFetch } from "@/lib/presence/tab-close-fetch";
 import { getDeviceId } from "@/lib/moderation/device-id";
+import { blockUserForSession } from "@/lib/moderation/session-block";
 import { ConnectionSignal } from "@/components/chat/ConnectionSignal";
 import { ReportUserDialog } from "@/components/chat/ReportUserDialog";
 import { checkMatchAccess, rejectBlockedRoom, shouldAcceptRoom } from "@/lib/match/room-guard";
@@ -246,6 +247,7 @@ export function ChatRoom({ roomId }: Props) {
     if (!accept) {
       await rejectBlockedRoom(client, roomId);
       router.replace("/match");
+      window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
       return;
     }
 
@@ -519,11 +521,14 @@ export function ChatRoom({ roomId }: Props) {
   }, [client, roomId, router]);
 
   const leaveManually = useCallback(
-    async (clearFilters: boolean) => {
+    async (clearFilters: boolean, blockPeer = false) => {
       resetInactivityStrikes();
+      if (blockPeer && peerId && !isAiRoom) {
+        blockUserForSession(peerId);
+      }
       await endRoomAndGoMatch(clearFilters);
     },
-    [endRoomAndGoMatch],
+    [endRoomAndGoMatch, peerId, isAiRoom],
   );
 
   const leaveForInactivity = useCallback(async () => {
@@ -552,7 +557,6 @@ export function ChatRoom({ roomId }: Props) {
     skipEndingRef.current = true;
     disarmGhostSchedule(ghostSchedule.current);
     replyQueueRef.current = [];
-    recordInactivitySkip();
     await endRoomAndGoMatch(false);
   }, [endRoomAndGoMatch]);
 
@@ -977,7 +981,7 @@ export function ChatRoom({ roomId }: Props) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           disabled={exiting} // This is the "Skip" button
-          onClick={() => void leaveManually(false)}
+          onClick={() => void leaveManually(false, true)}
           className="inline-flex items-center gap-1.5 rounded-2xl bg-navy-900 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-50 dark:bg-navy-100 dark:text-navy-950"
         >
           <SkipForward className="h-3.5 w-3.5" aria-hidden />

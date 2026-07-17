@@ -20,6 +20,7 @@ import {
 } from "@/lib/match/policy";
 import { getDeviceId } from "@/lib/moderation/device-id";
 import { getSessionBlockedUsers } from "@/lib/moderation/session-block";
+import { normalizeBlockedUserIds } from "@/lib/moderation/blocked-user-ids";
 import {
   checkMatchAccess,
   rejectBlockedRoom,
@@ -73,6 +74,27 @@ export function MatchLobby() {
     activeWantsGender,
   );
   const shouldMatch = globalSettingsLoaded && canMatch && !matchingPaused;
+
+  const goToRoom = useCallback(
+    async (roomId: string, uid: string) => {
+      if (isMatchingPausedForInactivity()) return false;
+      const access = await checkMatchAccess(client);
+      if (!access.allowed) {
+        if (access.reason === "blocked") setAccessBlocked(true);
+        await rejectBlockedRoom(client, roomId);
+        return false;
+      }
+      const ok = await shouldAcceptRoom(client, roomId, uid);
+      if (!ok) {
+        await rejectBlockedRoom(client, roomId);
+        return false;
+      }
+      navigatedRef.current = true;
+      router.replace(`/chat/${roomId}`);
+      return true;
+    },
+    [client, router],
+  );
 
   useEffect(() => {
     if (!matchingPaused) return;
@@ -197,23 +219,7 @@ export function MatchLobby() {
       return { data: j.roomId ?? null, error: null };
     };
 
-    const goToRoom = async (roomId: string, uid: string) => {
-      if (isMatchingPausedForInactivity()) return false;
-      const access = await checkMatchAccess(client);
-      if (!access.allowed) {
-        if (access.reason === "blocked") setAccessBlocked(true);
-        await rejectBlockedRoom(client, roomId);
-        return false;
-      }
-      const ok = await shouldAcceptRoom(client, roomId, uid);
-      if (!ok) {
-        await rejectBlockedRoom(client, roomId);
-        return false;
-      }
-      navigatedRef.current = true;
-      router.replace(`/chat/${roomId}`);
-      return true;
-    };
+    const goToRoomLocal = goToRoom;
 
     void (async () => {
       const first = await attemptMatch();
@@ -228,7 +234,7 @@ export function MatchLobby() {
           data: { session },
         } = await client.auth.getSession();
         const uid = session?.user?.id;
-        if (uid) await goToRoom(firstRoom, uid);
+        if (uid) await goToRoomLocal(firstRoom, uid);
         return;
       }
 
@@ -243,7 +249,7 @@ export function MatchLobby() {
       const handleInsert = (payload: { new: Record<string, unknown> }) => {
         const id = typeof payload.new?.id === "string" ? payload.new.id : undefined;
         if (!id || !alive || cancelledRef.current) return;
-        void goToRoom(id, uid);
+        void goToRoomLocal(id, uid);
       };
 
       const suffix =
@@ -293,7 +299,7 @@ export function MatchLobby() {
         const { data, error } = await attemptMatch();
         if (error || !alive || cancelledRef.current) return;
         const rid = data as string | null;
-        if (rid) await goToRoom(rid, uid);
+        if (rid) await goToRoomLocal(rid, uid);
       }, 2800);
     })();
 
@@ -305,7 +311,7 @@ export function MatchLobby() {
       void client.rpc("leave_match_queue");
       if (matchChannel) void client.removeChannel(matchChannel);
     };
-  }, [client, ready, router, activeSelfGender, activeWantsGender, shouldMatch]);
+  }, [client, ready, router, activeSelfGender, activeWantsGender, shouldMatch, goToRoom]);
 
   const clearMatchFilters = useCallback(() => {
     setSelfGender(null);
@@ -356,7 +362,13 @@ export function MatchLobby() {
         return;
       }
 
-      // Prefer a human still waiting in the queue before falling back to AI.
+      if (!alive || cancelledRef.current || navigatedRef.current) return;
+      const {
+        data: { session },
+      } = await client.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+
       const humanRes = await fetch("/api/match/try", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -371,28 +383,26 @@ export function MatchLobby() {
       if (humanRes.ok) {
         const hj = (await humanRes.json()) as { roomId?: string | null };
         if (hj.roomId) {
-          navigatedRef.current = true;
-          router.replace(`/chat/${hj.roomId}`);
-          return;
+          const ok = await goToRoom(hj.roomId, uid);
+          if (ok) return;
         }
       }
 
+      const blockedIds = normalizeBlockedUserIds(getSessionBlockedUsers());
       const { data, error } = await client.rpc("try_match_ai_practice", {
         p_self_gender: activeSelfGender,
         p_wants_gender: activeWantsGender,
+        p_blocked_user_ids: blockedIds,
       });
       if (error || !alive || cancelledRef.current || navigatedRef.current) return;
       const rid = data as string | null;
-      if (rid) {
-        navigatedRef.current = true;
-        router.replace(`/chat/${rid}`);
-      }
+      if (rid) await goToRoom(rid, uid);
     }, delayMs);
     return () => {
       alive = false;
       window.clearTimeout(t);
     };
-  }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings]);
+  }, [client, ready, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings, goToRoom]);
 
   if (!ready || !globalSettingsLoaded) {
     return <PageLoader label={!ready ? "Preparing your session…" : "Loading match settings…"} />;

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { logError } from "@/lib/ops/error-log";
 import { clientIp } from "@/lib/moderation/client-ip";
+import { normalizeBlockedUserIds } from "@/lib/moderation/blocked-user-ids";
 
 export async function POST(req: Request) {
   try {
@@ -36,9 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Your access has been restricted." }, { status: 403 });
     }
 
-    const blockedIds = Array.isArray(body.blockedUserIds)
-      ? body.blockedUserIds.filter((id) => typeof id === "string")
-      : [];
+    const blockedIds = normalizeBlockedUserIds(body.blockedUserIds);
 
     const { data: roomId, error } = await supabase.rpc("try_match", {
       p_self_gender: body.selfGender ?? "male",
