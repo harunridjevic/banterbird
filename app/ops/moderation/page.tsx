@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Shield, Ban, CheckCircle, XCircle } from "lucide-react";
+import { OpsLoadingPanel, PAGE_SIZE } from "@/components/ops/OpsLoadingPanel";
 
 type Report = {
   id: string;
@@ -41,6 +42,10 @@ export default function OpsModerationPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [usageByUser, setUsageByUser] = useState<Record<string, UserUsage>>({});
+  const [blocksTotal, setBlocksTotal] = useState(0);
+  const [blocksHasMore, setBlocksHasMore] = useState(false);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [loadingMoreBlocks, setLoadingMoreBlocks] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const unlock = useCallback(async () => {
@@ -65,17 +70,33 @@ export default function OpsModerationPage() {
     }
   }, [password]);
 
-  const loadData = useCallback(async () => {
-    const res = await fetch("/api/ops/moderation?status=open");
-    if (!res.ok) return;
-    const data = (await res.json()) as {
-      reports: Report[];
-      blocks: Block[];
-      usageByUser?: Record<string, UserUsage>;
-    };
-    setReports(data.reports ?? []);
-    setBlocks(data.blocks ?? []);
-    setUsageByUser(data.usageByUser ?? {});
+  const loadBlocks = useCallback(async (offset = 0, append = false) => {
+    if (append) setLoadingMoreBlocks(true);
+    else setLoadingBlocks(true);
+    try {
+      const qs = new URLSearchParams({
+        status: "open",
+        blocksLimit: String(PAGE_SIZE),
+        blocksOffset: String(offset),
+      });
+      const res = await fetch(`/api/ops/moderation?${qs}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        reports: Report[];
+        blocks: Block[];
+        usageByUser?: Record<string, UserUsage>;
+        blocksTotal?: number;
+        blocksHasMore?: boolean;
+      };
+      if (!append) setReports(data.reports ?? []);
+      setBlocks((prev) => (append ? [...prev, ...(data.blocks ?? [])] : (data.blocks ?? [])));
+      setUsageByUser((prev) => ({ ...prev, ...(data.usageByUser ?? {}) }));
+      setBlocksTotal(data.blocksTotal ?? (data.blocks ?? []).length);
+      setBlocksHasMore(data.blocksHasMore ?? false);
+    } finally {
+      if (append) setLoadingMoreBlocks(false);
+      else setLoadingBlocks(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -90,8 +111,8 @@ export default function OpsModerationPage() {
   }, []);
 
   useEffect(() => {
-    if (unlocked) void loadData();
-  }, [unlocked, loadData]);
+    if (unlocked) void loadBlocks(0, false);
+  }, [unlocked, loadBlocks]);
 
   const modAction = async (body: Record<string, unknown>) => {
     const res = await fetch("/api/ops/moderation", {
@@ -99,7 +120,7 @@ export default function OpsModerationPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (res.ok) void loadData();
+    if (res.ok) void loadBlocks(0, false);
   };
 
   return (
@@ -112,7 +133,7 @@ export default function OpsModerationPage() {
         <p className="mt-2 text-sm text-navy-300">Review reports, block users, IPs, or devices.</p>
 
         {isCheckingCookie ? (
-          <p className="mt-10 text-sm text-navy-400">Checking authentication…</p>
+          <OpsLoadingPanel label="Checking authentication…" compact />
         ) : !unlocked ? (
           <div className="mt-10 rounded-2xl border border-white/10 bg-navy-900/40 p-6">
             <input
@@ -137,7 +158,9 @@ export default function OpsModerationPage() {
           <div className="mt-10 space-y-10">
             <section>
               <h2 className="text-lg font-semibold text-white">Open reports ({reports.length})</h2>
-              {reports.length === 0 ? (
+              {loadingBlocks && reports.length === 0 ? (
+                <OpsLoadingPanel label="Loading reports…" compact />
+              ) : reports.length === 0 ? (
                 <p className="mt-4 text-sm text-navy-400">No open reports.</p>
               ) : (
                 <ul className="mt-4 space-y-4">
@@ -228,58 +251,78 @@ export default function OpsModerationPage() {
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold text-white">Active blocks ({blocks.length})</h2>
-              {blocks.length === 0 ? (
+              <h2 className="text-lg font-semibold text-white">
+                Active blocks ({blocksTotal || blocks.length})
+              </h2>
+              {loadingBlocks && blocks.length === 0 ? (
+                <OpsLoadingPanel label="Loading blocked users…" compact />
+              ) : blocks.length === 0 ? (
                 <p className="mt-4 text-sm text-navy-400">No active blocks.</p>
               ) : (
-                <ul className="mt-4 space-y-2">
-                  {blocks.map((b) => {
-                    const usage =
-                      b.block_type === "user" ? usageByUser[b.block_value] : undefined;
-                    const autoBlocked =
-                      b.created_by === "rate_limit" || b.created_by === "llm_overusage";
-                    return (
-                      <li
-                        key={b.id}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
-                      >
-                        <div>
-                          <span className="rounded bg-white/10 px-2 py-0.5 text-xs uppercase text-navy-300">
-                            {b.block_type}
-                          </span>
-                          {autoBlocked ? (
-                            <span className="ml-2 rounded bg-amber-500/20 px-2 py-0.5 text-xs uppercase text-amber-200">
-                              auto
-                            </span>
-                          ) : null}
-                          <span className="ml-2 font-mono text-sm text-white">{b.block_value}</span>
-                          {b.reason ? (
-                            <p className="mt-1 text-xs text-navy-400">{b.reason}</p>
-                          ) : null}
-                          {usage ? (
-                            <p className="mt-1 text-xs text-navy-300">
-                              API calls: {usage.apiCalls} · Rooms: {usage.rooms} · Online time:{" "}
-                              {usage.sessionMinutes} min
-                            </p>
-                          ) : null}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void modAction({ action: "unblock", blockId: b.id })}
-                          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-navy-200 hover:bg-white/5"
+                <>
+                  <ul className="mt-4 space-y-2">
+                    {blocks.map((b) => {
+                      const usage =
+                        b.block_type === "user" ? usageByUser[b.block_value] : undefined;
+                      const autoBlocked =
+                        b.created_by === "rate_limit" || b.created_by === "llm_overusage";
+                      return (
+                        <li
+                          key={b.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
                         >
-                          Unblock
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                          <div>
+                            <span className="rounded bg-white/10 px-2 py-0.5 text-xs uppercase text-navy-300">
+                              {b.block_type}
+                            </span>
+                            {autoBlocked ? (
+                              <span className="ml-2 rounded bg-amber-500/20 px-2 py-0.5 text-xs uppercase text-amber-200">
+                                auto
+                              </span>
+                            ) : null}
+                            <span className="ml-2 font-mono text-sm text-white">{b.block_value}</span>
+                            {b.reason ? (
+                              <p className="mt-1 text-xs text-navy-400">{b.reason}</p>
+                            ) : null}
+                            {usage ? (
+                              <p className="mt-1 text-xs text-navy-300">
+                                API calls: {usage.apiCalls} · Rooms: {usage.rooms} · Online time:{" "}
+                                {usage.sessionMinutes} min
+                              </p>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void modAction({ action: "unblock", blockId: b.id })}
+                            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-navy-200 hover:bg-white/5"
+                          >
+                            Unblock
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {blocksHasMore ? (
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        type="button"
+                        disabled={loadingMoreBlocks}
+                        onClick={() => void loadBlocks(blocks.length, true)}
+                        className="rounded-xl border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-navy-100 hover:bg-white/10 disabled:opacity-50"
+                      >
+                        {loadingMoreBlocks
+                          ? "Loading…"
+                          : `Load more (${blocks.length} of ${blocksTotal})`}
+                      </button>
+                    </div>
+                  ) : null}
+                </>
               )}
             </section>
 
             <section>
               <h2 className="text-lg font-semibold text-white">Manual block</h2>
-              <ManualBlockForm onBlock={() => void loadData()} />
+              <ManualBlockForm onBlock={() => void loadBlocks(0, false)} />
             </section>
           </div>
         )}

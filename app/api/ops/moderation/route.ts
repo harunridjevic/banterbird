@@ -13,14 +13,16 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const status = url.searchParams.get("status") ?? "open";
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 200);
+  const reportsLimit = Math.min(parseInt(url.searchParams.get("reportsLimit") ?? "50", 10), 200);
+  const blocksLimit = Math.min(parseInt(url.searchParams.get("blocksLimit") ?? "25", 10), 100);
+  const blocksOffset = Math.max(parseInt(url.searchParams.get("blocksOffset") ?? "0", 10), 0);
 
   const admin = createServiceRoleClient();
   let query = admin
     .from("user_reports")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(reportsLimit);
 
   if (status !== "all") {
     query = query.eq("status", status);
@@ -31,11 +33,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { data: blocks } = await admin
+  const { count: blocksTotal, error: blocksCountErr } = await admin
+    .from("moderation_blocks")
+    .select("*", { count: "exact", head: true })
+    .eq("active", true);
+
+  const { data: blocks, error: blocksErr } = await admin
     .from("moderation_blocks")
     .select("*")
     .eq("active", true)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(blocksOffset, blocksOffset + blocksLimit - 1);
+
+  if (blocksErr) {
+    return NextResponse.json({ error: blocksErr.message }, { status: 500 });
+  }
 
   const usageByUser: Record<
     string,
@@ -62,10 +74,17 @@ export async function GET(req: Request) {
     }),
   );
 
+  const blockRows = blocks ?? [];
+  const totalBlocks = blocksCountErr ? blockRows.length : (blocksTotal ?? blockRows.length);
+
   return NextResponse.json({
     reports: reports ?? [],
-    blocks: blocks ?? [],
+    blocks: blockRows,
     usageByUser,
+    blocksTotal: totalBlocks,
+    blocksHasMore: blocksOffset + blockRows.length < totalBlocks,
+    blocksOffset,
+    blocksLimit,
   });
 }
 

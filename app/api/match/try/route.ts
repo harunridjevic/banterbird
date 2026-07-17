@@ -48,13 +48,9 @@ export async function POST(req: Request) {
       });
       const result = rateResult as { allowed?: boolean; reason?: string; blocked?: boolean } | null;
       if (result && !result.allowed) {
-        if (result.blocked) {
-          await supabase.rpc("leave_match_queue");
-          await supabase.rpc("end_user_active_rooms");
-        }
         return NextResponse.json(
           {
-            error: "Too many rematches. Spammy behavior detected. Take a break.",
+            error: "Too many rematches. Please wait a moment before trying again.",
             reason: result.reason,
           },
           { status: 429 },

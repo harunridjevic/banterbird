@@ -29,7 +29,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     enabled: true,
     maxMessagesPerMinute: 20,
     maxMessagesPer10Seconds: 5,
-    maxRematchesPerMinute: 8,
+    maxRematchesPerMinute: 30,
     blockDurationMinutes: 15,
   },
   ageGate: {

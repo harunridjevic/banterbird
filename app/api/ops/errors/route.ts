@@ -41,20 +41,29 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 200);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "25", 10), 100);
+  const offset = Math.max(parseInt(url.searchParams.get("offset") ?? "0", 10), 0);
 
   const admin = createServiceRoleClient();
+  const { count, error: countErr } = await admin
+    .from("error_logs")
+    .select("*", { count: "exact", head: true });
+
   const { data, error } = await admin
     .from("error_logs")
     .select("id,source,level,message,stack,metadata,user_id,created_at")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ errors: data ?? [] });
+  const total = countErr ? (data?.length ?? 0) : (count ?? 0);
+  const rows = data ?? [];
+  const hasMore = offset + rows.length < total;
+
+  return NextResponse.json({ errors: rows, total, hasMore, offset, limit });
 }
 
 export async function DELETE(req: Request) {

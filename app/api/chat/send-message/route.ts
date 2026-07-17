@@ -55,15 +55,11 @@ export async function POST(req: Request) {
       });
       const result = rateResult as { allowed?: boolean; reason?: string; blocked?: boolean } | null;
       if (result && !result.allowed) {
-        if (result.blocked) {
-          await supabase.rpc("leave_match_queue");
-          await supabase.rpc("end_user_active_rooms");
-        }
         return NextResponse.json(
           {
             error:
               result.reason === "burst_limit" || result.reason === "rate_limit"
-                ? "Slow down. Spammy behavior detected. Your access is temporarily restricted."
+                ? "Slow down. You're sending messages too quickly."
                 : "Slow down. You're sending messages too quickly.",
             reason: result.reason,
           },

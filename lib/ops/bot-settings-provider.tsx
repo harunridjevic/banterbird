@@ -27,7 +27,7 @@ const REFRESH_MS = 30_000;
 export function BotSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<BotSettings | null>(null);
   const [ageGate, setAgeGate] = useState<AgeGateSettings>(DEFAULT_APP_SETTINGS.ageGate);
-  const [loaded, setLoaded] = useState(true);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,14 +35,17 @@ export function BotSettingsProvider({ children }: { children: ReactNode }) {
     const refresh = async () => {
       try {
         const res = await fetch("/api/settings/public");
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) setLoaded(true);
+          return;
+        }
         const data = (await res.json()) as {
           botSettings?: unknown;
           ageGate?: Partial<AgeGateSettings>;
         };
         const parsed = parseBotSettings(data.botSettings);
-        if (!cancelled && parsed) {
-          setSettings(parsed);
+        if (!cancelled) {
+          if (parsed) setSettings(parsed);
           setLoaded(true);
           if (data.ageGate) {
             setAgeGate({
@@ -53,7 +56,7 @@ export function BotSettingsProvider({ children }: { children: ReactNode }) {
           window.dispatchEvent(new CustomEvent(BOT_SETTINGS_CHANGED_EVENT));
         }
       } catch {
-        // keep last known settings
+        if (!cancelled) setLoaded(true);
       }
     };
 

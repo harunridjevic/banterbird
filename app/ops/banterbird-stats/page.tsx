@@ -19,6 +19,7 @@ import {
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
 import { fmtDurationMinutes } from "@/lib/ops/format-duration";
+import { OpsLoadingPanel } from "@/components/ops/OpsLoadingPanel";
 import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 function fmtNum(n: number | null | undefined, suffix = ""): string {
@@ -211,9 +212,7 @@ export default function OpsAnalyticsPage() {
         </div>
 
         {isCheckingCookie ? (
-          <div className="mt-10 flex items-center justify-center rounded-2xl border border-white/10 bg-navy-900/40 p-6">
-            <p className="text-sm text-navy-400">Checking authentication…</p>
-          </div>
+          <OpsLoadingPanel label="Checking authentication…" compact />
         ) : !unlocked ? (
           <div className="mt-10 rounded-2xl border border-white/10 bg-navy-900/40 p-6">
             <label htmlFor="ops-pw" className="block text-sm font-medium text-navy-200">
@@ -541,7 +540,7 @@ export default function OpsAnalyticsPage() {
                 </section>
               </div>
             ) : loading ? (
-              <p className="mt-8 text-sm text-navy-400">Loading metrics…</p>
+              <OpsLoadingPanel label="Loading metrics…" compact />
             ) : !error ? (
               <p className="mt-8 text-sm text-navy-400">No data yet.</p>
             ) : null}

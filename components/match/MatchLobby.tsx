@@ -192,8 +192,7 @@ export function MatchLobby() {
           return { data: null, error: { message: j.error ?? "Your access has been restricted." } };
         }
         if (res.status === 429 && (j.reason === "rate_limit" || j.reason === "burst_limit")) {
-          setAccessBlocked(true);
-          return { data: null, error: { message: j.error ?? "Spam detected. Access temporarily restricted." } };
+          return { data: null, error: { message: j.error ?? "Too many rematches. Wait a moment and try again." } };
         }
         return { data: null, error: { message: j.error ?? `Match failed (${res.status})` } };
       }
@@ -398,8 +397,8 @@ export function MatchLobby() {
     };
   }, [client, ready, router, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings]);
 
-  if (!ready) {
-    return <PageLoader label="Preparing your session…" />;
+  if (!ready || !globalSettingsLoaded) {
+    return <PageLoader label={!ready ? "Preparing your session…" : "Loading match settings…"} />;
   }
 
   if (authError) {
