@@ -11,10 +11,10 @@ export function LegalPageShell({ title, updated, children }: Props) {
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
       <Link
-        href="/match"
+        href="/"
         className="inline-flex items-center text-sm font-medium text-navy-600 underline-offset-2 hover:text-navy-900 hover:underline dark:text-navy-400 dark:hover:text-navy-100"
       >
-        ← Back to match
+        ← Back to chat
       </Link>
 
       <header className="mt-6 border-b border-navy-200/60 pb-6 dark:border-white/10">

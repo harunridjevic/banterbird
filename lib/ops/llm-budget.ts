@@ -6,7 +6,7 @@ import {
   type LlmGuardSettings,
 } from "@/lib/ops/app-settings";
 
-const LLM_PROVIDERS = ["groq", "gemini", "openai"] as const;
+const LLM_PROVIDERS = ["cerebras", "groq", "gemini", "openai"] as const;
 
 export type UserLlmUsageProfile = {
   calls10Min: number;

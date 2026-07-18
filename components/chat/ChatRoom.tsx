@@ -232,21 +232,21 @@ export function ChatRoom({ roomId }: Props) {
     if (room.ended_at) {
       setPeerId(null);
       setPeerGender(null);
-      router.replace("/match");
+      router.replace("/");
       return;
     }
 
     const access = await checkMatchAccess();
     if (!access.allowed) {
       await client.rpc("end_active_room", { p_room_id: roomId });
-      router.replace("/match");
+      router.replace("/");
       return;
     }
 
     const accept = await shouldAcceptRoom(client, roomId, session.user.id);
     if (!accept) {
       await rejectBlockedRoom(client, roomId);
-      router.replace("/match");
+      router.replace("/");
       window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
       return;
     }
@@ -343,7 +343,7 @@ export function ChatRoom({ roomId }: Props) {
           const next = payload.new as { ended_at?: string | null };
           if (next.ended_at) {
             roomEndedRef.current = true;
-            router.replace("/match");
+            router.replace("/");
           }
         },
       )
@@ -357,7 +357,7 @@ export function ChatRoom({ roomId }: Props) {
         },
         () => {
           roomEndedRef.current = true;
-          router.replace("/match");
+          router.replace("/");
         },
       )
       .subscribe();
@@ -517,7 +517,7 @@ export function ChatRoom({ roomId }: Props) {
       }).catch(() => undefined);
     }
     roomEndedRef.current = true;
-    router.replace("/match");
+    router.replace("/");
   }, [client, roomId, router]);
 
   const leaveManually = useCallback(
@@ -835,13 +835,13 @@ export function ChatRoom({ roomId }: Props) {
           // Remove optimistic message on error
           setMessages((prev) => prev.filter((m) => m.id !== tempId));
           if (res.status === 403) {
-            router.replace("/match");
+            router.replace("/");
             return;
           }
           if (res.status === 429) {
             setError(j.error ?? "Slow down. Messages sent too quickly.");
             if (j.reason === "rate_limit" || j.reason === "burst_limit") {
-              router.replace("/match");
+              router.replace("/");
             }
             return;
           }
@@ -871,7 +871,7 @@ export function ChatRoom({ roomId }: Props) {
         <p className="text-navy-700 dark:text-navy-200">{error}</p>
         <button
           type="button"
-          onClick={() => void router.replace("/match")}
+          onClick={() => void router.replace("/")}
           className="rounded-2xl bg-navy-900 px-6 py-3 text-sm font-semibold text-white dark:bg-navy-100 dark:text-navy-950"
         >
           Back to matching
@@ -998,7 +998,7 @@ export function ChatRoom({ roomId }: Props) {
           selfId={selfId}
           onReported={() => {
             setShowReport(false);
-            void router.replace("/match");
+            void router.replace("/");
           }}
           onClose={() => setShowReport(false)}
         />

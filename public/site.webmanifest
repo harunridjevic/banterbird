@@ -1,7 +1,7 @@
 {
   "name": "BanterBird - Anonymous Chat",
   "short_name": "BanterBird",
-  "description": "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide.",
+  "description": "Free anonymous chat online on BanterBird (banterbird.app) — no signup. Instant 1-on-1 anonymous text chat with random people worldwide.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c121c",
@@ -9,19 +9,19 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/web-app-manifest-192x192.png",
+      "src": "/web-app-manifest-192x192.png?v=0.11.0",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/web-app-manifest-512x512.png",
+      "src": "/web-app-manifest-512x512.png?v=0.11.0",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/apple-touch-icon.png",
+      "src": "/apple-touch-icon.png?v=0.11.0",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
