@@ -611,7 +611,7 @@ export default function OpsBotSettingsPage() {
             {botSettings.replySpeedMode === "fixed" ? (
               <SliderField
                 label="Reply speed"
-                hint="0.55 = fast, 1.65 = slow. Affects read delay and typing duration."
+                hint="0.55 = fast read, 1.65 = slow. Typing bubble never goes below normal speed."
                 value={botSettings.replySpeed}
                 min={0.55}
                 max={1.65}

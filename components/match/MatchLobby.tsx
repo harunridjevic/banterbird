@@ -59,6 +59,9 @@ export function MatchLobby() {
   const matchGendersRef = useRef<{ self: SelfGender; wants: WantsGender } | null>(null);
   const navigatedRef = useRef(false);
   const cancelledRef = useRef(false);
+  /** Once set, matching loops must not restart or kill this room. */
+  const matchedRoomIdRef = useRef<string | null>(null);
+  const goToRoomRef = useRef<(roomId: string, uid: string) => Promise<boolean>>(async () => false);
   const showMatchModePicker = globalSettingsLoaded && matchMode === "user_choice";
   const effectiveIncludeAi = globalSettingsLoaded && matchMode ? computeEffectiveIncludeAi(matchMode, includeAiMatch) : false;
   const { activeSelfGender, activeWantsGender } = resolveActiveGenders(
@@ -75,26 +78,46 @@ export function MatchLobby() {
   );
   const shouldMatch = globalSettingsLoaded && canMatch && !matchingPaused;
 
+  const releaseMatchClaim = useCallback(() => {
+    matchedRoomIdRef.current = null;
+    navigatedRef.current = false;
+    cancelledRef.current = false;
+  }, []);
+
   const goToRoom = useCallback(
     async (roomId: string, uid: string) => {
+      if (matchedRoomIdRef.current === roomId || navigatedRef.current) return true;
+      if (matchedRoomIdRef.current) return true;
       if (isMatchingPausedForInactivity()) return false;
+
+      // Claim immediately — effect restarts / AI fallback must not wipe this.
+      matchedRoomIdRef.current = roomId;
+      navigatedRef.current = true;
+      cancelledRef.current = true;
+
       const access = await checkMatchAccess(client);
       if (!access.allowed) {
+        releaseMatchClaim();
         if (access.reason === "blocked") setAccessBlocked(true);
-        await rejectBlockedRoom(client, roomId);
+        if (access.reason === "blocked") await rejectBlockedRoom(client, roomId);
         return false;
       }
       const ok = await shouldAcceptRoom(client, roomId, uid);
       if (!ok) {
+        releaseMatchClaim();
         await rejectBlockedRoom(client, roomId);
         return false;
       }
-      navigatedRef.current = true;
+      void client.rpc("leave_match_queue");
       router.replace(`/chat/${roomId}`);
       return true;
     },
-    [client, router],
+    [client, router, releaseMatchClaim],
   );
+
+  useEffect(() => {
+    goToRoomRef.current = goToRoom;
+  }, [goToRoom]);
 
   useEffect(() => {
     if (!matchingPaused) return;
@@ -168,33 +191,61 @@ export function MatchLobby() {
   }, [wantsGender, hideGenderFilters]);
 
   useEffect(() => {
-    cancelledRef.current = false;
-    navigatedRef.current = false;
     if (!ready || !shouldMatch) {
       setIsMatching(false);
       return;
     }
 
+    // Already claimed a room this session — do not reset and re-poll (kills rematch).
+    if (matchedRoomIdRef.current || navigatedRef.current) {
+      setIsMatching(false);
+      return;
+    }
+
+    cancelledRef.current = false;
     setIsMatching(true);
 
     let poll: ReturnType<typeof setInterval> | undefined;
     let matchChannel: ReturnType<typeof client.channel> | null = null;
     let alive = true;
+    let accessOkCached: boolean | null = null;
+
+    const stopMatchingLoops = () => {
+      alive = false;
+      if (poll) {
+        clearInterval(poll);
+        poll = undefined;
+      }
+      if (matchChannel) {
+        void client.removeChannel(matchChannel);
+        matchChannel = null;
+      }
+    };
 
     const attemptMatch = async () => {
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
+        return { data: null, error: null };
+      }
       if (isMatchingPausedForInactivity()) {
         return { data: null, error: null };
       }
-      const access = await checkMatchAccess(client);
-      if (!access.allowed) {
-        if (access.reason === "blocked") setAccessBlocked(true);
-        const message =
-          access.reason === "blocked"
-            ? "Your access has been restricted."
-            : access.reason === "unauthorized"
-              ? "Sign-in failed or your session expired. Refresh the page."
-              : "Could not verify access. Try refreshing.";
-        return { data: null, error: { message } };
+      if (accessOkCached !== true) {
+        const access = await checkMatchAccess(client);
+        if (!access.allowed) {
+          if (access.reason === "blocked") setAccessBlocked(true);
+          const message =
+            access.reason === "blocked"
+              ? "Your access has been restricted."
+              : access.reason === "unauthorized"
+                ? "Sign-in failed or your session expired. Refresh the page."
+                : "Could not verify access. Try refreshing.";
+          return { data: null, error: { message } };
+        }
+        accessOkCached = true;
+      }
+
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
+        return { data: null, error: null };
       }
 
       const res = await fetch("/api/match/try", {
@@ -207,6 +258,9 @@ export function MatchLobby() {
           deviceId: getDeviceId(),
         }),
       });
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
+        return { data: null, error: null };
+      }
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
         if (res.status === 403) {
@@ -219,11 +273,9 @@ export function MatchLobby() {
       return { data: j.roomId ?? null, error: null };
     };
 
-    const goToRoomLocal = goToRoom;
-
     void (async () => {
       const first = await attemptMatch();
-      if (!alive || cancelledRef.current) return;
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) return;
       if (first.error) {
         setRpcError(first.error.message);
         return;
@@ -234,7 +286,10 @@ export function MatchLobby() {
           data: { session },
         } = await client.auth.getSession();
         const uid = session?.user?.id;
-        if (uid) await goToRoomLocal(firstRoom, uid);
+        if (uid) {
+          const ok = await goToRoomRef.current(firstRoom, uid);
+          if (ok) stopMatchingLoops();
+        }
         return;
       }
 
@@ -244,12 +299,18 @@ export function MatchLobby() {
         data: { session },
       } = await client.auth.getSession();
       const uid = session?.user?.id;
-      if (!uid || !alive || cancelledRef.current) return;
+      if (!uid || !alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
+        return;
+      }
 
       const handleInsert = (payload: { new: Record<string, unknown> }) => {
         const id = typeof payload.new?.id === "string" ? payload.new.id : undefined;
-        if (!id || !alive || cancelledRef.current) return;
-        void goToRoomLocal(id, uid);
+        if (!id || !alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
+          return;
+        }
+        void goToRoomRef.current(id, uid).then((ok) => {
+          if (ok) stopMatchingLoops();
+        });
       };
 
       const suffix =
@@ -280,7 +341,7 @@ export function MatchLobby() {
           handleInsert,
         );
 
-      if (!alive || cancelledRef.current) {
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
         void client.removeChannel(ch);
         return;
       }
@@ -288,32 +349,39 @@ export function MatchLobby() {
       ch.subscribe();
       matchChannel = ch;
 
-      if (!alive || cancelledRef.current) {
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
         void client.removeChannel(ch);
         matchChannel = null;
         return;
       }
 
       poll = setInterval(async () => {
-        if (!alive || cancelledRef.current) return;
+        if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) return;
         const { data, error } = await attemptMatch();
-        if (error || !alive || cancelledRef.current) return;
+        if (error || !alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
+          return;
+        }
         const rid = data as string | null;
-        if (rid) await goToRoomLocal(rid, uid);
-      }, 2800);
+        if (rid) {
+          const ok = await goToRoomRef.current(rid, uid);
+          if (ok) stopMatchingLoops();
+        }
+      }, 2200);
     })();
 
     return () => {
-      alive = false;
-      cancelledRef.current = true;
-      if (poll) clearInterval(poll);
-      setIsMatching(false);
-      void client.rpc("leave_match_queue");
-      if (matchChannel) void client.removeChannel(matchChannel);
+      stopMatchingLoops();
+      // Only cancel if we never claimed a room — otherwise a deps flicker would abort navigation.
+      if (!matchedRoomIdRef.current) {
+        cancelledRef.current = true;
+        setIsMatching(false);
+        void client.rpc("leave_match_queue");
+      }
     };
-  }, [client, ready, router, activeSelfGender, activeWantsGender, shouldMatch, goToRoom]);
+  }, [client, ready, activeSelfGender, activeWantsGender, shouldMatch]);
 
   const clearMatchFilters = useCallback(() => {
+    releaseMatchClaim();
     setSelfGender(null);
     setWantsGender(null);
     setIncludeAiMatch(true);
@@ -321,16 +389,17 @@ export function MatchLobby() {
     matchGendersRef.current = null;
     localStorage.removeItem("banterbird:selfGender");
     localStorage.removeItem("banterbird:wantsGender");
-  }, []);
+  }, [releaseMatchClaim]);
 
   const handleCancelMatching = useCallback(async () => {
     cancelledRef.current = true;
+    releaseMatchClaim();
     if (client) {
       await client.rpc("leave_match_queue");
     }
     clearMatchFilters();
     setIsMatching(false);
-  }, [client, clearMatchFilters]);
+  }, [client, clearMatchFilters, releaseMatchClaim]);
 
   const handleInactivityWhileMatching = useCallback(async () => {
     recordInactivitySkip();
@@ -341,20 +410,24 @@ export function MatchLobby() {
 
   const handleStartMatching = useCallback(() => {
     resetInactivityStrikes();
+    releaseMatchClaim();
     if (hideGenderFilters) {
       matchGendersRef.current = anonymousMatchGenders();
     }
     setMatchRequested(true);
-  }, [hideGenderFilters]);
+  }, [hideGenderFilters, releaseMatchClaim]);
 
   useEffect(() => {
     if (!ready || !shouldMatch || !effectiveIncludeAi) return;
+    if (matchedRoomIdRef.current || navigatedRef.current) return;
+
     let alive = true;
-    const s = globalBotSettings;
-    const span = Math.max(0, s.aiMatchDelayMaxMs - s.aiMatchDelayMinMs);
-    const delayMs = s.aiMatchDelayMinMs + Math.floor(Math.random() * (span + 1));
+    const delayMin = globalBotSettings.aiMatchDelayMinMs;
+    const delayMax = globalBotSettings.aiMatchDelayMaxMs;
+    const span = Math.max(0, delayMax - delayMin);
+    const delayMs = delayMin + Math.floor(Math.random() * (span + 1));
     const t = window.setTimeout(async () => {
-      if (!alive || cancelledRef.current || navigatedRef.current) return;
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) return;
       if (isMatchingPausedForInactivity()) return;
       const access = await checkMatchAccess(client);
       if (!access.allowed) {
@@ -362,31 +435,12 @@ export function MatchLobby() {
         return;
       }
 
-      if (!alive || cancelledRef.current || navigatedRef.current) return;
+      if (!alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) return;
       const {
         data: { session },
       } = await client.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-
-      const humanRes = await fetch("/api/match/try", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selfGender: activeSelfGender,
-          wantsGender: activeWantsGender,
-          blockedUserIds: getSessionBlockedUsers(),
-          deviceId: getDeviceId(),
-        }),
-      });
-      if (!alive || cancelledRef.current || navigatedRef.current) return;
-      if (humanRes.ok) {
-        const hj = (await humanRes.json()) as { roomId?: string | null };
-        if (hj.roomId) {
-          const ok = await goToRoom(hj.roomId, uid);
-          if (ok) return;
-        }
-      }
 
       const blockedIds = normalizeBlockedUserIds(getSessionBlockedUsers());
       const { data, error } = await client.rpc("try_match_ai_practice", {
@@ -394,15 +448,26 @@ export function MatchLobby() {
         p_wants_gender: activeWantsGender,
         p_blocked_user_ids: blockedIds,
       });
-      if (error || !alive || cancelledRef.current || navigatedRef.current) return;
+      if (error || !alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
+        return;
+      }
       const rid = data as string | null;
-      if (rid) await goToRoom(rid, uid);
+      if (rid) await goToRoomRef.current(rid, uid);
     }, delayMs);
     return () => {
       alive = false;
       window.clearTimeout(t);
     };
-  }, [client, ready, activeSelfGender, activeWantsGender, effectiveIncludeAi, shouldMatch, globalBotSettings, goToRoom]);
+  }, [
+    client,
+    ready,
+    activeSelfGender,
+    activeWantsGender,
+    effectiveIncludeAi,
+    shouldMatch,
+    globalBotSettings.aiMatchDelayMinMs,
+    globalBotSettings.aiMatchDelayMaxMs,
+  ]);
 
   if (!ready || !globalSettingsLoaded) {
     return <PageLoader label={!ready ? "Preparing your session…" : "Loading match settings…"} />;

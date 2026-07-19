@@ -240,14 +240,31 @@ export function isAggressiveConversation(history: ChatTurn[]): boolean {
 const LEAVING_RE =
   /\b(wait.*(gtg|gotta go|go do|do something)|gtg|g2g|gotta go|got to go|have to go|need to go|brb|be right back|i'?m leaving|im leaving|leaving now|something came up|do something|busy now|afk|talk later|ttyl|cya|see ya|see you|goodbye|good bye|bye bye|goodnight|good night)\b/i;
 
-export function isUserLeavingConversation(history: ChatTurn[]): boolean {
-  const last = lastUserLines(history).pop()?.trim() ?? "";
+function lineLooksLikeLeaving(line: string): boolean {
+  const last = line.trim();
   if (!last) return false;
   if (LEAVING_RE.test(last)) return true;
   const t = last.toLowerCase();
   if (/^(bye+|byee+|cya|later|gn|night)$/.test(t)) return true;
-  if (t.length <= 24 && /\b(bye|goodbye)\b/.test(t)) return true;
+  if (t.length <= 40 && /\b(bye|goodbye)\b/.test(t)) return true;
   return false;
+}
+
+export function isUserLeavingConversation(history: ChatTurn[]): boolean {
+  const last = lastUserLines(history).pop()?.trim() ?? "";
+  return lineLooksLikeLeaving(last);
+}
+
+export function countUserGoodbyes(history: ChatTurn[]): number {
+  return lastUserLines(history).filter((line) => lineLooksLikeLeaving(line)).length;
+}
+
+/** Bot already tried to get them to stay after a goodbye. */
+export function botAlreadyTriedStay(history: ChatTurn[]): boolean {
+  const assistants = history.filter((m) => m.role === "assistant").slice(-4);
+  return assistants.some((m) =>
+    /\b(wait|why|already|stay|dont go|don't go|one more|hold on|wya)\b/i.test(m.content),
+  );
 }
 
 /** User said goodbye earlier, bot asked why, they gave an explanation (not another goodbye). */
@@ -255,22 +272,28 @@ export function isGoodbyeFollowUp(history: ChatTurn[]): boolean {
   const users = lastUserLines(history);
   if (users.length < 2) return false;
 
-  const last = users[users.length - 1] ?? "";
   if (isUserLeavingConversation(history)) return false;
 
-  const hadGoodbyeBefore = users.slice(0, -1).some((line) => {
-    const t = line.trim().toLowerCase();
-    return LEAVING_RE.test(line) || /^(bye+|cya|later|gn|night)$/.test(t);
-  });
+  const hadGoodbyeBefore = users.slice(0, -1).some((line) => lineLooksLikeLeaving(line));
   if (!hadGoodbyeBefore) return false;
 
-  const assistants = history.filter((m) => m.role === "assistant");
-  const lastBot = assistants[assistants.length - 1]?.content ?? "";
-  return /\b(why|where|wait|wya|already)\b/i.test(lastBot);
+  // After any stay attempt, the next user message ends the chat (ack + skip).
+  if (botAlreadyTriedStay(history)) return true;
+
+  const recentBot = history
+    .filter((m) => m.role === "assistant")
+    .slice(-3)
+    .map((m) => m.content)
+    .join(" ");
+  return /\b(why|where|wait|wya|already)\b/i.test(recentBot);
 }
 
 export function isGoodbyeContextActive(history: ChatTurn[]): boolean {
-  return isUserLeavingConversation(history) || isGoodbyeFollowUp(history);
+  return (
+    isUserLeavingConversation(history) ||
+    isGoodbyeFollowUp(history) ||
+    countUserGoodbyes(history) >= 2
+  );
 }
 
 export function isUserCallingOutContradiction(text: string): boolean {

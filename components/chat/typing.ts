@@ -26,16 +26,24 @@ export function readDelayOpenerMs(timing: TimingScale = {}) {
   return clamp(scale(480 + Math.random() * 1700, s), 300, 3800);
 }
 
-/** Deterministic typing time from message length (~62ms/char + small base). */
-const TYPING_BASE_MS = 100;
-const TYPING_MS_PER_CHAR = 62;
+/**
+ * Typing bubble duration from message length.
+ * Tuned for casual phone typing — never flash-short even for "fast" personas.
+ */
+const TYPING_BASE_MS = 850;
+const TYPING_MS_PER_CHAR = 130;
 
 export function typingDurationForReply(reply: string, timing: TimingScale = {}) {
-  const s = timing.typingScale ?? 1;
+  // Floor at 1× so replySpeed 0.55 personas still type at a believable pace.
+  // Slower personas (scale > 1) still type slower.
+  const s = Math.max(timing.typingScale ?? 1, 1);
   const len = reply.trim().length || 1;
-  const scaled = (TYPING_BASE_MS + len * TYPING_MS_PER_CHAR) * s;
-  const min = len <= 4 ? 300 : len <= 10 ? 380 : 450;
-  return clamp(Math.round(scaled), min, 16_000);
+  // Light jitter (±10%) so identical lengths don't feel robotic.
+  const jitter = 0.9 + Math.random() * 0.2;
+  const scaled = (TYPING_BASE_MS + len * TYPING_MS_PER_CHAR) * s * jitter;
+  // Hard floors so short lines ("hey", "lol") still linger on screen.
+  const min = len <= 4 ? 1400 : len <= 12 ? 1800 : len <= 28 ? 2400 : 3000;
+  return clamp(Math.round(scaled), min, 28_000);
 }
 
 /**
@@ -59,7 +67,7 @@ export async function runHumanlikeTyping(
   }
 }
 
-/** Typing bubble on for the exact computed duration, then off after insert. */
+/** Typing bubble on for the computed duration, then deliver, then briefly hold. */
 export async function typeThenDeliver(
   setTyping: (v: boolean) => void,
   line: string,
@@ -72,6 +80,8 @@ export async function typeThenDeliver(
   try {
     await delayMs(ms, shouldAbort);
     await deliver();
+    // Keep bubble up a beat so the message can land via realtime before it vanishes.
+    await delayMs(180, shouldAbort);
   } finally {
     setTyping(false);
   }

@@ -118,18 +118,22 @@ export default function OpsApiKeysPage() {
   }, [newApiKey, newName, newProvider, keys.length, postAction]);
 
   const move = useCallback(
-    async (index: number, dir: -1 | 1) => {
-      const next = index + dir;
-      if (next < 0 || next >= keys.length) return;
-      const ordered = keys.map((k) => k.id);
-      const tmp = ordered[index];
-      ordered[index] = ordered[next];
+    async (opsIndex: number, dir: -1 | 1) => {
+      const opsOnly = keys.filter((k) => k.source !== "env");
+      const next = opsIndex + dir;
+      if (next < 0 || next >= opsOnly.length) return;
+      const ordered = opsOnly.map((k) => k.id);
+      const tmp = ordered[opsIndex];
+      ordered[opsIndex] = ordered[next];
       ordered[next] = tmp;
-      // Optimistic UI
-      const reordered = [...keys];
-      const [item] = reordered.splice(index, 1);
-      reordered.splice(next, 0, item);
-      setKeys(reordered.map((k, i) => ({ ...k, priority: (i + 1) * 10 })));
+      const reorderedOps = [...opsOnly];
+      const [item] = reorderedOps.splice(opsIndex, 1);
+      reorderedOps.splice(next, 0, item);
+      const envKeys = keys.filter((k) => k.source === "env");
+      setKeys([
+        ...reorderedOps.map((k, i) => ({ ...k, priority: (i + 1) * 10 })),
+        ...envKeys,
+      ]);
       await postAction({ action: "reorder", orderedIds: ordered });
     },
     [keys, postAction],
@@ -250,17 +254,24 @@ export default function OpsApiKeysPage() {
                 {saving ? <span className="text-xs text-navy-500">Saving…</span> : null}
               </div>
               <p className="mt-2 text-xs text-navy-500">
-                Top of the list is tried first. Env keys (<code className="text-navy-400">CEREBRAS_API_KEY</code> /{" "}
-                <code className="text-navy-400">GROQ_API_KEY</code>) are appended after these if set.
+                Top of the list is tried first. Keys from server env (
+                <code className="text-navy-400">GROQ_API_KEY</code> /{" "}
+                <code className="text-navy-400">CEREBRAS_API_KEY</code>) appear at the bottom as
+                read-only and are used after your managed keys.
               </p>
 
               {keys.length === 0 ? (
-                <p className="mt-6 text-sm text-navy-400">No keys yet — add Cerebras or Groq keys above.</p>
+                <p className="mt-6 text-sm text-navy-400">
+                  No keys yet — add Cerebras or Groq keys above, or set env vars on the server.
+                </p>
               ) : (
                 <ul className="mt-4 space-y-3">
                   {keys.map((key, index) => {
                     const cooldown = formatUntil(key.rateLimitedUntil);
                     const limited = key.rateLimited && !!cooldown;
+                    const isEnv = key.source === "env";
+                    const opsKeys = keys.filter((k) => k.source !== "env");
+                    const opsIndex = opsKeys.findIndex((k) => k.id === key.id);
                     return (
                       <li
                         key={key.id}
@@ -269,23 +280,27 @@ export default function OpsApiKeysPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs font-mono text-navy-500">#{index + 1}</span>
-                            <input
-                              value={key.name}
-                              onChange={(e) => {
-                                const name = e.target.value;
-                                setKeys((prev) =>
-                                  prev.map((k) => (k.id === key.id ? { ...k, name } : k)),
-                                );
-                              }}
-                              onBlur={(e) => {
-                                void postAction({
-                                  action: "update",
-                                  id: key.id,
-                                  name: e.target.value,
-                                });
-                              }}
-                              className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold text-white outline-none hover:border-white/10 focus:border-violet-500/40"
-                            />
+                            {isEnv ? (
+                              <span className="text-sm font-semibold text-white">{key.name}</span>
+                            ) : (
+                              <input
+                                value={key.name}
+                                onChange={(e) => {
+                                  const name = e.target.value;
+                                  setKeys((prev) =>
+                                    prev.map((k) => (k.id === key.id ? { ...k, name } : k)),
+                                  );
+                                }}
+                                onBlur={(e) => {
+                                  void postAction({
+                                    action: "update",
+                                    id: key.id,
+                                    name: e.target.value,
+                                  });
+                                }}
+                                className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold text-white outline-none hover:border-white/10 focus:border-violet-500/40"
+                              />
+                            )}
                             <span
                               className={`rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
                                 key.provider === "cerebras"
@@ -295,6 +310,11 @@ export default function OpsApiKeysPage() {
                             >
                               {key.provider}
                             </span>
+                            {isEnv ? (
+                              <span className="rounded-md bg-navy-700 px-2 py-0.5 text-[11px] text-navy-300">
+                                env
+                              </span>
+                            ) : null}
                             {!key.enabled ? (
                               <span className="rounded-md bg-navy-700 px-2 py-0.5 text-[11px] text-navy-300">
                                 disabled
@@ -330,51 +350,57 @@ export default function OpsApiKeysPage() {
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
-                          <button
-                            type="button"
-                            title="Move up (higher priority)"
-                            disabled={index === 0 || saving}
-                            onClick={() => void move(index, -1)}
-                            className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Move down (lower priority)"
-                            disabled={index === keys.length - 1 || saving}
-                            onClick={() => void move(index, 1)}
-                            className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            title={key.enabled ? "Disable" : "Enable"}
-                            disabled={saving}
-                            onClick={() =>
-                              void postAction({
-                                action: "update",
-                                id: key.id,
-                                enabled: !key.enabled,
-                              })
-                            }
-                            className="rounded-lg border border-white/10 px-2.5 py-2 text-xs text-navy-300 hover:bg-white/5 disabled:opacity-30"
-                          >
-                            {key.enabled ? "On" : "Off"}
-                          </button>
-                          <button
-                            type="button"
-                            title="Delete key"
-                            disabled={saving}
-                            onClick={() => {
-                              if (!window.confirm(`Delete “${key.name}”?`)) return;
-                              void postAction({ action: "delete", id: key.id });
-                            }}
-                            className="rounded-lg border border-rose-500/30 p-2 text-rose-300 hover:bg-rose-500/10 disabled:opacity-30"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {!isEnv ? (
+                            <>
+                              <button
+                                type="button"
+                                title="Move up (higher priority)"
+                                disabled={opsIndex <= 0 || saving}
+                                onClick={() => void move(opsIndex, -1)}
+                                className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                              >
+                                <ArrowUp className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Move down (lower priority)"
+                                disabled={opsIndex < 0 || opsIndex >= opsKeys.length - 1 || saving}
+                                onClick={() => void move(opsIndex, 1)}
+                                className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title={key.enabled ? "Disable" : "Enable"}
+                                disabled={saving}
+                                onClick={() =>
+                                  void postAction({
+                                    action: "update",
+                                    id: key.id,
+                                    enabled: !key.enabled,
+                                  })
+                                }
+                                className="rounded-lg border border-white/10 px-2.5 py-2 text-xs text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                              >
+                                {key.enabled ? "On" : "Off"}
+                              </button>
+                              <button
+                                type="button"
+                                title="Delete key"
+                                disabled={saving}
+                                onClick={() => {
+                                  if (!window.confirm(`Delete “${key.name}”?`)) return;
+                                  void postAction({ action: "delete", id: key.id });
+                                }}
+                                className="rounded-lg border border-rose-500/30 p-2 text-rose-300 hover:bg-rose-500/10 disabled:opacity-30"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="px-2 text-xs text-navy-500">Read-only</span>
+                          )}
                         </div>
                       </li>
                     );

@@ -1,12 +1,14 @@
 import {
   invalidateApiKeyCache,
+  markEnvKeyCooldown,
   markOpsApiKeyRateLimited,
+  getEnvKeyCooldownUntil,
   resolveApiKeyPool,
   type ApiKeyProvider,
   type ResolvedApiKey,
 } from "@/lib/ops/api-keys";
 
-/** In-process cooldown for env keys (and fast path before DB write lands). */
+/** In-process cooldown for ops keys (fast path before DB write lands). */
 const localCooldownUntil = new Map<string, number>();
 
 const DEFAULT_COOLDOWN_MS = 60_000;
@@ -60,11 +62,15 @@ export async function markKeyRateLimited(
 ): Promise<void> {
   localCooldownUntil.set(key.id, untilMs);
   invalidateApiKeyCache();
+  if (key.source === "env" || key.id.startsWith("env:")) {
+    markEnvKeyCooldown(key.id, untilMs, lastError);
+    return;
+  }
   await markOpsApiKeyRateLimited(key.id, untilMs, lastError);
 }
 
 function isLocallyCooling(keyId: string, now: number): boolean {
-  const until = localCooldownUntil.get(keyId) ?? 0;
+  const until = Math.max(localCooldownUntil.get(keyId) ?? 0, getEnvKeyCooldownUntil(keyId));
   return until > now;
 }
 

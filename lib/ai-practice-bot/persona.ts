@@ -124,7 +124,8 @@ export function buildBotPersona(
   const replySpeed =
     settings?.replySpeedMode === "fixed" && settings.replySpeed
       ? settings.replySpeed
-      : 0.55 + ((h >> 9) % 111) / 100;
+      : // Was 0.55–1.65; low end made typing bubbles unrealistically short.
+        0.9 + ((h >> 9) % 61) / 100;
   const typoRate =
     settings?.typoRate && settings.typoRate !== "random"
       ? settings.typoRate
@@ -155,7 +156,8 @@ export function personaTiming(persona: BotPersona, settings?: BotSettings | null
     persona.messageStyle === "burst" ? 280 + (hashSeed(persona.country) % 520) : persona.messageStyle === "split" ? 700 + (hashSeed(persona.age.toString()) % 900) : 0;
   return {
     readScale: persona.replySpeed,
-    typingScale: persona.replySpeed,
+    // Typing never goes below 1× — fast personas still "read" quicker, but type normally.
+    typingScale: Math.max(persona.replySpeed, 1),
     burstGapMs,
     idlePingMs: settings?.ghostPingMs ?? 45_000,
     idleSkipMs: settings?.ghostSkipMs ?? 20_000,

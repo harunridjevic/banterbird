@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { cookieSecret, verifyAnalyticsCookie, COOKIE_NAME } from "@/lib/ops/analytics-cookie";
 import {
+  clearEnvKeyCooldown,
   createOpsApiKey,
   deleteOpsApiKey,
   invalidateApiKeyCache,
-  listOpsApiKeys,
+  listOpsApiKeysWithEnv,
   reorderOpsApiKeys,
   updateOpsApiKey,
   type ApiKeyProvider,
@@ -23,7 +24,7 @@ async function requireOpsAuth(): Promise<boolean> {
 
 export async function GET() {
   if (!(await requireOpsAuth())) return unauthorized();
-  const keys = await listOpsApiKeys();
+  const keys = await listOpsApiKeysWithEnv();
   return NextResponse.json({ keys });
 }
 
@@ -43,12 +44,26 @@ export async function POST(req: Request) {
     };
 
     if (body.action === "reorder" && Array.isArray(body.orderedIds)) {
-      const keys = await reorderOpsApiKeys(body.orderedIds.filter((id) => typeof id === "string"));
+      const opsIds = body.orderedIds.filter(
+        (id) => typeof id === "string" && !id.startsWith("env:"),
+      );
+      await reorderOpsApiKeys(opsIds);
       invalidateApiKeyCache();
-      return NextResponse.json({ keys });
+      return NextResponse.json({ keys: await listOpsApiKeysWithEnv() });
     }
 
     if (body.action === "update" && body.id) {
+      if (body.id.startsWith("env:")) {
+        if (body.clearRateLimit) {
+          clearEnvKeyCooldown(body.id);
+          invalidateApiKeyCache();
+          return NextResponse.json({ keys: await listOpsApiKeysWithEnv() });
+        }
+        return NextResponse.json(
+          { error: "Env keys are read-only — edit GROQ_API_KEY / CEREBRAS_API_KEY on the server" },
+          { status: 400 },
+        );
+      }
       const key = await updateOpsApiKey(body.id, {
         name: body.name,
         priority: body.priority,
@@ -57,13 +72,19 @@ export async function POST(req: Request) {
         clearRateLimit: body.clearRateLimit,
       });
       invalidateApiKeyCache();
-      return NextResponse.json({ key });
+      return NextResponse.json({ key, keys: await listOpsApiKeysWithEnv() });
     }
 
     if (body.action === "delete" && body.id) {
+      if (body.id.startsWith("env:")) {
+        return NextResponse.json(
+          { error: "Env keys cannot be deleted here — remove them from server env" },
+          { status: 400 },
+        );
+      }
       await deleteOpsApiKey(body.id);
       invalidateApiKeyCache();
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, keys: await listOpsApiKeysWithEnv() });
     }
 
     // default: create
@@ -77,7 +98,7 @@ export async function POST(req: Request) {
       priority: body.priority,
     });
     invalidateApiKeyCache();
-    return NextResponse.json({ key }, { status: 201 });
+    return NextResponse.json({ key, keys: await listOpsApiKeysWithEnv() }, { status: 201 });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed" },

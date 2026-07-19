@@ -13,4 +13,6 @@ export type OpsApiKeyPublic = {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+  /** ops = managed in this panel; env = from server env (read-only in UI) */
+  source: "ops" | "env";
 };

@@ -236,11 +236,15 @@ export function ChatRoom({ roomId }: Props) {
       return;
     }
 
-    const access = await checkMatchAccess();
+    const access = await checkMatchAccess(client);
     if (!access.allowed) {
-      await client.rpc("end_active_room", { p_room_id: roomId });
-      router.replace("/");
-      return;
+      // Only end the room for hard moderation blocks — soft/auth errors must not kill a fresh match.
+      if (access.reason === "blocked") {
+        await client.rpc("end_active_room", { p_room_id: roomId });
+        router.replace("/");
+        return;
+      }
+      // unauthorized/error: keep the room; user can refresh. Avoid match flicker.
     }
 
     const accept = await shouldAcceptRoom(client, roomId, session.user.id);
@@ -998,7 +1002,7 @@ export function ChatRoom({ roomId }: Props) {
           selfId={selfId}
           onReported={() => {
             setShowReport(false);
-            void router.replace("/");
+            void leaveManually(false, true);
           }}
           onClose={() => setShowReport(false)}
         />

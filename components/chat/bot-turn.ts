@@ -118,9 +118,8 @@ export async function executeBotTurn(opts: {
           await sleep(postSkipDelay, shouldAbort);
         }
       } else {
-        const pauseMs = Math.round(500 + Math.random() * 1400);
         setPeerTyping(true);
-        await sleep(pauseMs, shouldAbort);
+        await sleep(Math.round(1600 + Math.random() * 1200), shouldAbort);
         setPeerTyping(false);
       }
       return "skip";

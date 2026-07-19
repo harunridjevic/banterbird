@@ -103,7 +103,51 @@ export function toPublicKey(record: OpsApiKeyRecord, now = Date.now()): OpsApiKe
     lastError: record.lastError,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    source: "ops",
   };
+}
+
+/** In-process cooldown for env keys (shared with key-pool). */
+const envCooldownUntil = new Map<string, number>();
+const envCooldownError = new Map<string, string>();
+
+export function markEnvKeyCooldown(id: string, untilMs: number, lastError?: string): void {
+  envCooldownUntil.set(id, untilMs);
+  if (lastError) envCooldownError.set(id, lastError.slice(0, 500));
+}
+
+export function clearEnvKeyCooldown(id: string): void {
+  envCooldownUntil.delete(id);
+  envCooldownError.delete(id);
+}
+
+export function getEnvKeyCooldownUntil(id: string): number {
+  return envCooldownUntil.get(id) ?? 0;
+}
+
+function envKeysAsPublic(now = Date.now()): OpsApiKeyPublic[] {
+  const out: OpsApiKeyPublic[] = [];
+  for (const provider of ["cerebras", "groq"] as const) {
+    for (const envKey of envKeysForProvider(provider)) {
+      const until = envCooldownUntil.get(envKey.id) ?? 0;
+      const rateLimited = until > now;
+      out.push({
+        id: envKey.id,
+        name: envKey.name,
+        provider: envKey.provider,
+        keyPrefix: envKey.keyPrefix,
+        priority: envKey.priority,
+        enabled: true,
+        rateLimitedUntil: rateLimited ? new Date(until).toISOString() : null,
+        rateLimited,
+        lastError: rateLimited ? (envCooldownError.get(envKey.id) ?? null) : null,
+        createdAt: "",
+        updatedAt: "",
+        source: "env",
+      });
+    }
+  }
+  return out;
 }
 
 export async function listOpsApiKeys(): Promise<OpsApiKeyPublic[]> {
@@ -118,6 +162,16 @@ export async function listOpsApiKeys(): Promise<OpsApiKeyPublic[]> {
     return [];
   }
   return data.map((row) => toPublicKey(mapRow(row as Record<string, unknown>)));
+}
+
+/** Ops UI: DB-managed keys first, then env fallbacks (read-only). */
+export async function listOpsApiKeysWithEnv(now = Date.now()): Promise<OpsApiKeyPublic[]> {
+  const ops = await listOpsApiKeys();
+  const env = envKeysAsPublic(now);
+  // Hide env entries that look like the same key already stored in ops (prefix match).
+  const opsPrefixes = new Set(ops.map((k) => `${k.provider}:${k.keyPrefix}`));
+  const envVisible = env.filter((k) => !opsPrefixes.has(`${k.provider}:${k.keyPrefix}`));
+  return [...ops, ...envVisible];
 }
 
 export async function createOpsApiKey(input: {
