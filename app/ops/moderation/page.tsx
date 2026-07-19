@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Shield, Ban, CheckCircle, XCircle } from "lucide-react";
 import { OpsLoadingPanel, PAGE_SIZE } from "@/components/ops/OpsLoadingPanel";
+import { OpsBackLink } from "@/components/ops/OpsBackLink";
 import type { LlmGuardSettings } from "@/lib/ops/app-settings";
 
 type Report = {
@@ -170,7 +170,8 @@ export default function OpsModerationPage() {
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-4xl">
-        <div className="flex items-center gap-3">
+        <OpsBackLink />
+        <div className="mt-4 flex items-center gap-3">
           <Shield className="h-7 w-7 text-violet-400" />
           <h1 className="text-2xl font-bold text-white">Moderation</h1>
         </div>
@@ -292,7 +293,7 @@ export default function OpsModerationPage() {
 
             <section>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-white">Highest usage IPs</h2>
+                <h2 className="text-lg font-semibold text-white">Highest usage IPs (top 3)</h2>
                 <div className="flex gap-2">
                   {[24, 168].map((hours) => (
                     <button
@@ -321,7 +322,7 @@ export default function OpsModerationPage() {
                 </p>
               ) : (
                 <ul className="mt-4 space-y-2">
-                  {topIps.map((row) => (
+                  {topIps.slice(0, 3).map((row) => (
                     <li
                       key={row.clientIp}
                       className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3"
@@ -533,12 +534,6 @@ export default function OpsModerationPage() {
             </section>
           </div>
         )}
-
-        <p className="mt-10 text-xs text-navy-500">
-          <Link href="/ops" className="text-navy-400 hover:underline">
-            ← Ops dashboard
-          </Link>
-        </p>
       </div>
     </div>
   );

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   ApiUsageChart,
@@ -20,6 +19,7 @@ import {
 } from "@/lib/ops/analytics-types";
 import { fmtDurationMinutes } from "@/lib/ops/format-duration";
 import { OpsLoadingPanel } from "@/components/ops/OpsLoadingPanel";
+import { OpsBackLink } from "@/components/ops/OpsBackLink";
 import { useOnlineCount } from "@/lib/ops/use-online-count";
 
 function fmtNum(n: number | null | undefined, suffix = ""): string {
@@ -188,17 +188,10 @@ export default function OpsAnalyticsPage() {
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-5xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <OpsBackLink />
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-white">Analytics</h1>
-              <Link
-                href="/ops"
-                className="text-sm text-navy-400 underline-offset-2 hover:text-navy-200 hover:underline"
-              >
-                ← Ops
-              </Link>
-            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Analytics</h1>
             <p className="mt-2 text-sm text-navy-300">
               Key product metrics. All dates are <strong className="font-medium text-navy-200">UTC</strong>.
               Hover <span className="text-navy-400">?</span> for definitions.

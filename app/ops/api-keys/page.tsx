@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, KeyRound, Plus, Trash2, FlaskConical } from "lucide-react";
 import type { ApiKeyProvider, OpsApiKeyPublic } from "@/lib/ops/api-keys-types";
+import { OpsBackLink } from "@/components/ops/OpsBackLink";
 
 export default function OpsApiKeysPage() {
   const [password, setPassword] = useState("");
@@ -178,11 +178,7 @@ export default function OpsApiKeysPage() {
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-3xl">
-        <p className="text-xs text-navy-500">
-          <Link href="/ops" className="underline-offset-2 hover:text-navy-200 hover:underline">
-            ← Ops
-          </Link>
-        </p>
+        <OpsBackLink />
         <h1 className="mt-4 flex items-center gap-3 text-2xl font-bold tracking-tight text-white">
           <KeyRound className="h-7 w-7 text-violet-300" aria-hidden />
           LLM API keys
@@ -305,10 +301,14 @@ export default function OpsApiKeysPage() {
                         className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-mono text-navy-500">#{index + 1}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 shrink-0 text-xs font-mono text-navy-500">
+                              #{index + 1}
+                            </span>
                             {isEnv ? (
-                              <span className="text-sm font-semibold text-white">{key.name}</span>
+                              <span className="min-w-0 truncate text-sm font-semibold text-white">
+                                {key.name}
+                              </span>
                             ) : (
                               <input
                                 value={key.name}
@@ -325,11 +325,11 @@ export default function OpsApiKeysPage() {
                                     name: e.target.value,
                                   });
                                 }}
-                                className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold text-white outline-none hover:border-white/10 focus:border-violet-500/40"
+                                className="min-w-0 max-w-[14rem] truncate rounded-lg border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold text-white outline-none hover:border-white/10 focus:border-violet-500/40 sm:max-w-[18rem]"
                               />
                             )}
                             <span
-                              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                              className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
                                 key.provider === "cerebras"
                                   ? "bg-amber-500/15 text-amber-200"
                                   : "bg-sky-500/15 text-sky-200"
@@ -338,18 +338,18 @@ export default function OpsApiKeysPage() {
                               {key.provider}
                             </span>
                             {isEnv ? (
-                              <span className="rounded-md bg-navy-700 px-2 py-0.5 text-[11px] text-navy-300">
+                              <span className="shrink-0 rounded-md bg-navy-700 px-2 py-0.5 text-[11px] text-navy-300">
                                 env
                               </span>
                             ) : null}
                             {!key.enabled ? (
-                              <span className="rounded-md bg-navy-700 px-2 py-0.5 text-[11px] text-navy-300">
+                              <span className="shrink-0 rounded-md bg-navy-700 px-2 py-0.5 text-[11px] text-navy-300">
                                 disabled
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-1 font-mono text-xs text-navy-400">{key.keyPrefix}</p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <p className="mt-1 pl-8 font-mono text-xs text-navy-400">{key.keyPrefix}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 pl-8 text-xs">
                             {limited ? (
                               <span className="rounded-md bg-rose-500/15 px-2 py-0.5 font-medium text-rose-300">
                                 Rate limited · clears in {cooldown}
@@ -376,7 +376,7 @@ export default function OpsApiKeysPage() {
                             ) : null}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1">
+                        <div className="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto sm:self-center">
                           <button
                             type="button"
                             title="Test this key"
@@ -388,24 +388,6 @@ export default function OpsApiKeysPage() {
                               <FlaskConical className="h-3.5 w-3.5" />
                               {testingId === key.id ? "…" : "Test"}
                             </span>
-                          </button>
-                          <button
-                            type="button"
-                            title="Move up (higher priority)"
-                            disabled={index === 0 || saving}
-                            onClick={() => void move(index, -1)}
-                            className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Move down (lower priority)"
-                            disabled={index === keys.length - 1 || saving}
-                            onClick={() => void move(index, 1)}
-                            className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
-                          >
-                            <ArrowDown className="h-4 w-4" />
                           </button>
                           {!isEnv ? (
                             <>
@@ -438,6 +420,24 @@ export default function OpsApiKeysPage() {
                               </button>
                             </>
                           ) : null}
+                          <button
+                            type="button"
+                            title="Move up (higher priority)"
+                            disabled={index === 0 || saving}
+                            onClick={() => void move(index, -1)}
+                            className="ml-1 rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Move down (lower priority)"
+                            disabled={index === keys.length - 1 || saving}
+                            onClick={() => void move(index, 1)}
+                            className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </button>
                         </div>
                       </li>
                     );

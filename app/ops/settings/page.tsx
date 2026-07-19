@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_BOT_SETTINGS, type BotSettings } from "@/lib/ops/bot-settings";
 import type { AppSettings } from "@/lib/ops/app-settings";
+import { OpsBackLink } from "@/components/ops/OpsBackLink";
 
 async function loadOpsSettings() {
   const [appRes, botRes] = await Promise.all([
@@ -140,13 +140,12 @@ export default function OpsBotSettingsPage() {
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Bot settings</h1>
-            <p className="mt-2 text-sm text-navy-300">
-              Changes save to the server and apply globally for every user and device.
-            </p>
-          </div>
+        <OpsBackLink />
+        <div className="mt-4">
+          <h1 className="text-2xl font-bold tracking-tight text-white">Bot settings</h1>
+          <p className="mt-2 text-sm text-navy-300">
+            Changes save to the server and apply globally for every user and device.
+          </p>
         </div>
 
         {isCheckingCookie ? (
@@ -826,12 +825,6 @@ export default function OpsBotSettingsPage() {
             <p className="text-sm text-navy-400">Loading settings…</p>
           </div>
         )}
-
-        <p className="mt-10 text-xs text-navy-500">
-          <Link href="/ops" className="text-navy-400 underline-offset-2 hover:text-navy-200 hover:underline">
-            ← Ops dashboard
-          </Link>
-        </p>
       </div>
     </div>
   );
