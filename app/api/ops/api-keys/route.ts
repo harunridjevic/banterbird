@@ -8,6 +8,7 @@ import {
   invalidateApiKeyCache,
   listOpsApiKeysWithEnv,
   reorderOpsApiKeys,
+  testApiKey,
   updateOpsApiKey,
   type ApiKeyProvider,
 } from "@/lib/ops/api-keys";
@@ -44,12 +45,14 @@ export async function POST(req: Request) {
     };
 
     if (body.action === "reorder" && Array.isArray(body.orderedIds)) {
-      const opsIds = body.orderedIds.filter(
-        (id) => typeof id === "string" && !id.startsWith("env:"),
-      );
-      await reorderOpsApiKeys(opsIds);
-      invalidateApiKeyCache();
-      return NextResponse.json({ keys: await listOpsApiKeysWithEnv() });
+      const ids = body.orderedIds.filter((id) => typeof id === "string");
+      const keys = await reorderOpsApiKeys(ids);
+      return NextResponse.json({ keys });
+    }
+
+    if (body.action === "test" && body.id) {
+      const result = await testApiKey(body.id);
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 });
     }
 
     if (body.action === "update" && body.id) {

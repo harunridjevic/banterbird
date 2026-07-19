@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, KeyRound, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, KeyRound, Plus, Trash2, FlaskConical } from "lucide-react";
 import type { ApiKeyProvider, OpsApiKeyPublic } from "@/lib/ops/api-keys-types";
 
 export default function OpsApiKeysPage() {
@@ -13,6 +13,8 @@ export default function OpsApiKeysPage() {
   const [isCheckingCookie, setIsCheckingCookie] = useState(true);
   const [keys, setKeys] = useState<OpsApiKeyPublic[]>([]);
   const [saving, setSaving] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testNote, setTestNote] = useState<string | null>(null);
 
   const [newName, setNewName] = useState("");
   const [newProvider, setNewProvider] = useState<ApiKeyProvider>("cerebras");
@@ -66,7 +68,6 @@ export default function OpsApiKeysPage() {
     })();
   }, [loadKeys]);
 
-  // Refresh rate-limit status while unlocked
   useEffect(() => {
     if (!unlocked) return;
     const id = window.setInterval(() => {
@@ -118,26 +119,53 @@ export default function OpsApiKeysPage() {
   }, [newApiKey, newName, newProvider, keys.length, postAction]);
 
   const move = useCallback(
-    async (opsIndex: number, dir: -1 | 1) => {
-      const opsOnly = keys.filter((k) => k.source !== "env");
-      const next = opsIndex + dir;
-      if (next < 0 || next >= opsOnly.length) return;
-      const ordered = opsOnly.map((k) => k.id);
-      const tmp = ordered[opsIndex];
-      ordered[opsIndex] = ordered[next];
+    async (index: number, dir: -1 | 1) => {
+      const next = index + dir;
+      if (next < 0 || next >= keys.length) return;
+      const ordered = keys.map((k) => k.id);
+      const tmp = ordered[index];
+      ordered[index] = ordered[next];
       ordered[next] = tmp;
-      const reorderedOps = [...opsOnly];
-      const [item] = reorderedOps.splice(opsIndex, 1);
-      reorderedOps.splice(next, 0, item);
-      const envKeys = keys.filter((k) => k.source === "env");
-      setKeys([
-        ...reorderedOps.map((k, i) => ({ ...k, priority: (i + 1) * 10 })),
-        ...envKeys,
-      ]);
+      const reordered = [...keys];
+      const [item] = reordered.splice(index, 1);
+      reordered.splice(next, 0, item);
+      setKeys(reordered.map((k, i) => ({ ...k, priority: (i + 1) * 10 })));
       await postAction({ action: "reorder", orderedIds: ordered });
     },
     [keys, postAction],
   );
+
+  const testKey = useCallback(async (id: string) => {
+    setTestingId(id);
+    setTestNote(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/ops/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test", id }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        name?: string;
+        provider?: string;
+        latencyMs?: number;
+        error?: string;
+        status?: number;
+      };
+      if (j.ok) {
+        setTestNote(`✓ ${j.name ?? id} (${j.provider}) OK in ${j.latencyMs ?? "?"}ms`);
+      } else {
+        setError(
+          `✗ ${j.name ?? id} failed${j.status ? ` (${j.status})` : ""}: ${j.error ?? "unknown"}`,
+        );
+      }
+    } catch {
+      setError("Test request failed (network)");
+    } finally {
+      setTestingId(null);
+    }
+  }, []);
 
   const formatUntil = (iso: string | null) => {
     if (!iso) return null;
@@ -160,8 +188,10 @@ export default function OpsApiKeysPage() {
           LLM API keys
         </h1>
         <p className="mt-2 text-sm text-navy-300">
-          Add Cerebras and Groq keys used in priority order. When a key hits rate limits, the next
-          key is tried instantly in the same request so chats stay seamless.
+          Add Cerebras and Groq keys used in priority order. Env keys (
+          <code className="text-navy-400">CEREBRAS_API_KEY</code> /{" "}
+          <code className="text-navy-400">GROQ_API_KEY</code>) show in the same list — move Cerebras
+          to #1 and hit Test to verify it works.
         </p>
 
         {isCheckingCookie ? (
@@ -197,6 +227,7 @@ export default function OpsApiKeysPage() {
         ) : (
           <>
             {error ? <p className="mt-6 text-sm text-rose-300">{error}</p> : null}
+            {testNote ? <p className="mt-6 text-sm text-emerald-300">{testNote}</p> : null}
 
             <section className="mt-8 rounded-2xl border border-white/10 bg-navy-900/40 p-6">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-navy-400">
@@ -254,10 +285,8 @@ export default function OpsApiKeysPage() {
                 {saving ? <span className="text-xs text-navy-500">Saving…</span> : null}
               </div>
               <p className="mt-2 text-xs text-navy-500">
-                Top of the list is tried first. Keys from server env (
-                <code className="text-navy-400">GROQ_API_KEY</code> /{" "}
-                <code className="text-navy-400">CEREBRAS_API_KEY</code>) appear at the bottom as
-                read-only and are used after your managed keys.
+                Top of the list is tried first. Env keys are fully reorderable here (secret still
+                lives in server env — you can&apos;t delete them from this panel).
               </p>
 
               {keys.length === 0 ? (
@@ -270,8 +299,6 @@ export default function OpsApiKeysPage() {
                     const cooldown = formatUntil(key.rateLimitedUntil);
                     const limited = key.rateLimited && !!cooldown;
                     const isEnv = key.source === "env";
-                    const opsKeys = keys.filter((k) => k.source !== "env");
-                    const opsIndex = opsKeys.findIndex((k) => k.id === key.id);
                     return (
                       <li
                         key={key.id}
@@ -350,26 +377,38 @@ export default function OpsApiKeysPage() {
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            title="Test this key"
+                            disabled={saving || testingId === key.id}
+                            onClick={() => void testKey(key.id)}
+                            className="rounded-lg border border-white/10 px-2.5 py-2 text-xs text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                          >
+                            <span className="inline-flex items-center gap-1">
+                              <FlaskConical className="h-3.5 w-3.5" />
+                              {testingId === key.id ? "…" : "Test"}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            title="Move up (higher priority)"
+                            disabled={index === 0 || saving}
+                            onClick={() => void move(index, -1)}
+                            className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Move down (lower priority)"
+                            disabled={index === keys.length - 1 || saving}
+                            onClick={() => void move(index, 1)}
+                            className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </button>
                           {!isEnv ? (
                             <>
-                              <button
-                                type="button"
-                                title="Move up (higher priority)"
-                                disabled={opsIndex <= 0 || saving}
-                                onClick={() => void move(opsIndex, -1)}
-                                className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
-                              >
-                                <ArrowUp className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Move down (lower priority)"
-                                disabled={opsIndex < 0 || opsIndex >= opsKeys.length - 1 || saving}
-                                onClick={() => void move(opsIndex, 1)}
-                                className="rounded-lg border border-white/10 p-2 text-navy-300 hover:bg-white/5 disabled:opacity-30"
-                              >
-                                <ArrowDown className="h-4 w-4" />
-                              </button>
                               <button
                                 type="button"
                                 title={key.enabled ? "Disable" : "Enable"}
@@ -398,9 +437,7 @@ export default function OpsApiKeysPage() {
                                 <Trash2 className="h-4 w-4" />
                               </button>
                             </>
-                          ) : (
-                            <span className="px-2 text-xs text-navy-500">Read-only</span>
-                          )}
+                          ) : null}
                         </div>
                       </li>
                     );

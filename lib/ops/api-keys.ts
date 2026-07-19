@@ -127,6 +127,7 @@ export function getEnvKeyCooldownUntil(id: string): number {
 
 function envKeysAsPublic(now = Date.now()): OpsApiKeyPublic[] {
   const out: OpsApiKeyPublic[] = [];
+  // Default: Cerebras env keys before Groq so you can test Cerebras without reordering first.
   for (const provider of ["cerebras", "groq"] as const) {
     for (const envKey of envKeysForProvider(provider)) {
       const until = envCooldownUntil.get(envKey.id) ?? 0;
@@ -150,6 +151,54 @@ function envKeysAsPublic(now = Date.now()): OpsApiKeyPublic[] {
   return out;
 }
 
+const API_KEY_ORDER_SETTING = "ops_api_key_order";
+
+async function loadApiKeyOrder(): Promise<string[]> {
+  try {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", API_KEY_ORDER_SETTING)
+      .maybeSingle();
+    const raw = data?.value;
+    if (Array.isArray(raw)) {
+      return raw.filter((id): id is string => typeof id === "string");
+    }
+  } catch (e) {
+    console.error("loadApiKeyOrder", e);
+  }
+  return [];
+}
+
+async function saveApiKeyOrder(orderedIds: string[]): Promise<void> {
+  const admin = createServiceRoleClient();
+  await admin.from("app_settings").upsert({
+    key: API_KEY_ORDER_SETTING,
+    value: orderedIds,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+function applyOrder<T extends { id: string; priority: number }>(
+  keys: T[],
+  orderedIds: string[],
+): T[] {
+  if (orderedIds.length === 0) {
+    return [...keys].sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      return a.id.localeCompare(b.id);
+    });
+  }
+  const rank = new Map(orderedIds.map((id, i) => [id, i]));
+  return [...keys]
+    .map((k, fallback) => ({
+      ...k,
+      priority: rank.has(k.id) ? (rank.get(k.id)! + 1) * 10 : 10_000 + fallback,
+    }))
+    .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
+}
+
 export async function listOpsApiKeys(): Promise<OpsApiKeyPublic[]> {
   const admin = createServiceRoleClient();
   const { data, error } = await admin
@@ -164,14 +213,14 @@ export async function listOpsApiKeys(): Promise<OpsApiKeyPublic[]> {
   return data.map((row) => toPublicKey(mapRow(row as Record<string, unknown>)));
 }
 
-/** Ops UI: DB-managed keys first, then env fallbacks (read-only). */
+/** Ops UI: managed + env keys in one hierarchy (reorderable). */
 export async function listOpsApiKeysWithEnv(now = Date.now()): Promise<OpsApiKeyPublic[]> {
   const ops = await listOpsApiKeys();
   const env = envKeysAsPublic(now);
-  // Hide env entries that look like the same key already stored in ops (prefix match).
   const opsPrefixes = new Set(ops.map((k) => `${k.provider}:${k.keyPrefix}`));
   const envVisible = env.filter((k) => !opsPrefixes.has(`${k.provider}:${k.keyPrefix}`));
-  return [...ops, ...envVisible];
+  const order = await loadApiKeyOrder();
+  return applyOrder([...ops, ...envVisible], order);
 }
 
 export async function createOpsApiKey(input: {
@@ -249,17 +298,136 @@ export async function deleteOpsApiKey(id: string): Promise<void> {
 export async function reorderOpsApiKeys(
   orderedIds: string[],
 ): Promise<OpsApiKeyPublic[]> {
+  const ids = orderedIds.filter((id) => typeof id === "string" && id.length > 0);
+  await saveApiKeyOrder(ids);
+
   const admin = createServiceRoleClient();
   const now = new Date().toISOString();
+  // Persist priorities for DB-managed keys so they survive even without the order setting.
   await Promise.all(
-    orderedIds.map((id, index) =>
-      admin
-        .from("ops_api_keys")
-        .update({ priority: (index + 1) * 10, updated_at: now })
-        .eq("id", id),
-    ),
+    ids
+      .filter((id) => !id.startsWith("env:"))
+      .map((id) => {
+        const index = ids.indexOf(id);
+        return admin
+          .from("ops_api_keys")
+          .update({ priority: (index + 1) * 10, updated_at: now })
+          .eq("id", id);
+      }),
   );
-  return listOpsApiKeys();
+  invalidateApiKeyCache();
+  return listOpsApiKeysWithEnv();
+}
+
+/** Tiny live request to verify a key works (ops test button). */
+export async function testApiKey(id: string): Promise<{
+  ok: boolean;
+  provider: ApiKeyProvider;
+  name: string;
+  status?: number;
+  error?: string;
+  latencyMs: number;
+}> {
+  const started = Date.now();
+  const pool = await resolveApiKeyPool(Date.now());
+  // Include rate-limited keys for explicit tests — resolve skips them, so also check env/ops directly.
+  let key = pool.find((k) => k.id === id);
+  if (!key) {
+    if (id.startsWith("env:")) {
+      for (const provider of ["cerebras", "groq"] as const) {
+        const found = envKeysForProvider(provider).find((k) => k.id === id);
+        if (found) {
+          key = found;
+          break;
+        }
+      }
+    } else {
+      try {
+        const admin = createServiceRoleClient();
+        const { data } = await admin.from("ops_api_keys").select("*").eq("id", id).maybeSingle();
+        if (data) {
+          const record = mapRow(data as Record<string, unknown>);
+          key = {
+            id: record.id,
+            name: record.name,
+            provider: record.provider,
+            apiKey: decryptApiKey(record.keyCiphertext),
+            keyPrefix: record.keyPrefix,
+            priority: record.priority,
+            source: "ops",
+          };
+        }
+      } catch (e) {
+        return {
+          ok: false,
+          provider: "cerebras",
+          name: id,
+          error: e instanceof Error ? e.message : "Lookup failed",
+          latencyMs: Date.now() - started,
+        };
+      }
+    }
+  }
+  if (!key) {
+    return {
+      ok: false,
+      provider: "cerebras",
+      name: id,
+      error: "Key not found",
+      latencyMs: Date.now() - started,
+    };
+  }
+
+  const endpoint =
+    key.provider === "cerebras"
+      ? "https://api.cerebras.ai/v1/chat/completions"
+      : "https://api.groq.com/openai/v1/chat/completions";
+  const model =
+    key.provider === "cerebras"
+      ? process.env.CEREBRAS_CHAT_MODEL?.trim() || "gpt-oss-120b"
+      : process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.1-8b-instant";
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 8,
+        messages: [{ role: "user", content: "ping" }],
+      }),
+    });
+    const bodyText = await res.text().catch(() => "");
+    if (!res.ok) {
+      return {
+        ok: false,
+        provider: key.provider,
+        name: key.name,
+        status: res.status,
+        error: bodyText.slice(0, 240) || `HTTP ${res.status}`,
+        latencyMs: Date.now() - started,
+      };
+    }
+    return {
+      ok: true,
+      provider: key.provider,
+      name: key.name,
+      status: res.status,
+      latencyMs: Date.now() - started,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      provider: key.provider,
+      name: key.name,
+      error: e instanceof Error ? e.message : "Network error",
+      latencyMs: Date.now() - started,
+    };
+  }
 }
 
 export async function markOpsApiKeyRateLimited(
@@ -303,6 +471,8 @@ function envKeysForProvider(provider: ApiKeyProvider): ResolvedApiKey[] {
   const seen = new Set<string>();
   const out: ResolvedApiKey[] = [];
   let i = 0;
+  // Cerebras defaults ahead of Groq (10,20… vs 100,110…) so env Cerebras is tried first.
+  const basePriority = provider === "cerebras" ? 10 : 100;
   for (const secret of [...singles.filter(Boolean) as string[], ...lists]) {
     const apiKey = secret.trim();
     if (!apiKey || seen.has(apiKey)) continue;
@@ -314,7 +484,7 @@ function envKeysForProvider(provider: ApiKeyProvider): ResolvedApiKey[] {
       provider,
       apiKey,
       keyPrefix: keyPrefixFromSecret(apiKey),
-      priority: 1000 + i,
+      priority: basePriority + (i - 1) * 10,
       source: "env",
     });
   }
@@ -328,7 +498,7 @@ export function invalidateApiKeyCache(): void {
   resolvedCache = null;
 }
 
-/** Ordered pool: ops keys by priority, then env keys. Skips currently rate-limited ops keys. */
+/** Ordered pool: ops + env keys by shared hierarchy. Skips rate-limited ops keys. */
 export async function resolveApiKeyPool(now = Date.now()): Promise<ResolvedApiKey[]> {
   if (resolvedCache && now - resolvedCache.at < RESOLVE_CACHE_MS) {
     return resolvedCache.keys;
@@ -379,16 +549,9 @@ export async function resolveApiKeyPool(now = Date.now()): Promise<ResolvedApiKe
     }
   }
 
-  keys.sort((a, b) => {
-    if (a.priority !== b.priority) return a.priority - b.priority;
-    if (a.provider !== b.provider) {
-      // Prefer cerebras slightly when priorities tie
-      if (a.provider === "cerebras") return -1;
-      if (b.provider === "cerebras") return 1;
-    }
-    return a.name.localeCompare(b.name);
-  });
+  const order = await loadApiKeyOrder();
+  const ordered = applyOrder(keys, order);
 
-  resolvedCache = { at: now, keys };
-  return keys;
+  resolvedCache = { at: now, keys: ordered };
+  return ordered;
 }
