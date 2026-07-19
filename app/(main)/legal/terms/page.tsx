@@ -4,7 +4,9 @@ import { LegalPageShell } from "@/components/legal/LegalPageShell";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "Read BanterBird's Terms of Service. Learn about eligibility, acceptable use, moderation policies, and your rights when using our anonymous chat platform.",
+  description:
+    "Read BanterBird (banterbird.app) Terms of Service — eligibility, acceptable use, moderation, and your rights on our anonymous chat platform.",
+  alternates: { canonical: "/legal/terms" },
 };
 
 export default function TermsPage() {

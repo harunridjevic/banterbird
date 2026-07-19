@@ -2,7 +2,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 type LogApiUsageInput = {
   endpoint: string;
-  provider: "groq" | "gemini" | "openai" | "local";
+  provider: "cerebras" | "groq" | "gemini" | "openai" | "local";
   success: boolean;
   latencyMs: number;
   roomId?: string;

@@ -47,7 +47,7 @@ export function Logo({
   );
   const isDark = !mounted || resolvedTheme === "dark";
   const pathname = usePathname();
-  const onMatchPage = pathname === "/match" || pathname.startsWith("/match/");
+  const onMatchPage = pathname === "/" || pathname === "/match" || pathname.startsWith("/match/");
 
   const startMatching = () => {
     window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
@@ -68,7 +68,7 @@ export function Logo({
   }
 
   return (
-    <Link href="/match" className={`group inline-flex flex-col items-center gap-1 ${className}`}>
+    <Link href="/" className={`group inline-flex flex-col items-center gap-1 ${className}`}>
       <LogoImage isDark={isDark} priority={priority} />
       {!showWordmark ? <span className="sr-only">BanterBird</span> : null}
     </Link>

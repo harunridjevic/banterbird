@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, Settings, Shield, AlertTriangle } from "lucide-react";
+import { BarChart3, Settings, Shield, AlertTriangle, KeyRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const cards = [
@@ -16,6 +16,12 @@ const cards = [
     title: "Bot settings",
     description: "Tune AI practice bot timing, personality, sexual vibe, and session policy. Changes apply live.",
     icon: Settings,
+  },
+  {
+    href: "/ops/api-keys",
+    title: "LLM API keys",
+    description: "Cerebras & Groq key pool — names, prefixes, hierarchy, and live rate-limit status.",
+    icon: KeyRound,
   },
   {
     href: "/ops/moderation",

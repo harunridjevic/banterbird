@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const blocksLimit = Math.min(parseInt(url.searchParams.get("blocksLimit") ?? "25", 10), 100);
   const blocksOffset = Math.max(parseInt(url.searchParams.get("blocksOffset") ?? "0", 10), 0);
   const ipHours = Math.min(Math.max(parseInt(url.searchParams.get("ipHours") ?? "24", 10), 1), 168);
-  const ipLimit = Math.min(Math.max(parseInt(url.searchParams.get("ipLimit") ?? "30", 10), 1), 100);
+  const ipLimit = Math.min(Math.max(parseInt(url.searchParams.get("ipLimit") ?? "3", 10), 1), 3);
 
   const admin = createServiceRoleClient();
   let query = admin

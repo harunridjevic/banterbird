@@ -18,6 +18,8 @@ import {
   isGoodbyeContextActive,
   isUserCallingOutContradiction,
   isBotAnnouncingOwnLeave,
+  countUserGoodbyes,
+  botAlreadyTriedStay,
   pickContradictionClarifyLine,
   pickGoodbyeAckParting,
   midChatStubReply,
@@ -258,6 +260,10 @@ export function decideFallbackTurn(
   }
 
   if (isUserLeavingConversation(history)) {
+    // Second+ goodbye, or we already asked them to stay → leave immediately.
+    if (countUserGoodbyes(history) >= 2 || botAlreadyTriedStay(history)) {
+      return withTiming(persona, { action: "skip", parting: pickLeavingSkipParting() }, settings);
+    }
     if (Math.random() < 0.38) {
       return withTiming(
         persona,
@@ -356,6 +362,14 @@ export function applySessionPolicy(
   }
 
   if (isUserLeavingConversation(history)) {
+    // Never stay twice; second goodbye always leaves.
+    if (countUserGoodbyes(history) >= 2 || botAlreadyTriedStay(history)) {
+      return withTiming(
+        persona,
+        { action: "skip", parting: pickLeavingSkipParting() },
+        settings,
+      );
+    }
     if (result.action === "reply") {
       if (isBotAnnouncingOwnLeave(result.messages)) {
         return withTiming(
@@ -368,14 +382,20 @@ export function applySessionPolicy(
       const stayAttempt = /\b(wait|stay|why|wya|where u|dont go|don't go|one more|hold on|noo|already)\b/.test(
         combined,
       );
-      if (!stayAttempt) {
-        const lastLine = result.messages[result.messages.length - 1]?.trim();
-        const parting =
-          lastLine && /\b(bye|cya|later|gn|night|see ya)\b/i.test(lastLine)
-            ? lastLine
-            : pickLeavingSkipParting();
-        return withTiming(persona, { action: "skip", parting }, settings);
+      if (stayAttempt) {
+        // One short stay line only — never a multi-bubble rant after bye.
+        return withTiming(
+          persona,
+          { action: "reply", messages: [result.messages[0]!.slice(0, 80)] },
+          settings,
+        );
       }
+      const lastLine = result.messages[result.messages.length - 1]?.trim();
+      const parting =
+        lastLine && /\b(bye|cya|later|gn|night|see ya)\b/i.test(lastLine)
+          ? lastLine
+          : pickLeavingSkipParting();
+      return withTiming(persona, { action: "skip", parting }, settings);
     }
     return result;
   }
@@ -470,8 +490,8 @@ export function sessionContextOverlay(
 export function goodbyeContextOverlay(): string {
   return [
     "They are leaving or wrapping up the chat.",
-    "If you have NOT asked why yet: ONE short stay line is ok (e.g. wait why, aw already).",
-    "If you already asked why and they answered: say ONE short ok/bye (e.g. ok cya, alright fair) and use skip with that parting.",
+    "If you have NOT asked why yet: ONE short stay line is ok (e.g. wait why, aw already) — single message only.",
+    "If you already asked why, OR they say bye again: MUST skip with ONE short parting (ok cya / alright fair). Do not keep chatting.",
     "NEVER say YOU are leaving (no brb, gotta go, ttyl) when THEY are the one leaving.",
     "If you say bye you MUST use skip action. Do not lecture them.",
   ].join(" ");

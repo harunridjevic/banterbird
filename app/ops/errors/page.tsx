@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { OpsLoadingPanel, PAGE_SIZE } from "@/components/ops/OpsLoadingPanel";
+import { OpsBackLink } from "@/components/ops/OpsBackLink";
 
 type ErrorRow = {
   id: string;
@@ -93,11 +94,14 @@ export default function OpsErrorsPage() {
   if (!unlocked) {
     return (
       <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
-        <p className="text-sm text-navy-400">
-          <Link href="/ops" className="text-violet-400 hover:underline">
-            Unlock ops first
-          </Link>
-        </p>
+        <div className="mx-auto max-w-4xl">
+          <OpsBackLink />
+          <p className="mt-4 text-sm text-navy-400">
+            <Link href="/ops" className="underline-offset-2 hover:text-navy-200 hover:underline">
+              Unlock ops first
+            </Link>
+          </p>
+        </div>
       </div>
     );
   }
@@ -105,7 +109,8 @@ export default function OpsErrorsPage() {
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-4xl">
-        <div className="flex items-center gap-3">
+        <OpsBackLink />
+        <div className="mt-4 flex items-center gap-3">
           <AlertTriangle className="h-7 w-7 text-amber-400" />
           <h1 className="text-2xl font-bold text-white">Error monitoring</h1>
         </div>
@@ -189,12 +194,6 @@ export default function OpsErrorsPage() {
             ) : null}
           </>
         )}
-
-        <p className="mt-10 text-xs text-navy-500">
-          <Link href="/ops" className="text-navy-400 hover:underline">
-            ← Ops dashboard
-          </Link>
-        </p>
       </div>
     </div>
   );

@@ -11,12 +11,17 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "BanterBird - Anonymous Chat Online Free",
+    default: "BanterBird — Free Anonymous Chat Online (No Signup)",
     template: "%s · BanterBird",
   },
   description:
-    "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide on BanterBird.",
+    "BanterBird is free anonymous chat online — no signup, no download. Instant 1-on-1 anonymous text chat with random people worldwide.",
   keywords: [
+    "banterbird",
+    "banterbird.app",
+    "banter bird",
+    "google ai banterbird",
+    "banterbird anonymous chat",
     "anonymous chat",
     "anonymous chat online",
     "free anonymous chat",
@@ -37,6 +42,8 @@ export const metadata: Metadata = {
     "chat with random people",
     "anonymous social chat",
     "no signup chat",
+    "AI chat practice",
+    "anonymous AI chat",
   ],
   authors: [{ name: "BanterBird" }],
   creator: "BanterBird",
@@ -48,31 +55,29 @@ export const metadata: Metadata = {
     telephone: false,
   },
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app"),
-  alternates: {
-    canonical: "/",
-  },
+  // Per-route canonicals only — do not force "/" site-wide (was causing GSC "alternate canonical").
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "/",
-    title: "BanterBird - Anonymous Chat Online Free",
+    url: "https://banterbird.app",
+    title: "BanterBird — Free Anonymous Chat Online",
     description:
-      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide.",
+      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide on BanterBird.",
     siteName: "BanterBird",
     images: [
       {
         url: "/logo_search.png",
         width: 1200,
         height: 630,
-        alt: "BanterBird - Anonymous Chat",
+        alt: "BanterBird — Anonymous Chat",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "BanterBird - Anonymous Chat Online Free",
+    title: "BanterBird — Free Anonymous Chat Online",
     description:
-      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide.",
+      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide on BanterBird.",
     images: ["/logo_search.png"],
     creator: "@banterbird",
   },
@@ -90,17 +95,20 @@ export const metadata: Metadata = {
   verification: {
     google: process.env.GOOGLE_SITE_VERIFICATION,
   },
+  // Cache-bust icon URLs so Google/crawlers re-fetch after brand updates (v0.11.0).
+  // Note: Search Console favicon/logo can still take days–weeks to refresh after recrawl.
   icons: {
     icon: [
-      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
-      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=0.11.0", sizes: "48x48" },
+      { url: "/favicon-96x96.png?v=0.11.0", sizes: "96x96", type: "image/png" },
+      { url: "/favicon.svg?v=0.11.0", type: "image/svg+xml" },
     ],
-    shortcut: "/favicon.ico",
+    shortcut: "/favicon.ico?v=0.11.0",
     apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/apple-touch-icon.png?v=0.11.0", sizes: "180x180", type: "image/png" },
     ],
   },
-  manifest: "/site.webmanifest",
+  manifest: "/site.webmanifest?v=0.11.0",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -134,13 +142,14 @@ export default function RootLayout({
         "@id": `${baseUrl}/#website`,
         url: baseUrl,
         name: "BanterBird",
-        description: "Free anonymous chat platform — start 1-on-1 text chat instantly with no registration.",
+        description:
+          "BanterBird is a free anonymous chat platform at banterbird.app — start 1-on-1 text chat instantly with no registration.",
         publisher: {
           "@id": `${baseUrl}/#organization`,
         },
         potentialAction: {
           "@type": "InteractAction",
-          target: `${baseUrl}/match`,
+          target: baseUrl,
           name: "Start Anonymous Chat",
         },
       },
@@ -151,10 +160,12 @@ export default function RootLayout({
         url: baseUrl,
         logo: {
           "@type": "ImageObject",
-          url: `${baseUrl}/logo_search.png`,
-          width: 1200,
-          height: 630,
+          // Prefer a square mark for Knowledge Graph; OG image remains logo_search.png
+          url: `${baseUrl}/web-app-manifest-512x512.png?v=0.11.0`,
+          width: 512,
+          height: 512,
         },
+        image: `${baseUrl}/logo_search.png?v=0.11.0`,
         sameAs: [
           "https://twitter.com/banterbird",
           "https://github.com/banterbird",
@@ -166,12 +177,14 @@ export default function RootLayout({
         name: "BanterBird",
         applicationCategory: "SocialNetworkingApplication",
         operatingSystem: "Web",
+        url: baseUrl,
         offers: {
           "@type": "Offer",
           price: "0",
           priceCurrency: "USD",
         },
-        description: "Free anonymous chat online with instant matching and no signup required.",
+        description:
+          "Free anonymous chat online on BanterBird (banterbird.app) with instant matching and no signup required.",
         featureList: [
           "Anonymous chat",
           "Random matching",
@@ -179,11 +192,20 @@ export default function RootLayout({
           "Instant messaging",
           "Interest-based matching",
           "Mobile-friendly",
+          "AI practice chat",
         ],
       },
       {
         "@type": "FAQPage",
         mainEntity: [
+          {
+            "@type": "Question",
+            name: "What is BanterBird?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "BanterBird (banterbird.app) is a free anonymous chat site for instant 1-on-1 text conversations with random people — no signup required.",
+            },
+          },
           {
             "@type": "Question",
             name: "Is BanterBird anonymous?",
@@ -202,10 +224,18 @@ export default function RootLayout({
           },
           {
             "@type": "Question",
-            name: "How does anonymous chat matching work?",
+            name: "How does anonymous chat matching work on BanterBird?",
             acceptedAnswer: {
               "@type": "Answer",
               text: "BanterBird instantly connects you with a random person for 1-on-1 anonymous text chat. You can set preferences and start chatting within seconds.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "Is BanterBird the same as banterbird.com?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "No. This product is BanterBird at banterbird.app — a free anonymous chat app. It is not affiliated with other sites using similar names.",
             },
           },
         ],

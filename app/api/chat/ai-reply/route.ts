@@ -8,15 +8,19 @@ import {
 } from "@/lib/ai-practice-bot/instructions";
 import { shouldUseLocalReply } from "@/lib/ai-practice-bot/llm-routing";
 import {
+  fetchWithKeyPool,
+  googleApiKeyFromEnv,
+  openaiApiKeyFromEnv,
+  type OpenAiCompatibleFetchResult,
+} from "@/lib/ai-practice-bot/key-pool";
+import {
   buildUserMemory,
   buildBotSelfMemory,
   contextualFallbackReply,
-  filterRedundantSelfDisclosure,
   formatBotSelfMemoryBlock,
   formatRecentBotLinesBlock,
   formatUserMemoryBlock,
   isGoodbyeContextActive,
-  isUserLeavingConversation,
   midChatStubReply,
   type BotSelfMemory,
 } from "@/lib/ai-practice-bot/memory";
@@ -50,18 +54,7 @@ import { createClient } from "@/utils/supabase/server";
 import { logError } from "@/lib/ops/error-log";
 import { clientIp } from "@/lib/moderation/client-ip";
 import type { NextRequest } from "next/server";
-
-function groqApiKey(): string | undefined {
-  return process.env.GROQ_API_KEY?.trim() || undefined;
-}
-
-function googleApiKey(): string | undefined {
-  return (
-    process.env.GOOGLE_API_KEY?.trim() ||
-    process.env.GEMINI_API_KEY?.trim() ||
-    undefined
-  );
-}
+import { getAvailablePoolKeys } from "@/lib/ai-practice-bot/key-pool";
 
 function useCompactPrompts(): boolean {
   return process.env.LLM_USE_FULL_PROMPT?.trim() !== "true";
@@ -161,12 +154,7 @@ function geminiContents(history: ChatTurn[]) {
   }));
 }
 
-type LlmFetchResult = {
-  raw: string | null;
-  inputTokens?: number;
-  outputTokens?: number;
-  rateLimited?: boolean;
-};
+type LlmFetchResult = OpenAiCompatibleFetchResult;
 
 async function fetchGeminiRaw(
   history: ChatTurn[],
@@ -174,7 +162,7 @@ async function fetchGeminiRaw(
   maxOutputTokens: number,
   temperature: number,
 ): Promise<LlmFetchResult> {
-  const key = googleApiKey();
+  const key = googleApiKeyFromEnv();
   if (!key) return { raw: null };
 
   const model = process.env.GEMINI_CHAT_MODEL?.trim() || "gemini-2.5-flash";
@@ -207,9 +195,9 @@ async function fetchGeminiRaw(
         message: `Gemini rate limit error (429)`,
         metadata: { status: res.status, body: errText.slice(0, 500) },
       });
-      return { raw: null, rateLimited: true };
+      return { raw: null, rateLimited: true, provider: "gemini" };
     }
-    return { raw: null };
+    return { raw: null, provider: "gemini" };
   }
 
   const json = (await res.json()) as {
@@ -227,63 +215,7 @@ async function fetchGeminiRaw(
       ?.map((part) => part.text ?? "")
       .join("")
       .trim() ?? null;
-  return { raw, inputTokens, outputTokens };
-}
-
-async function fetchGroqRaw(
-  history: ChatTurn[],
-  systemPrompt: string,
-  maxOutputTokens: number,
-  temperature: number,
-): Promise<LlmFetchResult> {
-  const key = groqApiKey();
-  if (!key) return { raw: null };
-
-  const model = process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.1-8b-instant";
-
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature,
-      max_tokens: maxOutputTokens,
-      response_format: { type: "json_object" },
-      messages: [{ role: "system", content: systemPrompt }, ...history],
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    console.error("Groq error:", res.status, errText);
-    if (res.status === 429) {
-      void logError({
-        source: "/api/chat/ai-reply",
-        message: `Groq rate limit error (429)`,
-        metadata: { status: res.status, body: errText.slice(0, 500) },
-      });
-      return { raw: null, rateLimited: true };
-    }
-    void logError({
-      source: "/api/chat/ai-reply",
-      message: `Groq API error ${res.status}`,
-      metadata: { status: res.status, body: errText.slice(0, 500) },
-    });
-    return { raw: null };
-  }
-
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  };
-  return {
-    raw: json.choices?.[0]?.message?.content?.trim() ?? null,
-    inputTokens: json.usage?.prompt_tokens,
-    outputTokens: json.usage?.completion_tokens,
-  };
+  return { raw, inputTokens, outputTokens, provider: "gemini" };
 }
 
 async function fetchOpenAIRaw(
@@ -292,7 +224,7 @@ async function fetchOpenAIRaw(
   maxOutputTokens: number,
   temperature: number,
 ): Promise<LlmFetchResult> {
-  const key = process.env.OPENAI_API_KEY;
+  const key = openaiApiKeyFromEnv();
   if (!key) return { raw: null };
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -319,9 +251,9 @@ async function fetchOpenAIRaw(
         message: `OpenAI rate limit error (429)`,
         metadata: { status: res.status, body: errText.slice(0, 500) },
       });
-      return { raw: null, rateLimited: true };
+      return { raw: null, rateLimited: true, provider: "openai" };
     }
-    return { raw: null };
+    return { raw: null, provider: "openai" };
   }
 
   const json = (await res.json()) as {
@@ -332,6 +264,7 @@ async function fetchOpenAIRaw(
     raw: json.choices?.[0]?.message?.content?.trim() ?? null,
     inputTokens: json.usage?.prompt_tokens,
     outputTokens: json.usage?.completion_tokens,
+    provider: "openai",
   };
 }
 
@@ -353,14 +286,12 @@ async function callLlm(
       ? (settings?.maxOutputTokensSexual ?? 256)
       : (settings?.maxOutputTokens ?? 160);
   const temperature = settings?.llmTemperature ?? 1.08;
-  const provider = groqApiKey() ? "groq" : googleApiKey() ? "gemini" : "openai";
-  const fetchRaw =
-    provider === "groq" ? fetchGroqRaw : provider === "gemini" ? fetchGeminiRaw : fetchOpenAIRaw;
   const started = Date.now();
 
   const logProviderUsage = (
     result: LlmFetchResult,
     success: boolean,
+    provider: "cerebras" | "groq" | "gemini" | "openai",
   ) => {
     if (!logCtx) return;
     const inputTokens = result.inputTokens ?? 0;
@@ -382,61 +313,87 @@ async function callLlm(
     });
   };
 
-  const result = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
-  if (result.rateLimited) {
-    logProviderUsage({ raw: null }, false);
-    return {
-      action: "skip",
-      parting: null,
-      timing: personaTiming(persona, settings),
-    };
-  }
-  if (result.raw) {
-    const parsed = parseModelTurn(result.raw, history, persona, memory, settings, botSelf);
-    if (parsed) {
-      logProviderUsage(result, true);
-      return parsed;
+  const softFallback = (): AiPracticeTurnResult => {
+    const allowSexual = personaAllowsSexualChat(persona, memory.sexualVibe);
+    if (opener) {
+      return {
+        action: "reply",
+        messages: contextualFallbackReply(history, memory, allowSexual),
+        timing: personaTiming(persona, settings),
+      };
     }
-    logProviderUsage(result, true);
-  } else {
-    logProviderUsage({ raw: null }, false);
-  }
-
-  // Retry once on parse/network failure before any fallback.
-  const retry = await fetchRaw(history, systemPrompt, maxOutputTokens, temperature);
-  if (retry.rateLimited) {
-    logProviderUsage({ raw: null }, false);
-    return {
-      action: "skip",
-      parting: null,
-      timing: personaTiming(persona, settings),
-    };
-  }
-  if (retry.raw) {
-    const parsed = parseModelTurn(retry.raw, history, persona, memory, settings, botSelf);
-    if (parsed) {
-      logProviderUsage(retry, true);
-      return parsed;
-    }
-    logProviderUsage(retry, true);
-  } else {
-    logProviderUsage({ raw: null }, false);
-  }
-
-  const allowSexual = personaAllowsSexualChat(persona, memory.sexualVibe);
-  if (opener) {
     return {
       action: "reply",
-      messages: contextualFallbackReply(history, memory, allowSexual),
+      messages: midChatStubReply(history, allowSexual),
       timing: personaTiming(persona, settings),
     };
+  };
+
+  // 1) Cerebras / Groq key pool — rotate instantly on 429 within this request.
+  const poolResult = await fetchWithKeyPool({
+    history,
+    systemPrompt,
+    maxOutputTokens,
+    temperature,
+    onError: (message, meta) => {
+      void logError({
+        source: "/api/chat/ai-reply",
+        message,
+        metadata: meta,
+      });
+    },
+  });
+
+  if (poolResult.raw) {
+    const provider = (poolResult.provider === "cerebras" || poolResult.provider === "groq"
+      ? poolResult.provider
+      : "groq") as "cerebras" | "groq";
+    const parsed = parseModelTurn(poolResult.raw, history, persona, memory, settings, botSelf);
+    if (parsed) {
+      logProviderUsage(poolResult, true, provider);
+      return parsed;
+    }
+    logProviderUsage(poolResult, true, provider);
+  } else if (poolResult.rateLimited) {
+    logProviderUsage({ raw: null }, false, "cerebras");
+  } else if ((await getAvailablePoolKeys()).length > 0) {
+    logProviderUsage({ raw: null }, false, "groq");
   }
 
-  return {
-    action: "reply",
-    messages: midChatStubReply(history, allowSexual),
-    timing: personaTiming(persona, settings),
-  };
+  // 2) Gemini fallback
+  if (googleApiKeyFromEnv()) {
+    const gemini = await fetchGeminiRaw(history, systemPrompt, maxOutputTokens, temperature);
+    if (gemini.raw) {
+      const parsed = parseModelTurn(gemini.raw, history, persona, memory, settings, botSelf);
+      if (parsed) {
+        logProviderUsage(gemini, true, "gemini");
+        return parsed;
+      }
+      logProviderUsage(gemini, true, "gemini");
+    } else if (!gemini.rateLimited) {
+      logProviderUsage({ raw: null }, false, "gemini");
+    } else {
+      logProviderUsage({ raw: null }, false, "gemini");
+    }
+  }
+
+  // 3) OpenAI fallback
+  if (openaiApiKeyFromEnv()) {
+    const openai = await fetchOpenAIRaw(history, systemPrompt, maxOutputTokens, temperature);
+    if (openai.raw) {
+      const parsed = parseModelTurn(openai.raw, history, persona, memory, settings, botSelf);
+      if (parsed) {
+        logProviderUsage(openai, true, "openai");
+        return parsed;
+      }
+      logProviderUsage(openai, true, "openai");
+    } else {
+      logProviderUsage({ raw: null }, false, "openai");
+    }
+  }
+
+  // Never leave the chat silent on rate limits — seamless canned continuation.
+  return softFallback();
 }
 
 export async function POST(req: Request) {
@@ -561,9 +518,10 @@ export async function POST(req: Request) {
       return respondLocal(result);
     }
 
-    const systemPrompt = groqApiKey() || !googleApiKey()
-      ? buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings)
-      : geminiSystemPrompt(
+    const poolKeys = await getAvailablePoolKeys();
+    const preferGeminiSchema = poolKeys.length === 0 && !!googleApiKeyFromEnv();
+    const systemPrompt = preferGeminiSchema
+      ? geminiSystemPrompt(
           personaBlock,
           memoryBlock,
           sessionBlock,
@@ -572,7 +530,8 @@ export async function POST(req: Request) {
           persona.chatMode,
           botSettings,
           isOpener,
-        );
+        )
+      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
 
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,
