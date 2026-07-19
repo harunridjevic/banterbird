@@ -2,20 +2,15 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  // Single canonical host/path shape for Google (avoids sitemap URLs that only redirect)
+  // Single canonical path shape for Google (avoids sitemap URLs that only redirect)
   trailingSlash: false,
   turbopack: {
     root: path.resolve(process.cwd()),
   },
   async redirects() {
     return [
-      // Apex is canonical — www should not be indexed as a separate host
-      {
-        source: "/:path*",
-        has: [{ type: "host", value: "www.banterbird.app" }],
-        destination: "https://banterbird.app/:path*",
-        permanent: true,
-      },
+      // Do NOT redirect www↔apex here — Vercel/DNS already handles the primary domain.
+      // Doing both causes ERR_TOO_MANY_REDIRECTS on www.banterbird.app.
       // Legacy /match lobby → homepage (do not keep /match in sitemap)
       {
         source: "/match",
