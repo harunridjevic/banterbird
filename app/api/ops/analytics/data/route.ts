@@ -73,6 +73,13 @@ export async function GET(req: Request) {
 
     snapshot.series.onlineUsersByDay = await fetchOnlineUsersByDay(snapshot.sinceUtc, days);
 
+    // Fire-and-forget: record a fresh online-count snapshot now so the concurrent
+    // users graph stays current even when organic traffic is low. The analytics
+    // dashboard polls every 5 s, so this is called frequently while the page is open.
+    void admin.rpc("snapshot_online_count").then(({ error: snapErr }) => {
+      if (snapErr) console.error("snapshot_online_count", snapErr);
+    });
+
     if (period === "today") {
       snapshot.series.onlineUsersByHour = await fetchOnlineUsersByHour(snapshot.sinceUtc);
     }

@@ -245,9 +245,17 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en" suppressHydrationWarning className={`${plusJakarta.variable} h-full`}>
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth" className={`${plusJakarta.variable} h-full`}>
       <head>
-        {/* Google tag (gtag.js) */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
+      <body className="min-h-full antialiased">
+        <AppProviders>{children}</AppProviders>
+        {/* Google tag (gtag.js) — placed in body via Next.js Script to avoid
+            head hydration conflicts */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-YWHJZBKFLM"
           strategy="afterInteractive"
@@ -260,19 +268,14 @@ export default function RootLayout({
             gtag('config', 'G-YWHJZBKFLM');
           `}
         </Script>
-        {/* Google AdSense */}
+        {/* Google AdSense — afterInteractive keeps it out of the SSR head so
+            AdSense's own script injection cannot cause a hydration mismatch */}
         <Script
+          id="adsense"
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2521687003085794"
           strategy="afterInteractive"
           crossOrigin="anonymous"
         />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-      </head>
-      <body className="min-h-full antialiased">
-        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );
