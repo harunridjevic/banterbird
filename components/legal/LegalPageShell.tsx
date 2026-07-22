@@ -9,7 +9,7 @@ type Props = {
 
 export function LegalPageShell({ title, updated, children }: Props) {
   return (
-    <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+    <div className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
       <Link
         href="/"
         className="inline-flex items-center text-sm font-medium text-navy-600 underline-offset-2 hover:text-navy-900 hover:underline dark:text-navy-400 dark:hover:text-navy-100"
