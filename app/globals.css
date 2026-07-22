@@ -43,7 +43,7 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  /* scroll-behavior is kept via data-scroll-behavior on the element (Next.js requirement) */
 }
 
 body {

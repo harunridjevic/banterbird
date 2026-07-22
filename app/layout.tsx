@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { AppProviders } from "./providers";
 
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
     template: "%s · BanterBird",
   },
   description:
-    "BanterBird is free anonymous chat online — no signup, no download. Instant 1-on-1 anonymous text chat with random people worldwide.",
+    "BanterBird is free anonymous chat online with no signup and no download. Start instant 1-on-1 anonymous text chat with random people worldwide.",
   keywords: [
     "banterbird",
     "banterbird.app",
@@ -95,20 +96,20 @@ export const metadata: Metadata = {
   verification: {
     google: process.env.GOOGLE_SITE_VERIFICATION,
   },
-  // Cache-bust icon URLs so Google/crawlers re-fetch after brand updates (v0.11.0).
+  // Cache-bust icon URLs so Google/crawlers re-fetch after brand updates (v0.12.0).
   // Note: Search Console favicon/logo can still take days–weeks to refresh after recrawl.
   icons: {
     icon: [
-      { url: "/favicon.ico?v=0.11.0", sizes: "48x48" },
-      { url: "/favicon-96x96.png?v=0.11.0", sizes: "96x96", type: "image/png" },
-      { url: "/favicon.svg?v=0.11.0", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=0.12.0", sizes: "48x48" },
+      { url: "/favicon-96x96.png?v=0.12.0", sizes: "96x96", type: "image/png" },
+      { url: "/favicon.svg?v=0.12.0", type: "image/svg+xml" },
     ],
-    shortcut: "/favicon.ico?v=0.11.0",
+    shortcut: "/favicon.ico?v=0.12.0",
     apple: [
-      { url: "/apple-touch-icon.png?v=0.11.0", sizes: "180x180", type: "image/png" },
+      { url: "/apple-touch-icon.png?v=0.12.0", sizes: "180x180", type: "image/png" },
     ],
   },
-  manifest: "/site.webmanifest?v=0.11.0",
+  manifest: "/site.webmanifest?v=0.12.0",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -161,11 +162,11 @@ export default function RootLayout({
         logo: {
           "@type": "ImageObject",
           // Prefer a square mark for Knowledge Graph; OG image remains logo_search.png
-          url: `${baseUrl}/web-app-manifest-512x512.png?v=0.11.0`,
+          url: `${baseUrl}/web-app-manifest-512x512.png?v=0.12.0`,
           width: 512,
           height: 512,
         },
-        image: `${baseUrl}/logo_search.png?v=0.11.0`,
+        image: `${baseUrl}/logo_search.png?v=0.12.0`,
         sameAs: [
           "https://twitter.com/banterbird",
           "https://github.com/banterbird",
@@ -244,7 +245,7 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en" suppressHydrationWarning className={`${plusJakarta.variable} h-full`}>
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth" className={`${plusJakarta.variable} h-full`}>
       <head>
         <script
           type="application/ld+json"
@@ -253,6 +254,28 @@ export default function RootLayout({
       </head>
       <body className="min-h-full antialiased">
         <AppProviders>{children}</AppProviders>
+        {/* Google tag (gtag.js) — placed in body via Next.js Script to avoid
+            head hydration conflicts */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-YWHJZBKFLM"
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-YWHJZBKFLM');
+          `}
+        </Script>
+        {/* Google AdSense — afterInteractive keeps it out of the SSR head so
+            AdSense's own script injection cannot cause a hydration mismatch */}
+        <Script
+          id="adsense"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2521687003085794"
+          strategy="afterInteractive"
+          crossOrigin="anonymous"
+        />
       </body>
     </html>
   );

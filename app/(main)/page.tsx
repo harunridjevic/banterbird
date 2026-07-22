@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     absolute: "BanterBird — Free Anonymous Chat Online (No Signup)",
   },
   description:
-    "BanterBird is free anonymous chat online — no signup, no download. Instant 1-on-1 anonymous text chat with random people. Private, fast, and built for banter.",
+    "BanterBird is free anonymous chat online with no signup and no download. Start instant 1-on-1 anonymous text chat with random people. Private, fast, and built for real conversation.",
   keywords: [
     "banterbird",
     "banterbird.app",

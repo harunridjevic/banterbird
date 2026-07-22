@@ -12,6 +12,7 @@ export type RoomsDayPoint = { date: string; human: number; bot: number; total: n
 export type ApiDayPoint = { date: string; calls: number; errors: number };
 export type ApiCostDayPoint = { date: string; costUsd: number; tokens: number };
 export type OnlineDayPoint = { date: string; peak: number; avg: number };
+export type OnlineHourPoint = { hour: string; peak: number; avg: number };
 
 export type AnalyticsSnapshot = {
   windowDays: number;
@@ -60,6 +61,8 @@ export type AnalyticsSnapshot = {
     apiCostByDay: ApiCostDayPoint[];
     /** Peak + average concurrent online users per day (from minute snapshots). */
     onlineUsersByDay?: OnlineDayPoint[];
+    /** Peak + average concurrent online users per hour — populated only for the "today" period. */
+    onlineUsersByHour?: OnlineHourPoint[];
   };
 };
 

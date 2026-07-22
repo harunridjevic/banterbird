@@ -6,6 +6,7 @@ const LEGAL_LINKS = [
   { href: "/legal/privacy", label: "Privacy", title: "Privacy Policy" },
   { href: "/legal/community", label: "Guidelines", title: "Community Guidelines" },
   { href: "/legal/cookies", label: "Cookies", title: "Cookie Policy" },
+  { href: "/contact", label: "Contact", title: "Contact Us" },
 ] as const;
 
 export function SiteFooter() {

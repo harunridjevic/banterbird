@@ -7,6 +7,7 @@ import {
   RoomsChart,
   UniqueUsersChart,
   OnlineUsersChart,
+  OnlineUsersHourlyChart,
 } from "@/components/ops/AnalyticsCharts";
 import { MetricCard } from "@/components/ops/MetricCard";
 import {
@@ -53,6 +54,28 @@ const PERIODS: { id: AnalyticsPeriod; label: string }[] = [
   { id: "custom", label: "Custom" },
 ];
 
+const PERIOD_STORAGE_KEY = "banterbird:ops:analyticsPeriod";
+const CUSTOM_DAYS_STORAGE_KEY = "banterbird:ops:analyticsCustomDays";
+
+function readStoredPeriod(): AnalyticsPeriod {
+  try {
+    const v = localStorage.getItem(PERIOD_STORAGE_KEY);
+    if (v && ["today", "week", "month", "year", "custom"].includes(v)) {
+      return v as AnalyticsPeriod;
+    }
+  } catch {}
+  return "month";
+}
+
+function readStoredCustomDays(): number {
+  try {
+    const v = localStorage.getItem(CUSTOM_DAYS_STORAGE_KEY);
+    const n = v ? Number.parseInt(v, 10) : NaN;
+    if (!Number.isNaN(n) && n >= 1 && n <= 365) return n;
+  } catch {}
+  return 30;
+}
+
 export default function OpsAnalyticsPage() {
   const liveOnlineCount = useOnlineCount();
   const [password, setPassword] = useState("");
@@ -67,6 +90,12 @@ export default function OpsAnalyticsPage() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState("");
   const [isCheckingCookie, setIsCheckingCookie] = useState(true);
+
+  // Restore saved period from localStorage on mount.
+  useEffect(() => {
+    setPeriod(readStoredPeriod());
+    setCustomDays(readStoredCustomDays());
+  }, []);
 
   const days = resolvePeriodDays(period, customDays);
 
@@ -240,7 +269,10 @@ export default function OpsAnalyticsPage() {
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => setPeriod(p.id)}
+                    onClick={() => {
+                      setPeriod(p.id);
+                      try { localStorage.setItem(PERIOD_STORAGE_KEY, p.id); } catch {}
+                    }}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                       period === p.id
                         ? "bg-violet-600 text-white"
@@ -263,7 +295,11 @@ export default function OpsAnalyticsPage() {
                     min={1}
                     max={365}
                     value={customDays}
-                    onChange={(e) => setCustomDays(Number.parseInt(e.target.value, 10) || 30)}
+                    onChange={(e) => {
+                      const n = Number.parseInt(e.target.value, 10) || 30;
+                      setCustomDays(n);
+                      try { localStorage.setItem(CUSTOM_DAYS_STORAGE_KEY, String(n)); } catch {}
+                    }}
                     className="w-24 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
                   />
                 </div>
@@ -521,7 +557,11 @@ export default function OpsAnalyticsPage() {
                     <UniqueUsersChart snapshot={snapshot} />
                     <RoomsChart snapshot={snapshot} />
                     <div className="lg:col-span-2">
-                      <OnlineUsersChart snapshot={snapshot} />
+                      {period === "today" ? (
+                        <OnlineUsersHourlyChart snapshot={snapshot} />
+                      ) : (
+                        <OnlineUsersChart snapshot={snapshot} />
+                      )}
                     </div>
                     <div className="lg:col-span-2">
                       <ApiUsageChart snapshot={snapshot} />

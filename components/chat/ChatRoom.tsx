@@ -95,6 +95,8 @@ export function ChatRoom({ roomId }: Props) {
   const [hideBotUi, setHideBotUi] = useState(globalBotSettings.matchMode === "hidden_bots");
   const [hideGenderFilters, setHideGenderFilters] = useState(globalBotSettings.hideGenderFilters);
   const [showReport, setShowReport] = useState(false);
+  const [skipConfirm, setSkipConfirm] = useState(false);
+  const skipConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyboardInset = useKeyboardInset();
   const peerTypingRef = useRef(false);
 
@@ -155,6 +157,11 @@ export function ChatRoom({ roomId }: Props) {
     unloadBeaconSentRef.current = false;
     roomEndedRef.current = false;
     skipEndingRef.current = false;
+    setSkipConfirm(false);
+    if (skipConfirmTimer.current !== null) {
+      clearTimeout(skipConfirmTimer.current);
+      skipConfirmTimer.current = null;
+    }
   }, [roomId]);
 
   const endRoomBeacon = useCallback(() => {
@@ -985,11 +992,31 @@ export function ChatRoom({ roomId }: Props) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           disabled={exiting} // This is the "Skip" button
-          onClick={() => void leaveManually(false, true)}
-          className="inline-flex items-center gap-1.5 rounded-2xl bg-navy-900 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-50 dark:bg-navy-100 dark:text-navy-950"
+          onClick={() => {
+            if (!skipConfirm) {
+              setSkipConfirm(true);
+              if (skipConfirmTimer.current !== null) clearTimeout(skipConfirmTimer.current);
+              skipConfirmTimer.current = setTimeout(() => {
+                setSkipConfirm(false);
+                skipConfirmTimer.current = null;
+              }, 3000);
+            } else {
+              if (skipConfirmTimer.current !== null) {
+                clearTimeout(skipConfirmTimer.current);
+                skipConfirmTimer.current = null;
+              }
+              setSkipConfirm(false);
+              void leaveManually(false, true);
+            }
+          }}
+          className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold shadow-sm disabled:opacity-50 transition-colors ${
+            skipConfirm
+              ? "bg-amber-500 text-white dark:bg-amber-400 dark:text-navy-950"
+              : "bg-navy-900 text-white dark:bg-navy-100 dark:text-navy-950"
+          }`}
         >
           <SkipForward className="h-3.5 w-3.5" aria-hidden />
-          Skip
+          {skipConfirm ? "Are you sure?" : "Skip"}
         </motion.button>
       </div>
 
