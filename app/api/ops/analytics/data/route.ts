@@ -7,7 +7,7 @@ import {
   type AnalyticsSnapshot,
   resolvePeriodDays,
 } from "@/lib/ops/analytics-types";
-import { fetchOnlineUsersByDay } from "@/lib/ops/online-users-series";
+import { fetchOnlineUsersByDay, fetchOnlineUsersByHour } from "@/lib/ops/online-users-series";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 type SessionMinutesRow = {
@@ -71,7 +71,11 @@ export async function GET(req: Request) {
       console.error("ops_user_session_minutes", timeErr);
     }
 
-    snapshot.series.onlineUsersByDay = await fetchOnlineUsersByDay(snapshot.sinceUtc);
+    snapshot.series.onlineUsersByDay = await fetchOnlineUsersByDay(snapshot.sinceUtc, days);
+
+    if (period === "today") {
+      snapshot.series.onlineUsersByHour = await fetchOnlineUsersByHour(snapshot.sinceUtc);
+    }
 
     return NextResponse.json({ snapshot });
   } catch (e) {

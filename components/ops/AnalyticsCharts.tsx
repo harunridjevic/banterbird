@@ -224,6 +224,48 @@ export function OnlineUsersChart({ snapshot }: ChartProps) {
   );
 }
 
+export function OnlineUsersHourlyChart({ snapshot }: ChartProps) {
+  const data = (snapshot.series.onlineUsersByHour ?? []).map((p) => ({
+    hour: p.hour,
+    Peak: p.peak,
+    Average: p.avg,
+  }));
+
+  if (data.length === 0) {
+    return <EmptyChart message="No concurrent-online samples yet for today. Data builds as users come online." />;
+  }
+
+  return (
+    <ChartShell title="Concurrent online users — today by hour (UTC)">
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+          <XAxis dataKey="hour" tick={{ fill: "#94a3b8", fontSize: 11 }} tickLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} tickLine={false} allowDecimals={false} />
+          <Tooltip content={<ChartTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
+          <Line
+            type="monotone"
+            dataKey="Peak"
+            name="Peak concurrent"
+            stroke="#34d399"
+            strokeWidth={2}
+            dot={{ r: 3, fill: "#34d399" }}
+          />
+          <Line
+            type="monotone"
+            dataKey="Average"
+            name="Avg concurrent"
+            stroke="#38bdf8"
+            strokeWidth={2}
+            dot={{ r: 3, fill: "#38bdf8" }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartShell>
+  );
+}
+
 function ChartShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-white/10 bg-black/20 p-4">
