@@ -12,11 +12,11 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "BanterBird — Free Anonymous Chat Online (No Signup)",
+    default: "BanterBird - Free Anonymous Chat Online (No Signup)",
     template: "%s · BanterBird",
   },
   description:
-    "BanterBird is free anonymous chat online with no signup and no download. Start instant 1-on-1 anonymous text chat with random people worldwide.",
+    "BanterBird is a free anonymous chat online with no signup and no download. Start instant 1-on-1 anonymous text chat with random people worldwide.",
   keywords: [
     "banterbird",
     "banterbird.app",
@@ -61,9 +61,9 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "https://banterbird.app",
-    title: "BanterBird — Free Anonymous Chat Online",
+    title: "BanterBird - Free Anonymous Chat Online",
     description:
-      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide on BanterBird.",
+      "Free anonymous chat online - no signup. Instant 1-on-1 anonymous text chat with random people worldwide on BanterBird.",
     siteName: "BanterBird",
     images: [
       {
@@ -76,9 +76,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "BanterBird — Free Anonymous Chat Online",
+    title: "BanterBird - Free Anonymous Chat Online",
     description:
-      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat with random people worldwide on BanterBird.",
+      "Free anonymous chat online - no signup. Instant 1-on-1 anonymous text chat with random people worldwide on BanterBird.",
     images: ["/logo_search.png"],
     creator: "@banterbird",
   },
@@ -204,7 +204,7 @@ export default function RootLayout({
             name: "What is BanterBird?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "BanterBird (banterbird.app) is a free anonymous chat site for instant 1-on-1 text conversations with random people — no signup required.",
+              text: "BanterBird (banterbird.app) is a free anonymous chat site for instant 1-on-1 text conversations with random people - no signup required.",
             },
           },
           {
@@ -236,7 +236,7 @@ export default function RootLayout({
             name: "Is BanterBird the same as banterbird.com?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "No. This product is BanterBird at banterbird.app — a free anonymous chat app. It is not affiliated with other sites using similar names.",
+              text: "No. This product is BanterBird at banterbird.app - a free anonymous chat app. It is not affiliated with other sites using similar names.",
             },
           },
         ],
