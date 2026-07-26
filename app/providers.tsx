@@ -15,6 +15,8 @@ import { ensureAnonymousSession } from "@/lib/auth/ensure-anonymous-session";
 import { OnlinePresenceProvider } from "@/components/presence/OnlinePresenceProvider";
 import { ClientErrorReporter } from "@/components/monitoring/ClientErrorReporter";
 import { BotSettingsProvider } from "@/lib/ops/bot-settings-provider";
+import { AccountProvider } from "@/lib/account/context";
+import { AccountModal } from "@/components/account/AccountModal";
 
 type SupabaseCtx = {
   client: SupabaseClient;
@@ -53,8 +55,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <SupabaseContext.Provider value={{ client, ready, authError }}>
         <BotSettingsProvider>
           <OnlinePresenceProvider>
-            <ClientErrorReporter />
-            {children}
+            <AccountProvider supabase={client}>
+              <ClientErrorReporter />
+              <AccountModal />
+              {children}
+            </AccountProvider>
           </OnlinePresenceProvider>
         </BotSettingsProvider>
       </SupabaseContext.Provider>

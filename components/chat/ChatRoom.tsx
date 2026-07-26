@@ -32,6 +32,7 @@ import { getDeviceId } from "@/lib/moderation/device-id";
 import { blockUserForSession } from "@/lib/moderation/session-block";
 import { ConnectionSignal } from "@/components/chat/ConnectionSignal";
 import { ReportUserDialog } from "@/components/chat/ReportUserDialog";
+import { FriendRequestButton } from "@/components/chat/FriendRequestButton";
 import { checkMatchAccess, rejectBlockedRoom, shouldAcceptRoom } from "@/lib/match/room-guard";
 import { useKeyboardInset } from "@/lib/hooks/use-keyboard-inset";
 import { useInactivityTimeout } from "@/lib/hooks/use-inactivity-timeout";
@@ -893,14 +894,15 @@ export function ChatRoom({ roomId }: Props) {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-navy-200/60 px-3 py-3 dark:border-white/10 sm:gap-3 sm:px-4">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-navy-200/60 px-3 py-2.5 dark:border-white/10 sm:gap-2 sm:px-4">
+        {/* Left: back button */}
         <motion.button
           type="button"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          disabled={exiting} // This is the "Cancel" button
+          disabled={exiting}
           onClick={() => void leaveManually(true)}
-          className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm font-medium text-navy-800 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl px-2 py-2 text-sm font-medium text-navy-800 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Match</span>
@@ -975,49 +977,53 @@ export function ChatRoom({ roomId }: Props) {
             You are both strangers. Stay kind.
           </p>
         </div>
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          disabled={exiting}
-          onClick={() => setShowReport(true)}
-          className="inline-flex items-center gap-1 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-2 text-xs font-semibold text-rose-800 disabled:opacity-50 dark:text-rose-200"
-          aria-label="Report user"
-        >
-          <Flag className="h-3.5 w-3.5" aria-hidden />
-          <span className="hidden sm:inline">Report</span>
-        </motion.button>
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          disabled={exiting} // This is the "Skip" button
-          onClick={() => {
-            if (!skipConfirm) {
-              setSkipConfirm(true);
-              if (skipConfirmTimer.current !== null) clearTimeout(skipConfirmTimer.current);
-              skipConfirmTimer.current = setTimeout(() => {
+        {/* Right: action buttons */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <FriendRequestButton peerId={peerId} isAiRoom={isAiRoom} />
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={exiting}
+            onClick={() => setShowReport(true)}
+            className="inline-flex items-center gap-1 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-2 text-xs font-semibold text-rose-800 disabled:opacity-50 dark:text-rose-200"
+            aria-label="Report user"
+          >
+            <Flag className="h-3.5 w-3.5" aria-hidden />
+            <span className="hidden sm:inline">Report</span>
+          </motion.button>
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={exiting}
+            onClick={() => {
+              if (!skipConfirm) {
+                setSkipConfirm(true);
+                if (skipConfirmTimer.current !== null) clearTimeout(skipConfirmTimer.current);
+                skipConfirmTimer.current = setTimeout(() => {
+                  setSkipConfirm(false);
+                  skipConfirmTimer.current = null;
+                }, 3000);
+              } else {
+                if (skipConfirmTimer.current !== null) {
+                  clearTimeout(skipConfirmTimer.current);
+                  skipConfirmTimer.current = null;
+                }
                 setSkipConfirm(false);
-                skipConfirmTimer.current = null;
-              }, 3000);
-            } else {
-              if (skipConfirmTimer.current !== null) {
-                clearTimeout(skipConfirmTimer.current);
-                skipConfirmTimer.current = null;
+                void leaveManually(false, true);
               }
-              setSkipConfirm(false);
-              void leaveManually(false, true);
-            }
-          }}
-          className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold shadow-sm disabled:opacity-50 transition-colors ${
-            skipConfirm
-              ? "bg-amber-500 text-white dark:bg-amber-400 dark:text-navy-950"
-              : "bg-navy-900 text-white dark:bg-navy-100 dark:text-navy-950"
-          }`}
-        >
-          <SkipForward className="h-3.5 w-3.5" aria-hidden />
-          {skipConfirm ? "Are you sure?" : "Skip"}
-        </motion.button>
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 ${
+              skipConfirm
+                ? "bg-amber-500 text-white dark:bg-amber-400 dark:text-navy-950"
+                : "bg-navy-900 text-white dark:bg-navy-100 dark:text-navy-950"
+            }`}
+          >
+            <SkipForward className="h-3.5 w-3.5" aria-hidden />
+            {skipConfirm ? "Sure?" : "Skip"}
+          </motion.button>
+        </div>
       </div>
 
       {showReport ? (

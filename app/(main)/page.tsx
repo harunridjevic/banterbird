@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { MatchLobby } from "@/components/match/MatchLobby";
 import { AgeGateWrapper } from "@/components/legal/AgeGateWrapper";
+import { SignInNudge } from "@/components/account/SignInNudge";
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 
@@ -77,6 +78,7 @@ export default function HomePage() {
         <div className="w-full max-w-2xl -translate-y-5 sm:-translate-y-8">
           <h1 className="sr-only">BanterBird — free anonymous chat online</h1>
           <MatchLobby />
+          <SignInNudge />
         </div>
       </div>
     </AgeGateWrapper>

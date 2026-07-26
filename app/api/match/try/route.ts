@@ -37,12 +37,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Your access has been restricted." }, { status: 403 });
     }
 
-    const blockedIds = normalizeBlockedUserIds(body.blockedUserIds);
+    // Merge client-supplied blocked IDs with the user's friends list so
+    // friends are never matched against each other in random chat.
+    const clientBlocked = normalizeBlockedUserIds(body.blockedUserIds);
+
+    const { data: friendships } = await supabase
+      .from("friendships")
+      .select("friend_id")
+      .eq("user_id", user.id);
+
+    const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
+
+    const allBlockedIds = Array.from(new Set([...clientBlocked, ...friendIds]));
 
     const { data: roomId, error } = await supabase.rpc("try_match", {
       p_self_gender: body.selfGender ?? "male",
       p_wants_gender: body.wantsGender ?? "any",
-      p_blocked_user_ids: blockedIds,
+      p_blocked_user_ids: allBlockedIds,
     });
 
     if (error) {

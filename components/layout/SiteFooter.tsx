@@ -2,6 +2,7 @@ import Link from "next/link";
 import { APP_VERSION } from "@/lib/version";
 
 const LEGAL_LINKS = [
+  { href: "/about", label: "About", title: "About BanterBird" },
   { href: "/legal/terms", label: "Terms", title: "Terms of Service" },
   { href: "/legal/privacy", label: "Privacy", title: "Privacy Policy" },
   { href: "/legal/community", label: "Guidelines", title: "Community Guidelines" },
