@@ -41,6 +41,7 @@ import {
   resetInactivityStrikes,
 } from "@/lib/moderation/inactivity-strikes";
 import { networkErrorMessage } from "@/lib/network-error";
+import { uploadChatImage, encodeImageMessage } from "@/lib/chat/image-upload";
 
 type Props = { roomId: string };
 
@@ -100,6 +101,8 @@ export function ChatRoom({ roomId }: Props) {
   const skipConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyboardInset = useKeyboardInset();
   const peerTypingRef = useRef(false);
+  // Dynamic peer username — updated when peer accepts our friend request
+  const [peerUsername, setPeerUsername] = useState<string | null>(null);
 
   const cancelOpener = useCallback(() => {
     if (openerTimerRef.current !== null) {
@@ -869,8 +872,93 @@ export function ChatRoom({ roomId }: Props) {
     [roomId, cancelOpener, router],
   );
 
+  // ── Peer username resolution ────────────────────────────────
+  // When peerId is known, try to look up their profile. Updates live via
+  // friend_requests realtime (when peer accepts our request their profile
+  // becomes accessible and we swap "Stranger" for their username).
+  useEffect(() => {
+    if (!peerId || isAiRoom || !ready) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await client
+        .from("profiles")
+        .select("username")
+        .eq("id", peerId)
+        .maybeSingle();
+      if (!cancelled && data?.username) setPeerUsername(data.username);
+    })();
+    return () => { cancelled = true; };
+  }, [peerId, isAiRoom, ready, client]);
+
+  // ── Friend request notifications in chat ────────────────────
+  // Listen for friend_requests where to_id = selfId AND from_id = peerId.
+  // When one arrives inject a system message so the user sees it in chat.
+  useEffect(() => {
+    if (!peerId || !selfId || isAiRoom) return;
+    const channel = client
+      .channel(`chat:fr:${roomId}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "friend_requests",
+        filter: `to_id=eq.${selfId}`,
+      }, (payload) => {
+        const row = payload.new as { from_id: string; to_id: string };
+        if (row.from_id !== peerId) return;
+        const sysMsg: MessageRow = {
+          id: `sys-fr-${Date.now()}`,
+          clientKey: `sys-fr-${Date.now()}`,
+          room_id: roomId,
+          user_id: null,
+          content: `[system]${peerUsername ?? "Stranger"} sent you a friend request`,
+          created_at: new Date().toISOString(),
+          is_from_ai: false,
+        };
+        setMessages((prev) => [...prev, sysMsg]);
+      })
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "friend_requests",
+        filter: `from_id=eq.${selfId}`,
+      }, async (payload) => {
+        // Peer accepted our request — fetch their username and update label
+        const row = payload.new as { to_id: string; status: string };
+        if (row.to_id !== peerId || row.status !== "accepted") return;
+        const { data } = await client
+          .from("profiles")
+          .select("username")
+          .eq("id", peerId)
+          .maybeSingle();
+        if (data?.username) {
+          setPeerUsername(data.username);
+          const sysMsg: MessageRow = {
+            id: `sys-acc-${Date.now()}`,
+            clientKey: `sys-acc-${Date.now()}`,
+            room_id: roomId,
+            user_id: null,
+            content: `[system]${data.username} accepted your friend request`,
+            created_at: new Date().toISOString(),
+            is_from_ai: false,
+          };
+          setMessages((prev) => [...prev, sysMsg]);
+        }
+      })
+      .subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, [peerId, selfId, isAiRoom, roomId, client, peerUsername]);
+
+  // ── Image send handler ──────────────────────────────────────
+  const sendImage = useCallback(async (file: File) => {
+    if (!selfId) return;
+    const result = await uploadChatImage(file, client, selfId);
+    if (!result.ok) { setError(result.error); return; }
+    await sendMessage(encodeImageMessage(result.url));
+  }, [selfId, client, sendMessage]);
+
   const displayAsHuman = isAiRoom && hideBotUi;
   const showPeerGender = !hideGenderFilters;
+  const peerLabel = peerUsername ?? "Stranger";
 
   if (loading || !selfId) {
     return <PageLoader label="Opening your chat…" />;
@@ -909,7 +997,7 @@ export function ChatRoom({ roomId }: Props) {
         </motion.button>
         <div className="min-w-0 flex-1 text-center">
           <p className="hidden text-sm font-semibold text-navy-950 sm:block dark:text-navy-50">
-            Anonymous chat
+            {peerLabel === "Stranger" ? "Anonymous chat" : peerLabel}
           </p>
           <div className="flex flex-nowrap items-center justify-center gap-1 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:mt-1 sm:gap-1.5 [&::-webkit-scrollbar]:hidden">
             {!displayAsHuman && isAiRoom ? (
@@ -974,7 +1062,7 @@ export function ChatRoom({ roomId }: Props) {
             ) : null}
           </div>
           <p className="mt-1 hidden text-xs text-navy-600 sm:block dark:text-navy-400">
-            You are both strangers. Stay kind.
+            {peerLabel === "Stranger" ? "You are both strangers. Stay kind." : `Chatting with ${peerLabel}`}
           </p>
         </div>
         {/* Right: action buttons */}
@@ -1061,7 +1149,7 @@ export function ChatRoom({ roomId }: Props) {
             selfId={selfId}
             peerTyping={peerTyping}
             peerIsBot={isAiRoom && !hideBotUi}
-            peerLabel="Stranger"
+            peerLabel={peerLabel}
           />
         )}
       </div>
@@ -1069,6 +1157,7 @@ export function ChatRoom({ roomId }: Props) {
       <div className="shrink-0 border-t border-navy-200/50 bg-[var(--page-bg)]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10">
         <ChatComposer
           onSend={sendMessage}
+          onSendImage={sendImage}
           onTypingChange={handleComposerTyping}
           onFocus={() => scrollToBottom(true)}
         />

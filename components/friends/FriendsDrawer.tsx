@@ -37,14 +37,14 @@ export function FriendsDrawer({
     <AnimatePresence>
       {open && (
         <>
-          {/* ── Backdrop — its own fixed layer so blur covers everything ── */}
+          {/* ── Backdrop — plain dark overlay, no blur ── */}
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-[199] bg-navy-950/50 backdrop-blur-md dark:bg-navy-950/65"
+            className="fixed inset-0 z-[199] bg-navy-950/40 dark:bg-navy-950/55"
             onClick={onClose}
             aria-hidden="true"
           />
