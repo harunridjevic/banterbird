@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { UserPlus, Check } from "lucide-react";
 import { useAccount } from "@/lib/account/context";
 import { InlineSpinner } from "@/components/ui/Loading";
+import { AccountNudge } from "@/components/account/AccountNudge";
 
 type Status = "idle" | "loading" | "sent" | "already_friends" | "error";
 
@@ -14,12 +15,14 @@ export function FriendRequestButton({
 }: {
   peerId: string | null;
   isAiRoom: boolean;
-  /** When true the bot badge is hidden - don't hint that the peer is a bot */
   hideBotUi?: boolean;
 }) {
   const { state } = useAccount();
   const [status, setStatus] = useState<Status>("idle");
   const [tooltip, setTooltip] = useState<string | null>(null);
+  const [showNudge, setShowNudge] = useState(false);
+
+  const isAnonymous = state.status === "anonymous" || state.status === "loading";
 
   useEffect(() => {
     if (!tooltip) return;
@@ -27,18 +30,23 @@ export function FriendRequestButton({
     return () => clearTimeout(t);
   }, [tooltip]);
 
-  if (state.status !== "named") return null;
-  if (!isAiRoom && !peerId) return null;
+  // Always render for signed-in users; for anon users render but intercept click
+  if (!isAiRoom && !peerId && state.status === "named") return null;
+  if (!isAiRoom && !peerId && isAnonymous) return null;
 
   const isSent = status === "sent" || status === "already_friends";
 
   const handleClick = async () => {
+    // Anonymous — show nudge instead
+    if (isAnonymous) {
+      setShowNudge(true);
+      return;
+    }
+
     if (isSent || status === "loading") return;
 
-    // AI room with no real peer ID - just show visual confirmation, no network call
     if (isAiRoom && !peerId) {
       setStatus("sent");
-      // Only mention it's a bot if the bot badge is visible
       if (!hideBotUi) setTooltip("Bots don't accept requests, but it's noted.");
       return;
     }
@@ -60,10 +68,7 @@ export function FriendRequestButton({
     }
 
     setStatus("sent");
-    // Only show bot note if the badge is visible (user knows it's a bot)
-    if (isAiRoom && !hideBotUi) {
-      setTooltip("Bots don't accept requests.");
-    }
+    if (isAiRoom && !hideBotUi) setTooltip("Bots don't accept requests.");
   };
 
   return (
@@ -72,7 +77,11 @@ export function FriendRequestButton({
         type="button"
         onClick={() => void handleClick()}
         disabled={status === "loading" || isSent}
-        aria-label={isSent ? "Friend request sent" : "Send friend request"}
+        aria-label={
+          isAnonymous ? "Sign in to add friends"
+          : isSent ? "Friend request sent"
+          : "Send friend request"
+        }
         className={`inline-flex items-center gap-1 rounded-2xl border px-2.5 py-2 text-xs font-semibold transition disabled:cursor-not-allowed ${
           isSent
             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
@@ -93,7 +102,15 @@ export function FriendRequestButton({
         </span>
       </button>
 
-      {tooltip && (
+      {/* Anonymous nudge */}
+      <AccountNudge
+        visible={showNudge}
+        onDismiss={() => setShowNudge(false)}
+        message="Create a free account to add friends."
+      />
+
+      {/* Sent/error tooltip */}
+      {tooltip && !showNudge && (
         <div className="absolute right-0 top-full z-50 mt-1.5 w-max max-w-[200px] rounded-xl border border-navy-200/70 bg-white px-3 py-2 text-xs text-navy-700 shadow-lg dark:border-white/10 dark:bg-navy-900 dark:text-navy-300">
           {tooltip}
         </div>

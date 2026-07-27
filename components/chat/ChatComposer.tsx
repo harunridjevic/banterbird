@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ImagePlus, Send, X } from "lucide-react";
 import { InlineSpinner } from "@/components/ui/Loading";
+import { useAccount } from "@/lib/account/context";
+import { AccountNudge } from "@/components/account/AccountNudge";
 
 type Props = {
   disabled?: boolean;
@@ -15,6 +17,9 @@ type Props = {
 };
 
 export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, onFocus, onBlur }: Props) {
+  const { state } = useAccount();
+  const isAnonymous = state.status === "anonymous" || state.status === "loading";
+  const [showImageNudge, setShowImageNudge] = useState(false);
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -145,15 +150,25 @@ export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, on
 
         {/* Image attach button */}
         {onSendImage && (
-          <button
-            type="button"
-            disabled={disabled || sending}
-            onClick={() => fileRef.current?.click()}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-navy-200/80 bg-white/70 text-navy-600 transition hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800"
-            aria-label="Attach image"
-          >
-            <ImagePlus className="h-5 w-5" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              disabled={disabled || sending}
+              onClick={() => {
+                if (isAnonymous) { setShowImageNudge(true); return; }
+                fileRef.current?.click();
+              }}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-navy-200/80 bg-white/70 text-navy-600 transition hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800"
+              aria-label="Attach image"
+            >
+              <ImagePlus className="h-5 w-5" />
+            </button>
+            <AccountNudge
+              visible={showImageNudge}
+              onDismiss={() => setShowImageNudge(false)}
+              message="Create a free account to send images."
+            />
+          </div>
         )}
 
         <textarea

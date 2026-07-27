@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, Settings, Shield, AlertTriangle, KeyRound } from "lucide-react";
+import { BarChart3, Settings, Shield, AlertTriangle, KeyRound, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const cards = [
@@ -10,6 +10,12 @@ const cards = [
     title: "Analytics",
     description: "Users, chats, room times, API usage, and live online count.",
     icon: BarChart3,
+  },
+  {
+    href: "/ops/users",
+    title: "Users",
+    description: "Browse all registered and anonymous users, search by username or email, view provider and sign-in history.",
+    icon: Users,
   },
   {
     href: "/ops/settings",

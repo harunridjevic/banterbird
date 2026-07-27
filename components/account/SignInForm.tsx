@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { Mail } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { InlineSpinner } from "@/components/ui/Loading";
 import { FormField } from "./FormField";
 import { GoogleButton } from "./GoogleButton";
 
-/** Returns true if the string looks like an email address */
 function looksLikeEmail(value: string) {
   return value.includes("@");
 }
+
+type View = "signin" | "forgot" | "forgot_sent";
 
 export function SignInForm({
   supabase,
@@ -18,22 +20,28 @@ export function SignInForm({
   supabase: SupabaseClient;
   onSuccess: () => void;
 }) {
-  const [identifier, setIdentifier] = useState(""); // username or email
+  const [view, setView] = useState<View>("signin");
+
+  // Sign-in state
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Forgot password state
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  // ── Sign in ──────────────────────────────────────────────────
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     const id = identifier.trim();
     if (!id || !password) return;
-
     setLoading(true);
     setError(null);
 
     let email = id;
-
-    // If it's not an email, resolve the username to an email first
     if (!looksLikeEmail(id)) {
       const res = await fetch("/api/auth/resolve-username", {
         method: "POST",
@@ -42,7 +50,7 @@ export function SignInForm({
       });
       const json = (await res.json().catch(() => ({}))) as { email?: string; error?: string };
       if (!res.ok || !json.email) {
-        setError(json.error ?? "Invalid username or password.");
+        setError("Invalid username or password.");
         setLoading(false);
         return;
       }
@@ -51,14 +59,99 @@ export function SignInForm({
 
     const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (authErr) {
-      // Don't leak whether it was the username or password that was wrong
-      setError("Invalid username or password.");
-      return;
-    }
+    if (authErr) { setError("Invalid username or password."); return; }
     onSuccess();
   };
 
+  // ── Forgot password ──────────────────────────────────────────
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailVal = resetEmail.trim();
+    if (!emailVal) return;
+    setResetLoading(true);
+    setResetError(null);
+
+    const redirectTo = `${typeof window !== "undefined" ? window.location.origin : "https://banterbird.app"}/account/reset-password`;
+
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(emailVal, { redirectTo });
+    setResetLoading(false);
+
+    if (resetErr) {
+      setResetError(resetErr.message);
+      return;
+    }
+    setView("forgot_sent");
+  };
+
+  // ── Forgot sent screen ───────────────────────────────────────
+  if (view === "forgot_sent") {
+    return (
+      <div className="space-y-5 py-2 text-center">
+        <div className="flex justify-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy-100 dark:bg-navy-800">
+            <Mail className="h-8 w-8 text-navy-700 dark:text-navy-300" />
+          </div>
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-navy-950 dark:text-navy-50">Check your inbox</h3>
+          <p className="mt-2 text-sm leading-relaxed text-navy-600 dark:text-navy-400">
+            If an account exists for <strong className="text-navy-900 dark:text-navy-100">{resetEmail}</strong>,
+            we sent a password reset link. Check your spam folder if it does not arrive.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setView("signin"); setResetEmail(""); setResetError(null); }}
+          className="text-sm font-semibold text-navy-700 underline underline-offset-2 dark:text-navy-300"
+        >
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
+  // ── Forgot password form ─────────────────────────────────────
+  if (view === "forgot") {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-navy-950 dark:text-navy-50">Reset your password</h3>
+          <p className="mt-1 text-sm text-navy-600 dark:text-navy-400">
+            Enter your email and we will send you a reset link.
+          </p>
+        </div>
+        <form onSubmit={handleForgotPassword} className="space-y-3">
+          <FormField
+            id="reset-email"
+            label="Email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            required
+          />
+          {resetError && <p className="text-xs text-rose-600 dark:text-rose-400">{resetError}</p>}
+          <button
+            type="submit"
+            disabled={resetLoading || !resetEmail.trim()}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-navy-900 py-3 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:opacity-60 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"
+          >
+            {resetLoading ? <InlineSpinner /> : "Send reset link"}
+          </button>
+        </form>
+        <button
+          type="button"
+          onClick={() => { setView("signin"); setResetError(null); }}
+          className="w-full text-center text-sm text-navy-500 hover:text-navy-800 dark:text-navy-400 dark:hover:text-navy-200"
+        >
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
+  // ── Sign in form ─────────────────────────────────────────────
   return (
     <div className="space-y-4">
       <GoogleButton supabase={supabase} label="Sign in with Google" />
@@ -69,27 +162,28 @@ export function SignInForm({
         <div className="h-px flex-1 bg-navy-200/70 dark:bg-white/10" />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3">
+      <form onSubmit={handleSignIn} className="space-y-3">
         <FormField
-          id="signin-identifier"
-          label="Username or email"
-          type="text"
-          autoComplete="username"
-          placeholder="coolbird42 or you@example.com"
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-          required
+          id="signin-identifier" label="Username or email" type="text" autoComplete="username"
+          placeholder="coolbird42 or you@example.com" value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)} required
         />
-        <FormField
-          id="signin-password"
-          label="Password"
-          type="password"
-          autoComplete="current-password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <div className="space-y-1.5">
+          <FormField
+            id="signin-password" label="Password" type="password" autoComplete="current-password"
+            placeholder="••••••••" value={password}
+            onChange={(e) => setPassword(e.target.value)} required
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => { setView("forgot"); setResetEmail(looksLikeEmail(identifier) ? identifier : ""); }}
+              className="text-xs text-navy-500 underline-offset-2 hover:text-navy-800 hover:underline dark:text-navy-400 dark:hover:text-navy-200"
+            >
+              Forgot password?
+            </button>
+          </div>
+        </div>
 
         {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
 

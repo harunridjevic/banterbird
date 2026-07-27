@@ -8,9 +8,7 @@ export const metadata: Metadata = {
   title: "About BanterBird",
   description:
     "Learn about BanterBird - the free anonymous chat platform where you can instantly connect 1-on-1 with strangers worldwide. No signup, no accounts, no data kept.",
-  alternates: {
-    canonical: "/about",
-  },
+  alternates: { canonical: "/about" },
   openGraph: {
     url: `${baseUrl}/about`,
     title: "About BanterBird - Free Anonymous Chat",
@@ -22,8 +20,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "About BanterBird",
-    description:
-      "BanterBird is a free anonymous chat app with instant 1-on-1 matching, no sign-up required.",
+    description: "BanterBird is a free anonymous chat app with instant 1-on-1 matching, no sign-up required.",
     images: ["/logo_search.png"],
   },
   robots: { index: true, follow: true },
@@ -34,12 +31,8 @@ const jsonLd = {
   "@type": "AboutPage",
   url: `${baseUrl}/about`,
   name: "About BanterBird",
-  description:
-    "BanterBird is a free anonymous chat platform for instant 1-on-1 text conversations with strangers worldwide. No registration required.",
-  isPartOf: {
-    "@type": "WebSite",
-    "@id": `${baseUrl}/#website`,
-  },
+  description: "BanterBird is a free anonymous chat platform for instant 1-on-1 text conversations with strangers worldwide. No registration required.",
+  isPartOf: { "@type": "WebSite", "@id": `${baseUrl}/#website` },
 };
 
 const FEATURES = [
@@ -54,7 +47,7 @@ const FEATURES = [
     body: "No name, email, or phone number required. Your identity stays yours. Every chat session is isolated.",
   },
   {
-    icon: "�-�️",
+    icon: "🗑️",
     title: "No message history",
     body: "Chats are ephemeral by design. Once a session ends, the messages are gone. Nothing is stored on your device or our servers long-term.",
   },
@@ -62,11 +55,6 @@ const FEATURES = [
     icon: "🎯",
     title: "Gender-preference matching",
     body: "Tell us who you are and who you want to talk to. Our matching engine pairs you with people who share your preferences.",
-  },
-  {
-    icon: "🤖",
-    title: "AI practice partner",
-    body: "No one available? Opt in to chat with an AI partner so you are never left waiting. It is always clearly labeled.",
   },
   {
     icon: "🌍",
@@ -82,7 +70,7 @@ const FAQS = [
   },
   {
     q: "Do I need to create an account?",
-    a: "No. BanterBird works without any account. You can optionally create one to save a username, set a profile picture, manage your gender preferences, and unlock social features like a friends list.",
+    a: "No. BanterBird works without any account. You can optionally create one to save a username, set a profile picture, manage your preferences, and unlock social features like a friends list.",
   },
   {
     q: "Is BanterBird free?",
@@ -95,10 +83,6 @@ const FAQS = [
   {
     q: "Are my chats private?",
     a: "Yes. Chat sessions are one-to-one. Nobody else can see your messages. Sessions end when either party leaves, and message content is not retained beyond the session.",
-  },
-  {
-    q: "What is the AI practice bot?",
-    a: "If no human match is available after a few seconds, BanterBird can optionally connect you with a friendly AI conversation partner. This is always clearly labeled, so you will never be deceived.",
   },
   {
     q: "Can I be reported or blocked?",
@@ -117,7 +101,6 @@ export default function AboutPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-
       <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
         {/* Hero */}
         <section className="mb-14 text-center">
@@ -151,43 +134,31 @@ export default function AboutPage() {
 
         {/* What is BanterBird */}
         <section className="mb-14">
-          <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">
-            What is BanterBird?
-          </h2>
+          <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">What is BanterBird?</h2>
           <div className="glass-panel rounded-3xl border border-navy-200/70 p-6 dark:border-white/10">
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
               BanterBird is a real-time anonymous chat web app at{" "}
               <strong className="text-navy-900 dark:text-navy-100">banterbird.app</strong>. It
-              connects two strangers in a private 1-on-1 text conversation. Think of it as a modern,
-              cleaner take on the concept popularised by Omegle, with smarter matching, an optional
-              AI practice partner, and a focus on genuine interaction over chaos.
+              connects two strangers in a private 1-on-1 text conversation — a modern, cleaner take
+              on random chat, with smarter matching and a focus on genuine interaction.
             </p>
             <p className="mt-4 leading-relaxed text-navy-700 dark:text-navy-300">
               The platform is built for people who want to talk to someone new without the friction
               of creating yet another account, or the exposure of sharing a social profile. Whether
               you want to practise a language, get an outside perspective, vent to a stranger, or
-              just have a good conversation. BanterBird is designed for that.
+              just have a good conversation — BanterBird is designed for that.
             </p>
           </div>
         </section>
 
-        {/* Features grid */}
+        {/* Features */}
         <section className="mb-14">
-          <h2 className="mb-6 text-xl font-bold text-navy-950 dark:text-navy-50">
-            How BanterBird works
-          </h2>
+          <h2 className="mb-6 text-xl font-bold text-navy-950 dark:text-navy-50">How BanterBird works</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map(({ icon, title, body }) => (
-              <div
-                key={title}
-                className="glass-panel rounded-2xl border border-navy-200/60 p-5 dark:border-white/10"
-              >
-                <div className="mb-3 text-2xl" aria-hidden>
-                  {icon}
-                </div>
-                <h3 className="mb-1.5 text-sm font-semibold text-navy-950 dark:text-navy-50">
-                  {title}
-                </h3>
+              <div key={title} className="glass-panel rounded-2xl border border-navy-200/60 p-5 dark:border-white/10">
+                <div className="mb-3 text-2xl" aria-hidden>{icon}</div>
+                <h3 className="mb-1.5 text-sm font-semibold text-navy-950 dark:text-navy-50">{title}</h3>
                 <p className="text-sm leading-relaxed text-navy-600 dark:text-navy-400">{body}</p>
               </div>
             ))}
@@ -196,9 +167,7 @@ export default function AboutPage() {
 
         {/* Who it's for */}
         <section className="mb-14">
-          <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">
-            Who is BanterBird for?
-          </h2>
+          <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">Who is BanterBird for?</h2>
           <div className="glass-panel rounded-3xl border border-navy-200/70 p-6 dark:border-white/10">
             <ul className="space-y-3 text-navy-700 dark:text-navy-300">
               {[
@@ -209,12 +178,7 @@ export default function AboutPage() {
                 "People who miss the serendipity of early-internet conversations",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2.5 text-sm leading-relaxed">
-                  <span
-                    className="mt-0.5 shrink-0 text-xs text-navy-400 dark:text-navy-500"
-                    aria-hidden
-                  >
-                    ▸
-                  </span>
+                  <span className="mt-0.5 shrink-0 text-xs text-navy-400 dark:text-navy-500" aria-hidden>▸</span>
                   {item}
                 </li>
               ))}
@@ -224,12 +188,10 @@ export default function AboutPage() {
 
         {/* Privacy */}
         <section className="mb-14">
-          <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">
-            Privacy by design
-          </h2>
+          <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">Privacy by design</h2>
           <div className="glass-panel rounded-3xl border border-navy-200/70 p-6 dark:border-white/10">
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
-              Anonymity is not an afterthought on BanterBird, it is the foundation. No personal
+              Anonymity is not an afterthought on BanterBird — it is the foundation. No personal
               information is collected to start a chat. Sessions use temporary anonymous credentials
               that expire. Chat content is not retained once the session ends.
             </p>
@@ -243,15 +205,10 @@ export default function AboutPage() {
 
         {/* FAQ */}
         <section className="mb-14">
-          <h2 className="mb-6 text-xl font-bold text-navy-950 dark:text-navy-50">
-            Frequently asked questions
-          </h2>
+          <h2 className="mb-6 text-xl font-bold text-navy-950 dark:text-navy-50">Frequently asked questions</h2>
           <div className="space-y-3">
             {FAQS.map(({ q, a }) => (
-              <div
-                key={q}
-                className="glass-panel rounded-2xl border border-navy-200/60 p-5 dark:border-white/10"
-              >
+              <div key={q} className="glass-panel rounded-2xl border border-navy-200/60 p-5 dark:border-white/10">
                 <h3 className="mb-2 text-sm font-semibold text-navy-950 dark:text-navy-50">{q}</h3>
                 <p className="text-sm leading-relaxed text-navy-600 dark:text-navy-400">{a}</p>
               </div>
@@ -261,12 +218,8 @@ export default function AboutPage() {
 
         {/* CTA */}
         <section className="text-center">
-          <h2 className="mb-3 text-xl font-bold text-navy-950 dark:text-navy-50">
-            Ready to start a conversation?
-          </h2>
-          <p className="mb-6 text-sm text-navy-600 dark:text-navy-400">
-            No account needed. Just click start and you are in.
-          </p>
+          <h2 className="mb-3 text-xl font-bold text-navy-950 dark:text-navy-50">Ready to start a conversation?</h2>
+          <p className="mb-6 text-sm text-navy-600 dark:text-navy-400">No account needed. Just click start and you are in.</p>
           <Link
             href="/"
             className="inline-flex items-center gap-2 rounded-2xl bg-navy-900 px-8 py-4 text-base font-semibold text-white shadow-lg transition hover:bg-navy-800 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"

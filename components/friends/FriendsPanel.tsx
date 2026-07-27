@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, Check, ChevronRight, MessageCircle, UserPlus, X } from "lucide-react";
+import { Check, ChevronRight, MessageCircle, UserPlus, X } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { InlineSpinner } from "@/components/ui/Loading";
 import { Avatar } from "./Avatar";
@@ -29,6 +29,8 @@ export function FriendsPanel({
   const [friends, setFriends] = useState<FriendEntry[]>([]);
   const [incoming, setIncoming] = useState<IncomingRequest[]>([]);
   const [unread, setUnread] = useState<UnreadMap>({});
+  // Track last-message timestamp per friend for sorting
+  const [lastMessageAt, setLastMessageAt] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [addUsername, setAddUsername] = useState("");
   const [addLoading, setAddLoading] = useState(false);
@@ -52,16 +54,13 @@ export function FriendsPanel({
 
   useEffect(() => { void loadList(); }, [loadList]);
 
-  // After loading, sync the Navbar badge to reflect actual data.
-  // This replaces any stale increment-only count with the real number
-  // so the badge stays accurate and never disappears prematurely.
   useEffect(() => {
     if (!loading) {
-      const realCount = incoming.length + Object.values(unread).reduce((a, b) => a + b, 0);
-      if (realCount === 0) {
+      // Navbar badge = pending friend requests only
+      if (incoming.length === 0) {
         onNotifClear?.();
       } else {
-        onNotifSync?.(realCount);
+        onNotifSync?.(incoming.length);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,9 +82,11 @@ export function FriendsPanel({
     const ch = supabase
       .channel(`fp:dm:${currentUserId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "dm_messages" }, (payload) => {
-        const msg = payload.new as { sender_id: string };
+        const msg = payload.new as { sender_id: string; created_at: string };
         if (msg.sender_id === currentUserId) return;
         if (!friends.find((f) => f.friend_id === msg.sender_id)) return;
+        // Update last-message timestamp to bubble this friend to top
+        setLastMessageAt((p) => ({ ...p, [msg.sender_id]: msg.created_at }));
         if (view === "dm" && activeFriend?.id === msg.sender_id) return;
         setUnread((p) => ({ ...p, [msg.sender_id]: (p[msg.sender_id] ?? 0) + 1 }));
       })
@@ -154,8 +155,24 @@ export function FriendsPanel({
   // useFriendPresence MUST be called before any early return (Rules of Hooks)
   const friendIds = friends.map((f) => f.friend_id);
   const onlineFriends = useFriendPresence(friendIds, supabase, currentUserId);
-  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
-  const totalNotif = incoming.length + totalUnread;
+
+  // Sort: friends with unread messages first (most recent unread at top),
+  // then by last message time, then alphabetically
+  const sortedFriends = [...friends].sort((a, b) => {
+    const unreadA = unread[a.friend_id] ?? 0;
+    const unreadB = unread[b.friend_id] ?? 0;
+    // Unread first
+    if (unreadA > 0 && unreadB === 0) return -1;
+    if (unreadB > 0 && unreadA === 0) return 1;
+    // Then by last message time (most recent first)
+    const timeA = lastMessageAt[a.friend_id] ?? "";
+    const timeB = lastMessageAt[b.friend_id] ?? "";
+    if (timeA && timeB) return timeB.localeCompare(timeA);
+    if (timeA) return -1;
+    if (timeB) return 1;
+    // Finally alphabetical
+    return (a.profiles.username ?? "").localeCompare(b.profiles.username ?? "");
+  });
 
   if (view === "dm" && activeFriend) {
     return (
@@ -171,16 +188,12 @@ export function FriendsPanel({
   return (
     <div className="flex h-full flex-col overflow-y-auto">
 
-      {/* Notification banner */}
-      {totalNotif > 0 && (
+      {/* Friend requests banner */}
+      {incoming.length > 0 && (
         <div className="mx-3 mt-3 flex items-center gap-2.5 rounded-2xl border border-amber-400/30 bg-amber-400/8 px-4 py-3 sm:mx-4 sm:mt-4">
-          <Bell className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
           <p className="flex-1 text-sm font-medium text-amber-800 dark:text-amber-300">
-            {incoming.length > 0 && totalUnread > 0
-              ? `${incoming.length} request${incoming.length > 1 ? "s" : ""} · ${totalUnread} new message${totalUnread > 1 ? "s" : ""}`
-              : incoming.length > 0
-                ? `${incoming.length} friend request${incoming.length > 1 ? "s" : ""}`
-                : `${totalUnread} new message${totalUnread > 1 ? "s" : ""}`}
+            {incoming.length} friend request{incoming.length > 1 ? "s" : ""} waiting
           </p>
         </div>
       )}
@@ -276,7 +289,7 @@ export function FriendsPanel({
             </p>
           ) : (
             <ul className="space-y-2">
-              {friends.map((f) => {
+              {sortedFriends.map((f) => {
                 const badge = unread[f.friend_id] ?? 0;
                 return (
                   <li key={f.friend_id}>
