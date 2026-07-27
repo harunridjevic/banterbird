@@ -95,7 +95,8 @@ export function FriendRequestButton({
         ) : (
           <UserPlus className="h-3.5 w-3.5" />
         )}
-        <span className="hidden sm:inline">
+        {/* Fixed-width span so text changes don't shift surrounding elements */}
+        <span className="hidden w-[4.5rem] text-center sm:inline">
           {isSent
             ? status === "already_friends" ? "Friends" : "Requested"
             : "Add"}

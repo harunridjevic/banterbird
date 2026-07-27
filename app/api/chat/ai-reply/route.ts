@@ -546,23 +546,8 @@ export async function POST(req: Request) {
       result = decideFallbackTurn(trimmedHistory, persona, "normal", memory, botSettings);
     }
 
-    // Insert bot messages server-side so the browser never needs to call
-    // supabase.rpc("insert_ai_chat_message") directly.
-    // The client receives these via the existing realtime subscription.
-    if (result.action === "reply" && result.messages.length > 0) {
-      for (const line of result.messages) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        await supabase.rpc("insert_ai_chat_message", {
-          p_room_id: roomId,
-          p_content: trimmed,
-        });
-      }
-    }
-
     return NextResponse.json({
       ...jsonBody(result),
-      serverInserted: result.action === "reply",
       persona: {
         version: persona.version,
         genderTag: persona.genderTag,
