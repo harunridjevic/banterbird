@@ -30,6 +30,7 @@ export function Navbar() {
   const userId = isNamed ? state.profile.id : null;
 
   const clearNotif = useCallback(() => setNotifCount(0), []);
+  const syncNotif = useCallback((realCount: number) => setNotifCount(realCount), []);
 
   useEffect(() => {
     if (!isNamed || !userId) { setNotifCount(0); return; }
@@ -119,6 +120,7 @@ export function Navbar() {
               supabase={client}
               notifCount={notifCount}
               onNotifClear={clearNotif}
+              onNotifSync={syncNotif}
             />
           )}
 

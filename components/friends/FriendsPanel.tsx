@@ -18,11 +18,13 @@ export function FriendsPanel({
   supabase,
   onClose,
   onNotifClear,
+  onNotifSync,
 }: {
   currentUserId: string;
   supabase: SupabaseClient;
   onClose: () => void;
   onNotifClear?: () => void;
+  onNotifSync?: (count: number) => void;
 }) {
   const [friends, setFriends] = useState<FriendEntry[]>([]);
   const [incoming, setIncoming] = useState<IncomingRequest[]>([]);
@@ -50,11 +52,20 @@ export function FriendsPanel({
 
   useEffect(() => { void loadList(); }, [loadList]);
 
-  // Clear badge once data has loaded
+  // After loading, sync the Navbar badge to reflect actual data.
+  // This replaces any stale increment-only count with the real number
+  // so the badge stays accurate and never disappears prematurely.
   useEffect(() => {
-    if (!loading) onNotifClear?.();
+    if (!loading) {
+      const realCount = incoming.length + Object.values(unread).reduce((a, b) => a + b, 0);
+      if (realCount === 0) {
+        onNotifClear?.();
+      } else {
+        onNotifSync?.(realCount);
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, [loading, incoming.length]);
 
   // ── Realtime: friend requests ─────────────────────────────
   useEffect(() => {
