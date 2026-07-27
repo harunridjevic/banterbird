@@ -4,11 +4,6 @@ import { useState } from "react";
 import { Eye, X, ZoomIn } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-/**
- * Renders a single image message.
- * - mine=true  → always visible, click → lightbox
- * - mine=false → blurred with a "tap to reveal" overlay, then click → lightbox
- */
 export function ImageMessage({
   url,
   mine,
@@ -23,15 +18,13 @@ export function ImageMessage({
 
   return (
     <>
+      {/* ── Thumbnail ── */}
       <div
         className="relative cursor-pointer overflow-hidden rounded-2xl"
         style={{ maxWidth: 260 }}
         onClick={() => {
-          if (!revealed) {
-            setRevealed(true);
-          } else {
-            setLightbox(true);
-          }
+          if (!revealed) setRevealed(true);
+          else setLightbox(true);
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -41,21 +34,17 @@ export function ImageMessage({
           className={`block w-full rounded-2xl object-cover transition duration-300 ${
             revealed ? "blur-0" : "blur-xl brightness-75"
           }`}
-          style={{ maxHeight: 320 }}
+          style={{ maxHeight: 300 }}
           loading="lazy"
         />
 
-        {/* Reveal overlay */}
         {!revealed && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30">
             <Eye className="h-7 w-7 text-white drop-shadow" />
-            <span className="text-xs font-semibold text-white drop-shadow">
-              Tap to see image
-            </span>
+            <span className="text-xs font-semibold text-white drop-shadow">Tap to see image</span>
           </div>
         )}
 
-        {/* Zoom hint once revealed */}
         {revealed && (
           <div className="absolute bottom-1.5 right-1.5 rounded-lg bg-black/40 p-1">
             <ZoomIn className="h-3.5 w-3.5 text-white" />
@@ -63,35 +52,47 @@ export function ImageMessage({
         )}
       </div>
 
-      {/* Lightbox */}
+      {/* ── Lightbox ── */}
       <AnimatePresence>
         {lightbox && (
           <motion.div
+            key="lightbox"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/90 p-4"
+            // Scrollable container: overflow-y-auto lets tall images scroll.
+            // grid + place-items-center keeps short images centred.
+            className="fixed inset-0 z-[300] grid place-items-start overflow-y-auto bg-black/95"
             onClick={() => setLightbox(false)}
           >
+            {/* Close button — sticky so it's always reachable */}
             <button
               type="button"
-              onClick={() => setLightbox(false)}
-              className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+              onClick={(e) => { e.stopPropagation(); setLightbox(false); }}
+              className="sticky top-4 left-full z-10 mr-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
             </button>
-            <motion.img
-              src={url}
-              alt="Full size"
-              initial={{ scale: 0.92 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.92 }}
-              transition={{ type: "spring", stiffness: 380, damping: 30 }}
-              className="max-h-[90dvh] max-w-full rounded-2xl object-contain shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
+
+            {/* Image — centred in the grid cell, padded so it doesn't touch edges */}
+            <div
+              className="flex min-h-screen w-full items-center justify-center p-4 pt-14"
+              onClick={() => setLightbox(false)}
+            >
+              <motion.img
+                src={url}
+                alt="Full size"
+                initial={{ scale: 0.93, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.93, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                className="max-w-full rounded-2xl object-contain shadow-2xl"
+                style={{ maxHeight: "calc(100dvh - 80px)" }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

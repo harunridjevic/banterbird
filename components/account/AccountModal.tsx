@@ -50,8 +50,8 @@ export function AccountModal() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.97 }}
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
-            className="glass-panel relative z-10 flex w-full max-w-md flex-col rounded-t-3xl border border-navy-200/70 shadow-2xl sm:rounded-3xl dark:border-white/10"
-            style={{ maxHeight: "90dvh" }}
+            className="glass-panel relative z-10 flex w-full flex-col rounded-t-3xl border border-navy-200/70 shadow-2xl sm:max-w-md sm:rounded-3xl dark:border-white/10"
+            style={{ maxHeight: "100dvh" }}
             role="dialog"
             aria-modal="true"
             aria-label={isNamed ? "Account settings" : "Sign in or create account"}

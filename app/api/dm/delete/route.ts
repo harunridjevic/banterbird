@@ -4,8 +4,17 @@ import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
- * POST /api/dm/delete — delete all messages in a DM room.
- * Called when a user closes a conversation (ephemeral by design).
+ * POST /api/dm/delete
+ * Called when a user closes a DM conversation.
+ *
+ * Deletes only messages that BOTH parties have seen:
+ *   - Messages sent by the other person where read_at IS NOT NULL
+ *     (the current user has read them).
+ *   - Messages sent by the current user where read_at IS NOT NULL
+ *     (the other person has read them).
+ *
+ * Unread messages are left in place so the other person still
+ * sees them when they next open the conversation.
  */
 export async function POST(req: Request) {
   try {
@@ -30,7 +39,22 @@ export async function POST(req: Request) {
     }
 
     const svc = createServiceRoleClient();
-    await svc.from("dm_messages").delete().eq("room_id", roomId);
+
+    // Delete messages that have been read by the recipient
+    await svc
+      .from("dm_messages")
+      .delete()
+      .eq("room_id", roomId)
+      .not("read_at", "is", null);
+
+    // Also delete any messages older than 30 days (ephemeral cleanup)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    await svc
+      .from("dm_messages")
+      .delete()
+      .eq("room_id", roomId)
+      .lt("created_at", thirtyDaysAgo.toISOString());
 
     return NextResponse.json({ ok: true });
   } catch (e) {
