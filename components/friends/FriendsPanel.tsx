@@ -140,6 +140,12 @@ export function FriendsPanel({
   }, []);
 
   // ── DM view ───────────────────────────────────────────────
+  // useFriendPresence MUST be called before any early return (Rules of Hooks)
+  const friendIds = friends.map((f) => f.friend_id);
+  const onlineFriends = useFriendPresence(friendIds, supabase, currentUserId);
+  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
+  const totalNotif = incoming.length + totalUnread;
+
   if (view === "dm" && activeFriend) {
     return (
       <DmConversation
@@ -150,11 +156,6 @@ export function FriendsPanel({
       />
     );
   }
-
-  const friendIds = friends.map((f) => f.friend_id);
-  const onlineFriends = useFriendPresence(friendIds, supabase, currentUserId);
-  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
-  const totalNotif = incoming.length + totalUnread;
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">

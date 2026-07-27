@@ -40,31 +40,41 @@ export function AccountModal() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[200] flex justify-center sm:items-center"
-          // On mobile: align to top so panel sits under the navbar
-          style={{ alignItems: "flex-start" }}
+          className="fixed inset-0 z-[200] flex items-center justify-center"
           onClick={(e) => { if (e.target === overlayRef.current) closeModal(); }}
         >
+          {/* Backdrop */}
           <div className="absolute inset-0 bg-navy-950/50 dark:bg-navy-950/70" />
 
-          {/* Mobile: slides down from top. Desktop (sm+): fades in centered. */}
+          {/*
+            Mobile:  fills the space between navbar (h-14 = 56px) and
+                     footer (h-12 = 48px) — no rounding, no gap.
+            Desktop (sm+): centred card, rounded, max-w-md, max 90dvh.
+          */}
           <motion.div
-            initial={{ opacity: 0, y: -24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -24 }}
+            initial={{ opacity: 0, scale: 0.97, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 12 }}
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
-            className="glass-panel relative z-10 flex w-full flex-col border-b border-navy-200/70 shadow-2xl sm:mt-0 sm:max-w-md sm:rounded-3xl sm:border dark:border-white/10"
-            // On mobile fill from top; on sm+ cap height
-            style={{
-              maxHeight: "100dvh",
-              // Offset on mobile to sit flush under the sticky navbar (56px = h-14)
-              marginTop: 0,
-            }}
+            className={[
+              "glass-panel relative z-10 flex flex-col shadow-2xl",
+              // Mobile: full width, fills between navbar and footer
+              "w-full",
+              // Navbar is h-14 (56px), footer is roughly h-9 (36px)
+              // Use absolute top/bottom so it's always flush
+              "absolute",
+              "top-14 bottom-9",        // mobile: sits between navbar & footer
+              "sm:static sm:top-auto sm:bottom-auto",  // reset on sm+
+              // Desktop: centred card shape
+              "sm:max-w-md sm:rounded-3xl sm:border sm:border-navy-200/70",
+              "sm:max-h-[90dvh]",
+              "dark:sm:border-white/10",
+            ].join(" ")}
             role="dialog"
             aria-modal="true"
             aria-label={isNamed ? "Account settings" : "Sign in or create account"}
           >
-            {/* Top bar */}
+            {/* Header */}
             <div className="flex shrink-0 items-center justify-between border-b border-navy-200/60 px-5 py-3.5 dark:border-white/10">
               <span className="text-sm font-bold text-navy-950 dark:text-navy-50">
                 {isNamed ? "Account" : tab === "signin" ? "Sign in" : "Create account"}
@@ -80,7 +90,7 @@ export function AccountModal() {
             </div>
 
             {/* Scrollable body */}
-            <div className="overflow-y-auto px-5 py-5 sm:px-6">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
               {isNamed ? (
                 <ProfileEditor
                   profile={state.profile}
@@ -114,11 +124,23 @@ export function AccountModal() {
 
                   <AnimatePresence mode="wait" initial={false}>
                     {tab === "signin" ? (
-                      <motion.div key="signin" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.15 }}>
+                      <motion.div
+                        key="signin"
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 8 }}
+                        transition={{ duration: 0.15 }}
+                      >
                         <SignInForm supabase={client} onSuccess={closeModal} />
                       </motion.div>
                     ) : (
-                      <motion.div key="signup" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }}>
+                      <motion.div
+                        key="signup"
+                        initial={{ opacity: 0, x: 8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -8 }}
+                        transition={{ duration: 0.15 }}
+                      >
                         <SignUpForm supabase={client} onSuccess={closeModal} />
                       </motion.div>
                     )}

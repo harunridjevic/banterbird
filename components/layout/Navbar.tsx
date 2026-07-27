@@ -95,29 +95,31 @@ export function Navbar() {
 
           {/* Friends button - signed-in only */}
           {isNamed && userId && (
-            <>
-              <button
-                type="button"
-                aria-label={`Friends${notifCount > 0 ? ` · ${notifCount}` : ""}`}
-                onClick={handleOpenFriends}
-                className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-700 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-300 dark:hover:bg-navy-800 sm:h-10 sm:w-10 sm:rounded-2xl"
-              >
-                <Users className="h-4 w-4" />
-                {notifCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                    {notifCount > 99 ? "99+" : notifCount}
-                  </span>
-                )}
-              </button>
-              <FriendsDrawer
-                open={friendsOpen}
-                onClose={() => setFriendsOpen(false)}
-                currentUserId={userId}
-                supabase={client}
-                notifCount={notifCount}
-                onNotifClear={clearNotif}
-              />
-            </>
+            <button
+              type="button"
+              aria-label={`Friends${notifCount > 0 ? ` · ${notifCount}` : ""}`}
+              onClick={handleOpenFriends}
+              className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-700 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-300 dark:hover:bg-navy-800 sm:h-10 sm:w-10 sm:rounded-2xl"
+            >
+              <Users className="h-4 w-4" />
+              {notifCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                  {notifCount > 99 ? "99+" : notifCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* FriendsDrawer always mounted — visibility controlled by open prop */}
+          {userId && (
+            <FriendsDrawer
+              open={friendsOpen}
+              onClose={() => setFriendsOpen(false)}
+              currentUserId={userId}
+              supabase={client}
+              notifCount={notifCount}
+              onNotifClear={clearNotif}
+            />
           )}
 
           {/* Account button - icon-only on mobile, label on sm+ */}
