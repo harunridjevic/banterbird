@@ -1,8 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Eye, X, ZoomIn } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+/** Renders children into document.body via a portal */
+function Lightbox({ onClose, url }: { onClose: () => void; url: string }) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    // Prevent body scroll while open
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handler);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <motion.div
+      ref={overlayRef}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      // Full viewport, flex column, click outside to close
+      className="fixed inset-0 z-[9999] flex flex-col bg-black/95"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      aria-modal="true"
+      role="dialog"
+      aria-label="Image fullscreen"
+    >
+      {/* Top bar: close button */}
+      <div className="flex shrink-0 items-center justify-end px-4 py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/25 active:scale-95"
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Image area — fills remaining height, image constrained to fit without scrolling */}
+      <div
+        className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4"
+        onClick={onClose}
+      >
+        <motion.img
+          src={url}
+          alt="Full size"
+          initial={{ scale: 0.94, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.94, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 340, damping: 28 }}
+          className="max-h-full max-w-full rounded-xl object-contain shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+          draggable={false}
+        />
+      </div>
+    </motion.div>,
+    document.body,
+  );
+}
 
 export function ImageMessage({
   url,
@@ -15,6 +81,9 @@ export function ImageMessage({
 }) {
   const [revealed, setRevealed] = useState(mine);
   const [lightbox, setLightbox] = useState(false);
+  // Only render portal after mount (document.body is unavailable on SSR)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   return (
     <>
@@ -41,61 +110,31 @@ export function ImageMessage({
         {!revealed && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30">
             <Eye className="h-7 w-7 text-white drop-shadow" />
-            <span className="text-xs font-semibold text-white drop-shadow">Tap to see image</span>
+            <span className="text-xs font-semibold text-white drop-shadow">
+              Tap to see image
+            </span>
           </div>
         )}
 
         {revealed && (
-          <div className="absolute bottom-1.5 right-1.5 rounded-lg bg-black/40 p-1">
+          <div className="absolute bottom-1.5 right-1.5 rounded-lg bg-black/40 p-1 pointer-events-none">
             <ZoomIn className="h-3.5 w-3.5 text-white" />
           </div>
         )}
       </div>
 
-      {/* ── Lightbox ── */}
-      <AnimatePresence>
-        {lightbox && (
-          <motion.div
-            key="lightbox"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            // Scrollable container: overflow-y-auto lets tall images scroll.
-            // grid + place-items-center keeps short images centred.
-            className="fixed inset-0 z-[300] grid place-items-start overflow-y-auto bg-black/95"
-            onClick={() => setLightbox(false)}
-          >
-            {/* Close button - sticky so it's always reachable */}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setLightbox(false); }}
-              className="sticky top-4 left-full z-10 mr-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            {/* Image - centred in the grid cell, padded so it doesn't touch edges */}
-            <div
-              className="flex min-h-screen w-full items-center justify-center p-4 pt-14"
-              onClick={() => setLightbox(false)}
-            >
-              <motion.img
-                src={url}
-                alt="Full size"
-                initial={{ scale: 0.93, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.93, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                className="max-w-full rounded-2xl object-contain shadow-2xl"
-                style={{ maxHeight: "calc(100dvh - 80px)" }}
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Lightbox via portal ── */}
+      {mounted && (
+        <AnimatePresence>
+          {lightbox && (
+            <Lightbox
+              key="lightbox"
+              url={url}
+              onClose={() => setLightbox(false)}
+            />
+          )}
+        </AnimatePresence>
+      )}
     </>
   );
 }
