@@ -26,7 +26,7 @@
   --text-primary: var(--color-navy-950);
   --text-secondary: var(--color-navy-700);
   --text-muted: var(--color-navy-600);
-  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg: rgba(255, 255, 255, 0.92);
   --glass-border: rgba(20, 31, 46, 0.1);
   --color-bubble-them: #dce3ee;
 }
@@ -37,7 +37,7 @@
   --text-primary: var(--color-navy-50);
   --text-secondary: var(--color-navy-200);
   --text-muted: var(--color-navy-400);
-  --glass-bg: rgba(20, 31, 46, 0.55);
+  --glass-bg: rgba(20, 31, 46, 0.82);
   --glass-border: rgba(255, 255, 255, 0.08);
   --color-bubble-them: #1e2a3d;
 }
