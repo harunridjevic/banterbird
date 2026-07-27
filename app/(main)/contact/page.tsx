@@ -5,7 +5,7 @@ import { LegalPageShell } from "@/components/legal/LegalPageShell";
 export const metadata: Metadata = {
   title: "Contact",
   description:
-    "Get in touch with the BanterBird team. Questions, feedback, or support — email us at banterbirdchat@gmail.com.",
+    "Get in touch with the BanterBird team. Questions, feedback, or support - email us at support@banterbird.app.",
   alternates: { canonical: "/contact" },
   robots: { index: true, follow: true },
 };
@@ -18,14 +18,25 @@ export default function ContactPage() {
         time and we will get back to you as soon as we can.
       </p>
 
-      <h2>Email</h2>
+      <h2>Support</h2>
       <p>
-        The best way to reach us is by email:{" "}
+        For general questions, help with your account, or anything else, email us at{" "}
         <a
-          href="mailto:banterbirdchat@gmail.com"
+          href="mailto:support@banterbird.app"
           className="font-medium text-violet-600 underline-offset-2 hover:underline dark:text-violet-400"
         >
-          banterbirdchat@gmail.com
+          support@banterbird.app
+        </a>
+      </p>
+
+      <h2>Business inquiries</h2>
+      <p>
+        For partnerships, press, or commercial inquiries, reach us at{" "}
+        <a
+          href="mailto:business@banterbird.app"
+          className="font-medium text-violet-600 underline-offset-2 hover:underline dark:text-violet-400"
+        >
+          business@banterbird.app
         </a>
       </p>
 
@@ -33,13 +44,7 @@ export default function ContactPage() {
       <p>
         If you need to report a user for abusive or harmful behavior, please use the{" "}
         <strong>Report</strong> button inside the chat room. For urgent safety concerns you can also
-        email us directly.
-      </p>
-
-      <h2>Business inquiries</h2>
-      <p>
-        For partnerships, press, or business inquiries, send us an email with the subject line
-        &quot;Business inquiry&quot; and we will route it to the right person.
+        email our support address directly.
       </p>
 
       <h2>Community guidelines</h2>

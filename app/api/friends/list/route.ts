@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 
-/** GET /api/friends/list — friends, pending incoming requests, and unread DM count */
+/** GET /api/friends/list - friends, pending incoming requests, and unread DM count */
 export async function GET() {
   try {
     const cookieStore = await cookies();

@@ -7,7 +7,7 @@ export function sanitizeBotChatLine(text: string): string {
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  // BanterBird has no profiles — rewrite dating-app hallucinations.
+  // BanterBird has no profiles - rewrite dating-app hallucinations.
   if (/\b(saw|see|check(ed)?|look(ed)? at|view(ed)?)\b.{0,24}\b(your|ur)\b.{0,12}\bprofile\b/i.test(out)) {
     return "hey";
   }

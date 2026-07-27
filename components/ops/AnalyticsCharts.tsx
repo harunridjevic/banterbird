@@ -236,7 +236,7 @@ export function OnlineUsersHourlyChart({ snapshot }: ChartProps) {
   }
 
   return (
-    <ChartShell title="Concurrent online users — today by hour (UTC)">
+    <ChartShell title="Concurrent online users - today by hour (UTC)">
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />

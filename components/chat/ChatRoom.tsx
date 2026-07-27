@@ -101,7 +101,7 @@ export function ChatRoom({ roomId }: Props) {
   const skipConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyboardInset = useKeyboardInset();
   const peerTypingRef = useRef(false);
-  // Dynamic peer username — updated when peer accepts our friend request
+  // Dynamic peer username - updated when peer accepts our friend request
   const [peerUsername, setPeerUsername] = useState<string | null>(null);
 
   const cancelOpener = useCallback(() => {
@@ -249,7 +249,7 @@ export function ChatRoom({ roomId }: Props) {
 
     const access = await checkMatchAccess(client);
     if (!access.allowed) {
-      // Only end the room for hard moderation blocks — soft/auth errors must not kill a fresh match.
+      // Only end the room for hard moderation blocks - soft/auth errors must not kill a fresh match.
       if (access.reason === "blocked") {
         await client.rpc("end_active_room", { p_room_id: roomId });
         router.replace("/");
@@ -922,7 +922,7 @@ export function ChatRoom({ roomId }: Props) {
         table: "friend_requests",
         filter: `from_id=eq.${selfId}`,
       }, async (payload) => {
-        // Peer accepted our request — fetch their username and update label
+        // Peer accepted our request - fetch their username and update label
         const row = payload.new as { to_id: string; status: string };
         if (row.to_id !== peerId || row.status !== "accepted") return;
         const { data } = await client
@@ -1067,7 +1067,7 @@ export function ChatRoom({ roomId }: Props) {
         </div>
         {/* Right: action buttons */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <FriendRequestButton peerId={peerId} isAiRoom={isAiRoom} />
+          <FriendRequestButton peerId={peerId} isAiRoom={isAiRoom} hideBotUi={hideBotUi} />
           <motion.button
             type="button"
             whileHover={{ scale: 1.02 }}

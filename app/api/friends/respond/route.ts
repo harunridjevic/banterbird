@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-/** POST /api/friends/respond — accept or decline a pending friend request */
+/** POST /api/friends/respond - accept or decline a pending friend request */
 export async function POST(req: Request) {
   try {
     const cookieStore = await cookies();

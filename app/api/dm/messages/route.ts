@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 
-/** GET /api/dm/messages?roomId=xxx — fetch messages for a DM room */
+/** GET /api/dm/messages?roomId=xxx - fetch messages for a DM room */
 export async function GET(req: Request) {
   try {
     const cookieStore = await cookies();
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
   }
 }
 
-/** POST /api/dm/messages — send a DM */
+/** POST /api/dm/messages - send a DM */
 export async function POST(req: Request) {
   try {
     const cookieStore = await cookies();

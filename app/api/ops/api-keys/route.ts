@@ -63,7 +63,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ keys: await listOpsApiKeysWithEnv() });
         }
         return NextResponse.json(
-          { error: "Env keys are read-only — edit GROQ_API_KEY / CEREBRAS_API_KEY on the server" },
+          { error: "Env keys are read-only - edit GROQ_API_KEY / CEREBRAS_API_KEY on the server" },
           { status: 400 },
         );
       }
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     if (body.action === "delete" && body.id) {
       if (body.id.startsWith("env:")) {
         return NextResponse.json(
-          { error: "Env keys cannot be deleted here — remove them from server env" },
+          { error: "Env keys cannot be deleted here - remove them from server env" },
           { status: 400 },
         );
       }

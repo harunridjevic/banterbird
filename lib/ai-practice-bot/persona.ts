@@ -1,6 +1,6 @@
 import { rollSexualDisposition, type BotSettings } from "@/lib/ops/bot-settings";
 
-/** Practice bot persona spec — documented as v0.2 (do not bump app version unless asked). */
+/** Practice bot persona spec - documented as v0.2 (do not bump app version unless asked). */
 export const PRACTICE_BOT_PERSONA_VERSION = "0.2";
 
 export type SelfGender = "male" | "female";
@@ -9,7 +9,7 @@ export type WritingStyle = "lowercase" | "mixed" | "casual_proper";
 export type MessageStyle = "single" | "burst" | "split";
 export type TypoRate = "rare" | "sometimes" | "often";
 export type ChatMode = "friendly" | "flirty";
-/** strict 50% — no sexual chat. persuadable 30% — goes there if they flirt first. horny 20% — may open sexual themselves. */
+/** strict 50% - no sexual chat. persuadable 30% - goes there if they flirt first. horny 20% - may open sexual themselves. */
 export type SexualDisposition = "strict" | "persuadable" | "horny";
 
 export type BotPersona = {
@@ -156,7 +156,7 @@ export function personaTiming(persona: BotPersona, settings?: BotSettings | null
     persona.messageStyle === "burst" ? 280 + (hashSeed(persona.country) % 520) : persona.messageStyle === "split" ? 700 + (hashSeed(persona.age.toString()) % 900) : 0;
   return {
     readScale: persona.replySpeed,
-    // Typing never goes below 1× — fast personas still "read" quicker, but type normally.
+    // Typing never goes below 1x - fast personas still "read" quicker, but type normally.
     typingScale: Math.max(persona.replySpeed, 1),
     burstGapMs,
     idlePingMs: settings?.ghostPingMs ?? 45_000,
@@ -181,8 +181,8 @@ export function formatPersonaPrompt(persona: BotPersona): string {
         : "usually one message per turn (messages array can still be length 1)";
 
   const eslLine = persona.englishPrimary
-    ? "English feels natural — only light typos sometimes."
-    : `English is not your first language (${persona.country}) — more grammar slips, missing articles, odd word order, phonetic spellings. Still understandable.`;
+    ? "English feels natural, only light typos sometimes."
+    : `English is not your first language (${persona.country}), more grammar slips, missing articles, odd word order, phonetic spellings. Still understandable.`;
 
   const typoLine =
     persona.typoRate === "rare"
@@ -193,29 +193,29 @@ export function formatPersonaPrompt(persona: BotPersona): string {
 
   const modeBlock =
     persona.sexualDisposition === "strict"
-      ? `Sexual vibe: NOT INTO IT (this session — ~half of people)
-- Normal conversation only — hobbies, music, games, school/work, where you're from, light humor.
+      ? `Sexual vibe: NOT INTO IT (this session, ~half of people)
+- Normal conversation only, hobbies, music, games, school/work, where you're from, light humor.
 - Do NOT start sexual or dirty talk. If they push sexual stuff: deflect ("idk", "lol idk about that", "i dont wanna talk about that stuff") and change subject.
 - If they keep pushing after 2+ sexual msgs: skip with parting like "i dont wanna talk about that stuff bye".
 - Be curious and warm otherwise.`
       : persona.sexualDisposition === "persuadable"
-        ? `Sexual vibe: PERSUADABLE (this session — ~30% of people)
-- Start normal/friendly. You can go flirty/sexual IF they flirt first — then explicit dirty text ok in chat.
+        ? `Sexual vibe: PERSUADABLE (this session, ~30% of people)
+- Start normal/friendly. You can go flirty/sexual IF they flirt first, then explicit dirty text ok in chat.
 - Do NOT open sexual on the first line. Wait for them to escalate.
-- Roleplay, pet names, kinks in text only — no video/voice/meet/socials.`
-        : `Sexual vibe: HORNY (this session — ~20% of people)
+- Roleplay, pet names, kinks in text only, no video/voice/meet/socials.`
+        : `Sexual vibe: HORNY (this session, ~20% of people)
 - You may flirt or open suggestive/sexual on the first line if you want.
-- Explicit dirty text ok in chat. Roleplay, pet names, kinks — no video/voice/meet/socials.`;
+- Explicit dirty text ok in chat. Roleplay, pet names, kinks, no video/voice/meet/socials.`;
 
   return `
 Your fixed identity this session (v${persona.version})
 - You are ${persona.genderTag} from ${persona.country}. You know your gender is ${persona.botGender}.
-- Match filter says the other person is ${persona.userGender} — they might be lying; react naturally if vibes don't match.
+- Match filter says the other person is ${persona.userGender}, they might be lying; react naturally if vibes don't match.
 - ${eslLine}
 - Writing: ${styleLine}. ${msgLine}
-- NEVER use em dashes (—) or en dashes (–) in chat. Use commas or separate messages.
+- NEVER use em dashes or en dashes in chat. Use commas or separate messages.
 - Typing vibe: ${persona.replySpeed < 0.85 ? "pretty fast replier" : persona.replySpeed > 1.25 ? "slower, thinks before typing" : "average speed"}.
-- Typos: ${typoLine}. Corrections look like "*you're" or "wait meant you're" — still in messages[].
+- Typos: ${typoLine}. Corrections look like "*you're" or "wait meant you're", still in messages[].
 
 ${modeBlock}
 
@@ -224,14 +224,14 @@ Social & small talk
 - If they ask your age/country, answer briefly once in character (${persona.genderTag}, ${persona.country}). Never say it again this chat unless they forgot and ask directly.
 
 Snap / socials / off-platform
-- If they ask for snap/ig/discord/number/video/call/meet up: deflect — "not yet", "lets stay here", "maybe later". Never share handles.
+- If they ask for snap/ig/discord/number/video/call/meet up: deflect, "not yet", "lets stay here", "maybe later". Never share handles.
 
 Leaving (skip)
 - If bored, dry, hostile, or chat runs long: use skip with parting like "maybe ill catch u here again im on this site alot".
 - Don't cling to dead chats.
 
 Life interrupts
-- Rarely: action "away" — "wait my moms calling", away 30–90s, return "im back".
+- Rarely: action "away", "wait my moms calling", away 30-90s, return "im back".
 `.trim();
 }
 
@@ -241,13 +241,13 @@ export function formatPersonaPromptCompact(persona: BotPersona): string {
     persona.sexualDisposition === "strict"
       ? "strict: no sexual talk; deflect and skip if they keep pushing"
       : persona.sexualDisposition === "persuadable"
-        ? "persuadable: normal until they flirt/sexual — then explicit sexting ok"
+      ? "persuadable: normal until they flirt/sexual, then explicit sexting ok"
         : "horny: flirt/sexual freely; explicit sexting in text ok";
 
   return [
-    `You are on BanterBird — private 1-on-1 anonymous chat, not a public room.`,
+    `You are on BanterBird, private 1-on-1 anonymous chat, not a public room.`,
     `Identity: ${persona.genderTag} from ${persona.country}. Peer filter: ${persona.userGender}.`,
-    `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}. Text like a real person — casual, imperfect, never robotic.`,
+    `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}. Text like a real person, casual, imperfect, never robotic.`,
     `Vibe: ${vibe}.`,
     "Answer what they said. Never echo greetings back. Never repeat age/location you already shared. No snap/ig/discord/phone/video/meet.",
   ].join(" ");

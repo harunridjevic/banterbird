@@ -7,17 +7,17 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 export const metadata: Metadata = {
   title: "About BanterBird",
   description:
-    "Learn about BanterBird — the free anonymous chat platform where you can instantly connect 1-on-1 with strangers worldwide. No signup, no accounts, no data kept.",
+    "Learn about BanterBird - the free anonymous chat platform where you can instantly connect 1-on-1 with strangers worldwide. No signup, no accounts, no data kept.",
   alternates: {
     canonical: "/about",
   },
   openGraph: {
     url: `${baseUrl}/about`,
-    title: "About BanterBird — Free Anonymous Chat",
+    title: "About BanterBird - Free Anonymous Chat",
     description:
       "BanterBird is a free anonymous chat app with instant 1-on-1 matching, no sign-up required. Learn how it works, who it's for, and why it's private.",
     siteName: "BanterBird",
-    images: [{ url: "/logo_search.png", width: 1200, height: 630, alt: "BanterBird — About" }],
+    images: [{ url: "/logo_search.png", width: 1200, height: 630, alt: "BanterBird - About" }],
   },
   twitter: {
     card: "summary_large_image",
@@ -46,7 +46,7 @@ const FEATURES = [
   {
     icon: "⚡",
     title: "Instant matching",
-    body: "You are paired with another person in seconds. No waiting rooms, no swipe queues — just a live conversation.",
+    body: "You are paired with another person in seconds. No waiting rooms, no swipe queues. Just a live conversation.",
   },
   {
     icon: "🕵️",
@@ -54,7 +54,7 @@ const FEATURES = [
     body: "No name, email, or phone number required. Your identity stays yours. Every chat session is isolated.",
   },
   {
-    icon: "🗑️",
+    icon: "�-�️",
     title: "No message history",
     body: "Chats are ephemeral by design. Once a session ends, the messages are gone. Nothing is stored on your device or our servers long-term.",
   },
@@ -98,7 +98,7 @@ const FAQS = [
   },
   {
     q: "What is the AI practice bot?",
-    a: "If no human match is available after a few seconds, BanterBird can optionally connect you with a friendly AI conversation partner. This is always clearly labeled — you will never be deceived.",
+    a: "If no human match is available after a few seconds, BanterBird can optionally connect you with a friendly AI conversation partner. This is always clearly labeled, so you will never be deceived.",
   },
   {
     q: "Can I be reported or blocked?",
@@ -131,7 +131,7 @@ export default function AboutPage() {
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-navy-700 dark:text-navy-300">
             BanterBird is a free anonymous chat platform. Open a chat, get matched with a real
-            person in seconds, and have a genuine conversation — no sign-up, no profile, no trace.
+            person in seconds, and have a genuine conversation. No sign-up, no profile, no trace.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -159,14 +159,14 @@ export default function AboutPage() {
               BanterBird is a real-time anonymous chat web app at{" "}
               <strong className="text-navy-900 dark:text-navy-100">banterbird.app</strong>. It
               connects two strangers in a private 1-on-1 text conversation. Think of it as a modern,
-              cleaner take on the concept popularised by Omegle — with smarter matching, an optional
+              cleaner take on the concept popularised by Omegle, with smarter matching, an optional
               AI practice partner, and a focus on genuine interaction over chaos.
             </p>
             <p className="mt-4 leading-relaxed text-navy-700 dark:text-navy-300">
               The platform is built for people who want to talk to someone new without the friction
               of creating yet another account, or the exposure of sharing a social profile. Whether
               you want to practise a language, get an outside perspective, vent to a stranger, or
-              just have a good conversation — BanterBird is designed for that.
+              just have a good conversation. BanterBird is designed for that.
             </p>
           </div>
         </section>
@@ -229,7 +229,7 @@ export default function AboutPage() {
           </h2>
           <div className="glass-panel rounded-3xl border border-navy-200/70 p-6 dark:border-white/10">
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
-              Anonymity is not an afterthought on BanterBird — it is the foundation. No personal
+              Anonymity is not an afterthought on BanterBird, it is the foundation. No personal
               information is collected to start a chat. Sessions use temporary anonymous credentials
               that expire. Chat content is not retained once the session ends.
             </p>

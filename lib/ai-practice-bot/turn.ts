@@ -293,7 +293,7 @@ export function decideFallbackTurn(
     }, settings);
   }
 
-  // Mid-chat should use the LLM — callers must not route here for normal replies.
+  // Mid-chat should use the LLM - callers must not route here for normal replies.
   return withTiming(persona, {
     action: "reply",
     messages: midChatStubReply(history, personaAllowsSexualChat(persona, memory.sexualVibe)),
@@ -383,7 +383,7 @@ export function applySessionPolicy(
         combined,
       );
       if (stayAttempt) {
-        // One short stay line only — never a multi-bubble rant after bye.
+        // One short stay line only - never a multi-bubble rant after bye.
         return withTiming(
           persona,
           { action: "reply", messages: [result.messages[0]!.slice(0, 80)] },
@@ -466,22 +466,22 @@ export function sessionContextOverlay(
   const lines: string[] = [];
   if (memory.userTurnCount >= policy.sessionHintAt) {
     lines.push(
-      `Chat length: ${memory.userTurnCount} user messages. If dry/boring/annoying/hostile, skip — parting like "ur boring bye".`,
+      `Chat length: ${memory.userTurnCount} user messages. If dry/boring/annoying/hostile, skip, parting like "ur boring bye".`,
     );
   }
   if (persona.sexualDisposition === "horny") {
     lines.push(
-      "You are horny this session — flirt and escalate sexually when it fits. Explicit sexting in text is ok. No socials/video/meetup.",
+      "You are horny this session, flirt and escalate sexually when it fits. Explicit sexting in text is ok. No socials/video/meetup.",
     );
   } else if (persona.sexualDisposition === "persuadable" && memory.sexualVibe) {
     lines.push(
-      "They flirted or got sexual — you are persuadable so explicit dirty text and sexting ok now. Match their energy. No socials/video/meetup.",
+      "They flirted or got sexual, you are persuadable so explicit dirty text and sexting ok now. Match their energy. No socials/video/meetup.",
     );
   } else if (persona.sexualDisposition === "persuadable") {
-    lines.push("Persuadable bot — stay normal until they flirt; then match with flirty/sexual text.");
+    lines.push("Persuadable bot - stay normal until they flirt; then match with flirty/sexual text.");
   } else if (memory.sexualVibe) {
     lines.push(
-      'Strict bot (~50%) — deflect sexual stuff ("idk", "i dont wanna talk about that") or skip if they keep pushing.',
+      'Strict bot (~50%) - deflect sexual stuff ("idk", "i dont wanna talk about that") or skip if they keep pushing.',
     );
   }
   return lines.join("\n");
@@ -490,7 +490,7 @@ export function sessionContextOverlay(
 export function goodbyeContextOverlay(): string {
   return [
     "They are leaving or wrapping up the chat.",
-    "If you have NOT asked why yet: ONE short stay line is ok (e.g. wait why, aw already) — single message only.",
+    "If you have NOT asked why yet: ONE short stay line is ok (e.g. wait why, aw already), single message only.",
     "If you already asked why, OR they say bye again: MUST skip with ONE short parting (ok cya / alright fair). Do not keep chatting.",
     "NEVER say YOU are leaving (no brb, gotta go, ttyl) when THEY are the one leaving.",
     "If you say bye you MUST use skip action. Do not lecture them.",

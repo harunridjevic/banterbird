@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-/** POST /api/friends/unfriend — remove a friendship (both directions) */
+/** POST /api/friends/unfriend - remove a friendship (both directions) */
 export async function POST(req: Request) {
   try {
     const cookieStore = await cookies();

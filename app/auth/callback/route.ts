@@ -21,6 +21,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // Something went wrong — redirect home anyway
+  // Something went wrong - redirect home anyway
   return NextResponse.redirect(`${origin}/`);
 }

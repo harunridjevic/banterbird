@@ -37,7 +37,7 @@ export function FriendsDrawer({
     <AnimatePresence>
       {open && (
         <>
-          {/* ── Backdrop — plain dark overlay, no blur ── */}
+          {/* ── Backdrop - plain dark overlay, no blur ── */}
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -49,7 +49,7 @@ export function FriendsDrawer({
             aria-hidden="true"
           />
 
-          {/* ── Sidebar panel — full-screen on mobile, slides in from right on desktop ── */}
+          {/* ── Sidebar panel - full-screen on mobile, slides in from right on desktop ── */}
           <motion.aside
             key="panel"
             initial={{ x: "100%" }}

@@ -8,6 +8,7 @@ import { InlineSpinner } from "@/components/ui/Loading";
 import { Avatar } from "./Avatar";
 import { DmConversation } from "./DmConversation";
 import type { FriendEntry, FriendProfile, IncomingRequest } from "./types";
+import { useFriendPresence } from "@/lib/hooks/use-friend-presence";
 
 type View = "list" | "dm";
 type UnreadMap = Record<string, number>;
@@ -150,6 +151,8 @@ export function FriendsPanel({
     );
   }
 
+  const friendIds = friends.map((f) => f.friend_id);
+  const onlineFriends = useFriendPresence(friendIds, supabase, currentUserId);
   const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
   const totalNotif = incoming.length + totalUnread;
 
@@ -257,7 +260,7 @@ export function FriendsPanel({
             <div className="flex justify-center py-10"><InlineSpinner /></div>
           ) : friends.length === 0 ? (
             <p className="py-8 text-center text-sm text-navy-400 dark:text-navy-500">
-              No friends yet — add someone above.
+              No friends yet - add someone above.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -270,18 +273,31 @@ export function FriendsPanel({
                       onClick={() => openDm(f.profiles)}
                       className="group flex w-full items-center gap-3 rounded-2xl border border-navy-200/60 bg-white px-4 py-3.5 text-left transition active:scale-[0.99] hover:border-navy-300 hover:bg-navy-50 dark:border-white/10 dark:bg-navy-900 dark:hover:border-white/20 dark:hover:bg-navy-800"
                     >
-                      <Avatar url={f.profiles.avatar_url} username={f.profiles.username} size="md" />
-                      <span className="flex-1 truncate text-base font-medium text-navy-900 dark:text-navy-100">
-                        {f.profiles.username ?? "Unknown"}
-                      </span>
+                      <div className="relative shrink-0">
+                        <Avatar url={f.profiles.avatar_url} username={f.profiles.username} size="md" />
+                        {onlineFriends.has(f.friend_id) && (
+                          <span
+                            className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-navy-900"
+                            aria-label="Online"
+                          />
+                        )}
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-base font-medium text-navy-900 dark:text-navy-100">
+                          {f.profiles.username ?? "Unknown"}
+                        </span>
+                        <span className={`text-xs ${onlineFriends.has(f.friend_id) ? "text-emerald-600 dark:text-emerald-400" : "text-navy-400 dark:text-navy-500"}`}>
+                          {onlineFriends.has(f.friend_id) ? "Online" : "Offline"}
+                        </span>
+                      </div>
                       {badge > 0 ? (
                         <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-500 px-1.5 text-xs font-bold text-white">
                           {badge > 99 ? "99+" : badge}
                         </span>
                       ) : (
-                        <MessageCircle className="h-5 w-5 text-navy-300 transition group-hover:text-navy-600 dark:text-navy-600 dark:group-hover:text-navy-300" />
+                        <MessageCircle className="h-5 w-5 shrink-0 text-navy-300 transition group-hover:text-navy-600 dark:text-navy-600 dark:group-hover:text-navy-300" />
                       )}
-                      <ChevronRight className="h-4 w-4 text-navy-300 dark:text-navy-600" />
+                      <ChevronRight className="h-4 w-4 shrink-0 text-navy-300 dark:text-navy-600" />
                     </button>
                     <div className="flex justify-end px-2 pt-1">
                       <button

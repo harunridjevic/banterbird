@@ -233,9 +233,9 @@ export default function OpsModerationPage() {
                       }
                       className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
                     >
-                      <option value="low">Low — only extreme abuse</option>
-                      <option value="medium">Medium — balanced</option>
-                      <option value="high">High — catch abuse sooner</option>
+                      <option value="low">Low - only extreme abuse</option>
+                      <option value="medium">Medium - balanced</option>
+                      <option value="high">High - catch abuse sooner</option>
                     </select>
                   </label>
                   <label className="block">

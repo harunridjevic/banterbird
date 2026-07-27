@@ -71,7 +71,7 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
         await client.removeChannel(ch);
       }
 
-      // Supabase reuses channels by topic — remove leftovers before re-subscribing
+      // Supabase reuses channels by topic - remove leftovers before re-subscribing
       // so we never call .on("presence") after subscribe().
       for (const existing of client.getChannels()) {
         const topic = existing.topic ?? "";

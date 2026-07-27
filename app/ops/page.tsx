@@ -20,7 +20,7 @@ const cards = [
   {
     href: "/ops/api-keys",
     title: "LLM API keys",
-    description: "Cerebras & Groq key pool — names, prefixes, hierarchy, and live rate-limit status.",
+    description: "Cerebras & Groq key pool - names, prefixes, hierarchy, and live rate-limit status.",
     icon: KeyRound,
   },
   {

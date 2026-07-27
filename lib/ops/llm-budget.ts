@@ -30,14 +30,14 @@ export function llmMaxCallsPerRoom(): number {
   return Number.isFinite(n) && n > 0 ? n : 12;
 }
 
-/** Soft hourly cap — falls back to canned replies, never blocks. */
+/** Soft hourly cap - falls back to canned replies, never blocks. */
 export function llmSoftCallsPerUserHour(): number {
   const raw = process.env.LLM_SOFT_CALLS_PER_USER_HOUR?.trim();
   const n = raw ? Number.parseInt(raw, 10) : 100;
   return Number.isFinite(n) && n > 0 ? n : 100;
 }
 
-/** Soft daily cap — falls back to canned replies, never blocks. */
+/** Soft daily cap - falls back to canned replies, never blocks. */
 export function llmSoftCallsPerUserDay(): number {
   const raw = process.env.LLM_SOFT_CALLS_PER_USER_DAY?.trim();
   const n = raw ? Number.parseInt(raw, 10) : 250;
@@ -183,7 +183,7 @@ export async function getUserLlmUsageProfile(userId: string): Promise<UserLlmUsa
   }
 }
 
-/** Only flag obvious cost-attack patterns — not normal heavy chatters. */
+/** Only flag obvious cost-attack patterns - not normal heavy chatters. */
 export function isInsaneLlmAbuse(
   profile: UserLlmUsageProfile,
   guards: LlmGuardSettings,
@@ -339,7 +339,7 @@ export type LlmAbuseResult = {
   reason?: "abuse" | "soft_hourly" | "soft_daily" | "budget" | "room_cap";
 };
 
-/** Enforce caps — auto-block only for insane cost-attack patterns. */
+/** Enforce caps - auto-block only for insane cost-attack patterns. */
 export async function enforceLlmUsageGuards(
   userId: string,
   roomId: string,

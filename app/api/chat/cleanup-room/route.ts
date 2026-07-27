@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: roomErr.message }, { status: 500 });
   }
 
-  // Already removed by end_active_room — success.
+  // Already removed by end_active_room - success.
   if (!room) {
     return NextResponse.json({ success: true, alreadyGone: true });
   }

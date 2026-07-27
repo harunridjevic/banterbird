@@ -11,7 +11,7 @@ import {
 import { ThemeProvider } from "next-themes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
-import { ensureAnonymousSession } from "@/lib/auth/ensure-anonymous-session";
+import { ensureAnonymousSession, formatAuthError } from "@/lib/auth/ensure-anonymous-session";
 import { OnlinePresenceProvider } from "@/components/presence/OnlinePresenceProvider";
 import { ClientErrorReporter } from "@/components/monitoring/ClientErrorReporter";
 import { BotSettingsProvider } from "@/lib/ops/bot-settings-provider";
@@ -37,7 +37,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       const result = await ensureAnonymousSession(client);
       if (cancelled) return;
       if (!result.ok) {
-        setAuthError(result.error);
+        setAuthError(formatAuthError(result.error));
         console.error("Anonymous sign-in failed:", result.error);
       } else {
         setAuthError(null);

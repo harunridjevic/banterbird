@@ -66,7 +66,7 @@ export function ImageMessage({
             className="fixed inset-0 z-[300] grid place-items-start overflow-y-auto bg-black/95"
             onClick={() => setLightbox(false)}
           >
-            {/* Close button — sticky so it's always reachable */}
+            {/* Close button - sticky so it's always reachable */}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setLightbox(false); }}
@@ -76,7 +76,7 @@ export function ImageMessage({
               <X className="h-5 w-5" />
             </button>
 
-            {/* Image — centred in the grid cell, padded so it doesn't touch edges */}
+            {/* Image - centred in the grid cell, padded so it doesn't touch edges */}
             <div
               className="flex min-h-screen w-full items-center justify-center p-4 pt-14"
               onClick={() => setLightbox(false)}

@@ -102,7 +102,7 @@ export function DmConversation({
     return () => { void supabase.removeChannel(channel); };
   }, [roomId, supabase]);
 
-  // Core send — accepts plain text or encoded [img] content
+  // Core send - accepts plain text or encoded [img] content
   const sendContent = useCallback(async (content: string) => {
     setSending(true);
     setError(null);
@@ -174,7 +174,7 @@ export function DmConversation({
         {loading && <div className="flex justify-center pt-8"><InlineSpinner /></div>}
         {!loading && messages.length === 0 && (
           <p className="pt-10 text-center text-sm text-navy-400 dark:text-navy-500">
-            No messages yet — say hi!
+            No messages yet - say hi!
           </p>
         )}
         {messages.map((msg) => {
@@ -191,7 +191,6 @@ export function DmConversation({
                     : "rounded-bl-sm bg-navy-100 text-navy-950 dark:bg-navy-800 dark:text-navy-50"
                 }`}>
                   {msg.content}
-                  {isMe && !msg.read_at && <span className="ml-1.5 text-[10px] opacity-40">●</span>}
                 </div>
               )}
             </div>
@@ -249,7 +248,7 @@ export function DmConversation({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(e); }
           }}
-          placeholder={imageFile ? "Image ready — hit send" : "Message…"}
+          placeholder={imageFile ? "Image ready - hit send" : "Message..."}
           className="flex-1 resize-none rounded-xl border border-navy-200/80 bg-white px-4 py-3 text-base text-navy-950 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/20 disabled:opacity-60 dark:border-white/10 dark:bg-navy-900 dark:text-navy-50 dark:placeholder:text-navy-500"
           maxLength={2000}
         />

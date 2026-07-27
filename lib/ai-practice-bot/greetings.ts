@@ -34,7 +34,7 @@ function hashSeed(seed: string): number {
   return h;
 }
 
-/** Pick a canned opener — never mirrors the user's greeting back at them. */
+/** Pick a canned opener - never mirrors the user's greeting back at them. */
 export function pickPredefinedGreeting(seed: string, flirty: boolean): string {
   const list = flirty ? FLIRTY_OPENERS : CASUAL_OPENERS;
   return list[hashSeed(seed) % list.length] ?? "hey";

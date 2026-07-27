@@ -7,18 +7,15 @@ import { InlineSpinner } from "@/components/ui/Loading";
 
 type Status = "idle" | "loading" | "sent" | "already_friends" | "error";
 
-/**
- * Shown in the chat header for signed-in users.
- * - Human rooms: sends a real friend request that the other person can accept.
- * - Bot rooms: sends a request that is stored but the bot never accepts it.
- *   The button looks identical either way.
- */
 export function FriendRequestButton({
   peerId,
   isAiRoom,
+  hideBotUi = false,
 }: {
   peerId: string | null;
   isAiRoom: boolean;
+  /** When true the bot badge is hidden - don't hint that the peer is a bot */
+  hideBotUi?: boolean;
 }) {
   const { state } = useAccount();
   const [status, setStatus] = useState<Status>("idle");
@@ -26,13 +23,10 @@ export function FriendRequestButton({
 
   useEffect(() => {
     if (!tooltip) return;
-    const t = setTimeout(() => setTooltip(null), 3500);
+    const t = setTimeout(() => setTooltip(null), 3000);
     return () => clearTimeout(t);
   }, [tooltip]);
 
-  // Only show for signed-in users
-  // For AI rooms show even without a real peerId (we'll show "sent" state
-  // but won't actually POST if there's no target)
   if (state.status !== "named") return null;
   if (!isAiRoom && !peerId) return null;
 
@@ -41,10 +35,11 @@ export function FriendRequestButton({
   const handleClick = async () => {
     if (isSent || status === "loading") return;
 
-    // If AI room and no peerId there's nobody to send to — just show feedback
+    // AI room with no real peer ID - just show visual confirmation, no network call
     if (isAiRoom && !peerId) {
       setStatus("sent");
-      setTooltip("Request sent! Bots don't accept requests, but it's noted.");
+      // Only mention it's a bot if the bot badge is visible
+      if (!hideBotUi) setTooltip("Bots don't accept requests, but it's noted.");
       return;
     }
 
@@ -56,10 +51,7 @@ export function FriendRequestButton({
     });
     const json = (await res.json().catch(() => ({}))) as { error?: string };
 
-    if (res.status === 409) {
-      setStatus("already_friends");
-      return;
-    }
+    if (res.status === 409) { setStatus("already_friends"); return; }
     if (!res.ok) {
       setStatus("error");
       setTooltip(json.error ?? "Failed to send request.");
@@ -68,8 +60,9 @@ export function FriendRequestButton({
     }
 
     setStatus("sent");
-    if (isAiRoom) {
-      setTooltip("Request sent! Bots don't accept requests though.");
+    // Only show bot note if the badge is visible (user knows it's a bot)
+    if (isAiRoom && !hideBotUi) {
+      setTooltip("Bots don't accept requests.");
     }
   };
 
@@ -95,9 +88,7 @@ export function FriendRequestButton({
         )}
         <span className="hidden sm:inline">
           {isSent
-            ? status === "already_friends"
-              ? "Friends"
-              : "Requested"
+            ? status === "already_friends" ? "Friends" : "Requested"
             : "Add"}
         </span>
       </button>

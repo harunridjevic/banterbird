@@ -5,8 +5,8 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
  * POST /api/friends/request
- * Body: { username: string } — find by username (from friends panel)
- *    OR { peerId: string }   — find by user ID directly (from chat room)
+ * Body: { username: string } - find by username (from friends panel)
+ *    OR { peerId: string }   - find by user ID directly (from chat room)
  *
  * Always does a true DELETE + INSERT so Supabase Realtime fires an INSERT
  * event on the recipient's subscription, even if they had a previous request.
@@ -59,8 +59,8 @@ export async function POST(req: Request) {
       .eq("from_id", user.id)
       .eq("to_id", targetId);
 
-    // Also delete any reverse request (in case they already sent one to us)
-    // — if so, just accept it and become friends instead of creating a loop.
+    // Also delete any reverse request (in case they already sent one to us).
+    // If so, just accept it and become friends instead of creating a loop.
     const { data: reverseRequest } = await supabase
       .from("friend_requests")
       .select("id")
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, autoAccepted: true });
     }
 
-    // Fresh INSERT — triggers Realtime INSERT event on recipient
+    // Fresh INSERT - triggers Realtime INSERT event on recipient
     const { error: insertErr } = await svc
       .from("friend_requests")
       .insert({ from_id: user.id, to_id: targetId, status: "pending" });

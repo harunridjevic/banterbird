@@ -13,7 +13,7 @@ import {
 } from "@/lib/ai-practice-bot/memory";
 import { sessionPolicyFromSettings, type BotSettings } from "@/lib/ops/bot-settings";
 
-/** Client-side skip before calling the LLM — boring / long / hostile / leaving. */
+/** Client-side skip before calling the LLM - boring / long / hostile / leaving. */
 export function shouldClientSkipChat(
   history: ChatTurn[],
   persona?: BotPersona,

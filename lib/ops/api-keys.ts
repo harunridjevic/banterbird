@@ -330,7 +330,7 @@ export async function testApiKey(id: string): Promise<{
 }> {
   const started = Date.now();
   const pool = await resolveApiKeyPool(Date.now());
-  // Include rate-limited keys for explicit tests — resolve skips them, so also check env/ops directly.
+  // Include rate-limited keys for explicit tests - resolve skips them, so also check env/ops directly.
   let key = pool.find((k) => k.id === id);
   if (!key) {
     if (id.startsWith("env:")) {

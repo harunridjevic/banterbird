@@ -149,7 +149,7 @@ function endpointFor(provider: ApiKeyProvider): string {
 }
 
 /**
- * Try pool keys in priority order. On 429, cool that key and immediately try the next —
+ * Try pool keys in priority order. On 429, cool that key and immediately try the next,
  * same request, no user-visible pause beyond the failed attempt latency.
  */
 export async function fetchWithKeyPool(input: {

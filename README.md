@@ -21,7 +21,7 @@ Anonymous, random-pair chat built with **Next.js** (App Router), **TypeScript**,
 
 3. **Authentication**
 
-   In Supabase: **Authentication → Providers → Anonymous** — enable anonymous sign-ins. This gives each visitor a stable user id for row-level security without passwords.
+   In Supabase: **Authentication > Providers > Anonymous** - enable anonymous sign-ins. This gives each visitor a stable user id for row-level security without passwords.
 
 4. **Realtime**
 
@@ -57,7 +57,7 @@ The BanterBird logo is served from `public/banterbird-logo.png`. Replace that fi
 
 ## Scripts
 
-- `npm run dev` — development server
-- `npm run build` — production build
-- `npm run start` — start production server
-- `npm run lint` — ESLint
+- `npm run dev` - development server
+- `npm run build` - production build
+- `npm run start` - start production server
+- `npm run lint` - ESLint

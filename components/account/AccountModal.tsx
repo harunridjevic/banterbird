@@ -40,23 +40,31 @@ export function AccountModal() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center"
+          className="fixed inset-0 z-[200] flex justify-center sm:items-center"
+          // On mobile: align to top so panel sits under the navbar
+          style={{ alignItems: "flex-start" }}
           onClick={(e) => { if (e.target === overlayRef.current) closeModal(); }}
         >
-          <div className="absolute inset-0 bg-navy-950/50 backdrop-blur-sm dark:bg-navy-950/70" />
+          <div className="absolute inset-0 bg-navy-950/50 dark:bg-navy-950/70" />
 
+          {/* Mobile: slides down from top. Desktop (sm+): fades in centered. */}
           <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.97 }}
+            initial={{ opacity: 0, y: -24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -24 }}
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
-            className="glass-panel relative z-10 flex w-full flex-col rounded-t-3xl border border-navy-200/70 shadow-2xl sm:max-w-md sm:rounded-3xl dark:border-white/10"
-            style={{ maxHeight: "100dvh" }}
+            className="glass-panel relative z-10 flex w-full flex-col border-b border-navy-200/70 shadow-2xl sm:mt-0 sm:max-w-md sm:rounded-3xl sm:border dark:border-white/10"
+            // On mobile fill from top; on sm+ cap height
+            style={{
+              maxHeight: "100dvh",
+              // Offset on mobile to sit flush under the sticky navbar (56px = h-14)
+              marginTop: 0,
+            }}
             role="dialog"
             aria-modal="true"
             aria-label={isNamed ? "Account settings" : "Sign in or create account"}
           >
-            {/* ── Sticky top bar with close button ── */}
+            {/* Top bar */}
             <div className="flex shrink-0 items-center justify-between border-b border-navy-200/60 px-5 py-3.5 dark:border-white/10">
               <span className="text-sm font-bold text-navy-950 dark:text-navy-50">
                 {isNamed ? "Account" : tab === "signin" ? "Sign in" : "Create account"}
@@ -71,7 +79,7 @@ export function AccountModal() {
               </button>
             </div>
 
-            {/* ── Scrollable body ── */}
+            {/* Scrollable body */}
             <div className="overflow-y-auto px-5 py-5 sm:px-6">
               {isNamed ? (
                 <ProfileEditor
@@ -87,7 +95,6 @@ export function AccountModal() {
                       : "Join BanterBird to save your profile and connect with friends."}
                   </p>
 
-                  {/* Tab switcher */}
                   <div className="mb-5 flex rounded-2xl border border-navy-200/70 bg-navy-100/50 p-1 dark:border-white/10 dark:bg-navy-900/40">
                     {(["signin", "signup"] as const).map((t) => (
                       <button

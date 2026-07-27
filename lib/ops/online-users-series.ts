@@ -106,7 +106,7 @@ export async function fetchOnlineUsersByDay(sinceUtc: string, days?: number): Pr
     });
 
     if (error) {
-      // RPC not deployed yet — use per-day chunked fallback.
+      // RPC not deployed yet - use per-day chunked fallback.
       console.warn("ops_online_users_by_day unavailable, using fallback:", error.message);
       return fetchOnlineUsersByDayFallback(admin, since, until);
     }
@@ -125,7 +125,7 @@ export async function fetchOnlineUsersByDay(sinceUtc: string, days?: number): Pr
 
 /**
  * Peak + average concurrent online users per UTC hour.
- * Used by the "Today" analytics view — `sinceUtc` should be midnight UTC today.
+ * Used by the "Today" analytics view. `sinceUtc` should be midnight UTC today.
  */
 export async function fetchOnlineUsersByHour(sinceUtc: string): Promise<OnlineHourPoint[]> {
   try {
@@ -138,7 +138,7 @@ export async function fetchOnlineUsersByHour(sinceUtc: string): Promise<OnlineHo
     });
 
     if (error) {
-      // RPC not deployed yet — use direct single-day query fallback.
+      // RPC not deployed yet - use direct single-day query fallback.
       console.warn("ops_online_users_by_hour unavailable, using fallback:", error.message);
       return fetchOnlineUsersByHourFallback(admin, sinceUtc, until);
     }

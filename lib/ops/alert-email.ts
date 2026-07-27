@@ -1,4 +1,4 @@
-const ALERT_TO = ["banterbirdchat@gmail.com", "harunridjevic@gmail.com"] as const;
+const ALERT_TO = ["support@banterbird.app", "business@banterbird.app"] as const;
 
 export async function sendOpsAlertEmail(subject: string, text: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY?.trim();

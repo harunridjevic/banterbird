@@ -329,7 +329,7 @@ async function callLlm(
     };
   };
 
-  // 1) Cerebras / Groq key pool — rotate instantly on 429 within this request.
+  // 1) Cerebras / Groq key pool - rotate instantly on 429 within this request.
   const poolResult = await fetchWithKeyPool({
     history,
     systemPrompt,
@@ -392,7 +392,7 @@ async function callLlm(
     }
   }
 
-  // Never leave the chat silent on rate limits — seamless canned continuation.
+  // Never leave the chat silent on rate limits - seamless canned continuation.
   return softFallback();
 }
 

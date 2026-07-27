@@ -51,7 +51,7 @@ export function SignUpForm({
       return;
     }
 
-    // Write username to profile — must happen before refresh() so the
+    // Write username to profile - must happen before refresh() so the
     // account context picks it up correctly.
     const { error: profileErr } = await supabase
       .from("profiles")

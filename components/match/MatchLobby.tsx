@@ -90,7 +90,7 @@ export function MatchLobby() {
       if (matchedRoomIdRef.current) return true;
       if (isMatchingPausedForInactivity()) return false;
 
-      // Claim immediately — effect restarts / AI fallback must not wipe this.
+      // Claim immediately - effect restarts / AI fallback must not wipe this.
       matchedRoomIdRef.current = roomId;
       navigatedRef.current = true;
       cancelledRef.current = true;
@@ -196,7 +196,7 @@ export function MatchLobby() {
       return;
     }
 
-    // Already claimed a room this session — do not reset and re-poll (kills rematch).
+    // Already claimed a room this session - do not reset and re-poll (kills rematch).
     if (matchedRoomIdRef.current || navigatedRef.current) {
       setIsMatching(false);
       return;
@@ -371,7 +371,7 @@ export function MatchLobby() {
 
     return () => {
       stopMatchingLoops();
-      // Only cancel if we never claimed a room — otherwise a deps flicker would abort navigation.
+      // Only cancel if we never claimed a room - otherwise a deps flicker would abort navigation.
       if (!matchedRoomIdRef.current) {
         cancelledRef.current = true;
         setIsMatching(false);
