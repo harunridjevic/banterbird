@@ -23,4 +23,14 @@ create policy "user_heartbeat_minutes_deny_all"
 -- It's exposing auth.users data which is a security risk
 -- Drop it entirely - the app should use the profiles table directly
 
-drop view if exists public.users_with_profiles;
+drop view if exists public.users_with_profiles cascade;
+
+-- Also check if it exists in other schemas and drop it
+do $$
+begin
+  -- Drop from public schema explicitly
+  execute 'drop view if exists public.users_with_profiles cascade';
+exception when others then
+  -- View doesn't exist or already dropped
+  null;
+end $$;
