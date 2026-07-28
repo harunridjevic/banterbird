@@ -13,6 +13,7 @@ const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
 export function useUsernameCheck(
   username: string,
   currentUsername?: string | null,
+  currentUserId?: string | null,
 ): { status: Status; message: string | null } {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export function useUsernameCheck(
         const res = await fetch("/api/auth/check-username", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: trimmed }),
+          body: JSON.stringify({ username: trimmed, currentUserId: currentUserId ?? undefined }),
         });
         const json = (await res.json()) as { available: boolean };
         if (json.available) {
@@ -63,7 +64,7 @@ export function useUsernameCheck(
     }, 450); // debounce 450ms
 
     return () => clearTimeout(timer);
-  }, [username, currentUsername]);
+  }, [username, currentUsername, currentUserId]);
 
   return { status, message };
 }

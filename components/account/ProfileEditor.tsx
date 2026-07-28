@@ -30,6 +30,19 @@ export function ProfileEditor({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(profile.avatar_url);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
+  // If the profile arrives (or updates) with a username after the initial
+  // render — e.g. because the Google callback upsert finished after the
+  // account context first loaded — sync it into the local field so the
+  // user doesn't see a blank username box.
+  useEffect(() => {
+    if (profile.username && !username) {
+      setUsername(profile.username);
+    }
+  // Only run when profile.username changes; we intentionally don't reset
+  // a username the user has already started typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.username]);
+
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -82,8 +95,7 @@ export function ProfileEditor({
     return `${data.publicUrl}?t=${Date.now()}`;
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async () => {
     const trimmedUsername = username.trim();
     const trimmedEmail = newEmail.trim();
     const trimmedPassword = newPassword.trim();
@@ -195,7 +207,7 @@ export function ProfileEditor({
     <div className="flex h-full flex-col">
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-        <form id="profile-form" onSubmit={handleSave} className="space-y-4">
+        <div className="space-y-4">
         {/* Avatar */}
         <div className="flex items-center gap-4">
           <div className="shrink-0">
@@ -249,6 +261,7 @@ export function ProfileEditor({
           onChange={setUsername}
           currentUsername={profile.username}
           currentUserId={userId}
+          disabled={isGoogleUser === null}
         />
 
         {/* Security section — show spinner while auth provider is being determined */}
@@ -318,15 +331,15 @@ export function ProfileEditor({
           <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">{success}</p>
         )}
 
-        </form>
+        </div>
       </div>
 
       {/* Sticky bottom action bar */}
       <div className="shrink-0 space-y-2 border-t border-navy-200/60 px-0 pt-4 bg-white/[0.97] dark:bg-navy-950/[0.97] dark:border-white/10"
            style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
         <button
-          type="submit"
-          form="profile-form"
+          type="button"
+          onClick={() => void handleSave()}
           disabled={saving}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-navy-900 py-3 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:opacity-60 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"
         >
@@ -381,3 +394,4 @@ export function ProfileEditor({
     </div>
   );
 }
+

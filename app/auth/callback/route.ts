@@ -39,7 +39,12 @@ export async function GET(request: Request) {
     // linkIdentity preserves the existing anonymous user ID and profile,
     // so existing users keep their username. New Google sign-ins get one derived
     // from their email.
-    const { data: existing } = await supabase
+    //
+    // Use service role for all profile reads/writes here so RLS on a
+    // brand-new user row never causes a silent skip.
+    const svc = createServiceRoleClient();
+
+    const { data: existing } = await svc
       .from("profiles")
       .select("username")
       .eq("id", user.id)
@@ -56,7 +61,6 @@ export async function GET(request: Request) {
       // Fallback if base ends up empty after processing
       const safeBase = base || "user";
 
-      const svc = createServiceRoleClient();
       let username = safeBase;
       let attempt = 0;
 
@@ -71,9 +75,13 @@ export async function GET(request: Request) {
         username = `${safeBase}_${attempt + 1}`;
       }
 
-      await svc
+      const { error: upsertErr } = await svc
         .from("profiles")
         .upsert({ id: user.id, username }, { onConflict: "id" });
+
+      if (upsertErr) {
+        console.error("[auth/callback] Failed to assign username for Google user:", upsertErr.message);
+      }
     }
 
     // Redirect to relay page which reads sessionStorage for the return path

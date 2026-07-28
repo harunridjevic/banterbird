@@ -43,7 +43,7 @@ export function FriendsDrawer({
         "sm:max-w-sm",
         // Slide transition via CSS — no unmounting
         "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-        open ? "translate-x-0" : "translate-x-full",
+        open ? "translate-x-0" : "translate-x-full pointer-events-none",
       ].join(" ")}
     >
       {/* Header */}

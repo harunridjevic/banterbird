@@ -18,10 +18,11 @@ export function UsernameField({
   value,
   onChange,
   currentUsername,
+  currentUserId,
   required,
   disabled,
 }: Props) {
-  const { status, message } = useUsernameCheck(value, currentUsername);
+  const { status, message } = useUsernameCheck(value, currentUsername, currentUserId);
 
   const borderColor =
     status === "available"
