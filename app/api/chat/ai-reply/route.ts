@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { createClient } from "@/utils/supabase/server";
 import {
   PRACTICE_BOT_OUTPUT_JSON_RULES,
   PRACTICE_BOT_OUTPUT_JSON_RULES_COMPACT,

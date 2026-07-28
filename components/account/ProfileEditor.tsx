@@ -321,7 +321,7 @@ export function ProfileEditor({
       </div>
 
       {/* Sticky bottom action bar */}
-      <div className="shrink-0 space-y-2 border-t border-navy-200/60 bg-[var(--glass-bg)] px-0 pt-4 dark:border-white/10"
+      <div className="shrink-0 space-y-2 border-t border-navy-200/60 px-0 pt-4 bg-white/[0.97] dark:bg-navy-950/[0.97] dark:border-white/10"
            style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
         <button
           type="submit"

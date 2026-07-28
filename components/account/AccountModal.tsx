@@ -62,8 +62,9 @@ export function AccountModal() {
               "fixed left-0 right-0 z-[100] flex flex-col",
               "top-14",
               "h-[calc(100dvh-56px-36px)]",
-              // Use glass-panel for blur effect — solid enough to read, blurs content behind
-              "glass-panel shadow-2xl",
+              // Nearly opaque background with blur — more solid than generic glass-panel
+              "shadow-2xl backdrop-blur-2xl",
+              "bg-white/[0.97] dark:bg-navy-950/[0.97]",
               "border-t border-b border-navy-200/60 dark:border-white/10",
               // Desktop: hidden — use the centered modal below instead
               "sm:hidden",
@@ -120,7 +121,7 @@ export function AccountModal() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 12 }}
               transition={{ type: "spring", stiffness: 380, damping: 32 }}
-              className="glass-panel relative z-10 flex w-full max-w-md flex-col rounded-3xl border border-navy-200/70 shadow-2xl dark:border-white/10 sm:max-h-[90dvh]"
+              className="relative z-10 flex w-full max-w-md flex-col rounded-3xl border border-navy-200/70 shadow-2xl backdrop-blur-2xl bg-white/[0.97] dark:bg-navy-950/[0.97] dark:border-white/10 sm:max-h-[90dvh]"
               role="dialog"
               aria-modal="true"
               aria-label={isNamed ? "Account settings" : "Sign in or create account"}
