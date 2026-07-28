@@ -896,6 +896,18 @@ export function ChatRoom({ roomId }: Props) {
     [roomId, cancelOpener, router],
   );
 
+  // ── Helper: persist a system message to the DB ─────────────
+  // This ensures both users see it and it survives refresh.
+  const sendSystemMessage = useCallback(async (text: string) => {
+    await fetch("/api/chat/system-message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId, text }),
+    });
+    // The message arrives via the existing realtime subscription — no need
+    // to call setMessages directly.
+  }, [roomId]);
+
   // ── Peer username resolution ────────────────────────────────
   // Only show the peer's username if they are a CURRENT friend.
   // Former friends or strangers always show as "Stranger".
@@ -943,21 +955,11 @@ export function ChatRoom({ roomId }: Props) {
       }, (payload) => {
         const row = payload.new as { from_id: string; to_id: string };
         if (row.from_id !== peerId) return;
-        // Check if the recipient is anonymous — if so, add a note to sign in
         const isAnon = state.status === "anonymous" || state.status === "loading";
         const sysText = isAnon
           ? `${peerUsername ?? "Stranger"} sent you a friend request - sign in to accept it`
           : `${peerUsername ?? "Stranger"} sent you a friend request`;
-        const sysMsg: MessageRow = {
-          id: `sys-fr-${Date.now()}`,
-          clientKey: `sys-fr-${Date.now()}`,
-          room_id: roomId,
-          user_id: null,
-          content: `[system]${sysText}`,
-          created_at: new Date().toISOString(),
-          is_from_ai: false,
-        };
-        setMessages((prev) => [...prev, sysMsg]);
+        void sendSystemMessage(sysText);
       })
       .on("postgres_changes", {
         event: "UPDATE",
@@ -975,16 +977,7 @@ export function ChatRoom({ roomId }: Props) {
           .maybeSingle();
         if (data?.username) {
           setPeerUsername(data.username);
-          const sysMsg: MessageRow = {
-            id: `sys-acc-${Date.now()}`,
-            clientKey: `sys-acc-${Date.now()}`,
-            room_id: roomId,
-            user_id: null,
-            content: `[system]${data.username} accepted your friend request`,
-            created_at: new Date().toISOString(),
-            is_from_ai: false,
-          };
-          setMessages((prev) => [...prev, sysMsg]);
+          void sendSystemMessage(`${data.username} accepted your friend request`);
         }
       })
       // We accepted their request — friendships row inserted for us
@@ -1004,21 +997,12 @@ export function ChatRoom({ roomId }: Props) {
           .maybeSingle();
         if (data?.username) {
           setPeerUsername(data.username);
-          const sysMsg: MessageRow = {
-            id: `sys-friend-${Date.now()}`,
-            clientKey: `sys-friend-${Date.now()}`,
-            room_id: roomId,
-            user_id: null,
-            content: `[system]You are now friends with ${data.username}`,
-            created_at: new Date().toISOString(),
-            is_from_ai: false,
-          };
-          setMessages((prev) => [...prev, sysMsg]);
+          void sendSystemMessage(`You are now friends with ${data.username}`);
         }
       })
       .subscribe();
     return () => { void client.removeChannel(channel); };
-  }, [peerId, selfId, isAiRoom, roomId, client, peerUsername]);
+  }, [peerId, selfId, isAiRoom, roomId, client, peerUsername, sendSystemMessage, state.status]);
 
   // ── Image send handler ──────────────────────────────────────
   const sendImage = useCallback(async (file: File) => {
