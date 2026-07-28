@@ -53,8 +53,11 @@ export async function GET(request: Request) {
         .replace(/^_+|_+$/g, "")
         .slice(0, 24);
 
+      // Fallback if base ends up empty after processing
+      const safeBase = base || "user";
+
       const svc = createServiceRoleClient();
-      let username = base;
+      let username = safeBase;
       let attempt = 0;
 
       while (attempt < 10) {
@@ -65,7 +68,7 @@ export async function GET(request: Request) {
           .maybeSingle();
         if (!taken) break;
         attempt++;
-        username = `${base}_${attempt + 1}`;
+        username = `${safeBase}_${attempt + 1}`;
       }
 
       await svc

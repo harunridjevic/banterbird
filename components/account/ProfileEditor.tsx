@@ -88,6 +88,7 @@ export function ProfileEditor({
     const trimmedEmail = newEmail.trim();
     const trimmedPassword = newPassword.trim();
 
+    // Only validate username if it's being set (not empty)
     if (trimmedUsername && trimmedUsername.length < 3) { setError("Username must be at least 3 characters."); return; }
     if (trimmedUsername && usernameStatus === "taken") { setError("That username is already taken."); return; }
     if (trimmedUsername && usernameStatus === "checking") { setError("Please wait while we check username availability."); return; }
