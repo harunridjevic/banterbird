@@ -635,7 +635,7 @@ export function MatchLobby() {
                 <button
                   type="button"
                   onClick={() => setSelfGender("male")}
-                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`flex items-center rounded-2xl border px-4 py-3 text-left transition ${
                     selfGender === "male"
                       ? "border-blue-500/45 bg-blue-500/10 text-blue-900 shadow-sm dark:text-blue-200"
                       : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
@@ -648,7 +648,7 @@ export function MatchLobby() {
                 <button
                   type="button"
                   onClick={() => setSelfGender("female")}
-                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`flex items-center rounded-2xl border px-4 py-3 text-left transition ${
                     selfGender === "female"
                       ? "border-pink-500/45 bg-pink-500/10 text-pink-900 shadow-sm dark:text-pink-200"
                       : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
