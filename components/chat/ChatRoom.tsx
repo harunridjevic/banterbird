@@ -540,8 +540,13 @@ export function ChatRoom({ roomId }: Props) {
   const leaveManually = useCallback(
     async (clearFilters: boolean, blockPeer = false) => {
       resetInactivityStrikes();
-      if (blockPeer && peerId && !isAiRoom) {
-        blockUserForSession(peerId);
+      if (peerId && !isAiRoom) {
+        // Always session-block the peer on skip so they aren't re-matched this session.
+        // The back button passes clearFilters=true and blockPeer=false — we still
+        // block on skip (blockPeer=true) but NOT on back.
+        if (blockPeer) {
+          blockUserForSession(peerId);
+        }
       }
       await endRoomAndGoMatch(clearFilters);
     },
@@ -550,8 +555,10 @@ export function ChatRoom({ roomId }: Props) {
 
   const leaveForInactivity = useCallback(async () => {
     recordInactivitySkip();
+    // Block peer on inactivity skip too — same as manual skip
+    if (peerId && !isAiRoom) blockUserForSession(peerId);
     await endRoomAndGoMatch(false);
-  }, [endRoomAndGoMatch]);
+  }, [endRoomAndGoMatch, peerId, isAiRoom]);
 
   const inactive = !loading && !error && !exiting && !showReport;
   const { bumpActivity } = useInactivityTimeout(
@@ -924,7 +931,7 @@ export function ChatRoom({ roomId }: Props) {
         // Check if the recipient is anonymous — if so, add a note to sign in
         const isAnon = state.status === "anonymous" || state.status === "loading";
         const sysText = isAnon
-          ? `${peerUsername ?? "Stranger"} sent you a friend request — sign in to accept it`
+          ? `${peerUsername ?? "Stranger"} sent you a friend request - sign in to accept it`
           : `${peerUsername ?? "Stranger"} sent you a friend request`;
         const sysMsg: MessageRow = {
           id: `sys-fr-${Date.now()}`,
@@ -959,6 +966,35 @@ export function ChatRoom({ roomId }: Props) {
             room_id: roomId,
             user_id: null,
             content: `[system]${data.username} accepted your friend request`,
+            created_at: new Date().toISOString(),
+            is_from_ai: false,
+          };
+          setMessages((prev) => [...prev, sysMsg]);
+        }
+      })
+      // We accepted their request — friendships row inserted for us
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "friendships",
+        filter: `user_id=eq.${selfId}`,
+      }, async (payload) => {
+        const row = payload.new as { friend_id: string };
+        if (row.friend_id !== peerId) return;
+        // We just became friends with this person mid-chat — update label
+        const { data } = await client
+          .from("profiles")
+          .select("username")
+          .eq("id", peerId)
+          .maybeSingle();
+        if (data?.username) {
+          setPeerUsername(data.username);
+          const sysMsg: MessageRow = {
+            id: `sys-friend-${Date.now()}`,
+            clientKey: `sys-friend-${Date.now()}`,
+            room_id: roomId,
+            user_id: null,
+            content: `[system]You are now friends with ${data.username}`,
             created_at: new Date().toISOString(),
             is_from_ai: false,
           };
