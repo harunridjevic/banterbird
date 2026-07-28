@@ -212,9 +212,8 @@ begin
 end;
 $$;
 
--- ── 7. Realtime publication grants ───────────────────────────
--- Ensure these tables are tracked by Supabase Realtime
--- (also enable them in Dashboard → Database → Replication)
+-- Ensure friendships table is tracked by Supabase Realtime (run if not already done)
+-- alter publication supabase_realtime add table public.friendships;
 alter publication supabase_realtime add table public.friend_requests;
 alter publication supabase_realtime add table public.friendships;
 alter publication supabase_realtime add table public.dm_messages;

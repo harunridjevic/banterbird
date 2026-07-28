@@ -60,9 +60,35 @@ export async function shouldAcceptRoom(
 ): Promise<boolean> {
   const blocked = getSessionBlockedUsers();
   if (blocked.length === 0) return true;
+
   const peerId = await peerIdForRoom(client, roomId, selfId);
   if (!peerId) return true;
-  return !blocked.includes(peerId);
+
+  if (!blocked.includes(peerId)) return true;
+
+  // Peer is in session blocks — but session blocks may contain former friends
+  // who were skipped while the friendship was active. Check if they are a
+  // current friend (should be blocked from random match) or a former friend
+  // (should be allowed — they were unblocked by unfriending).
+  // We do this by checking: are they currently a friend in the DB?
+  const { data: friendship } = await client
+    .from("friendships")
+    .select("friend_id")
+    .eq("user_id", selfId)
+    .eq("friend_id", peerId)
+    .maybeSingle();
+
+  if (friendship) {
+    // Still a current friend — block this room (friends should use DMs)
+    return false;
+  }
+
+  // Former friend or unrelated block — clear the stale session block and allow
+  // (this only clears it for the current user; the other side is handled by
+  // the same logic on their own shouldAcceptRoom call)
+  const { unblockUserForSession } = await import("@/lib/moderation/session-block");
+  unblockUserForSession(peerId);
+  return true;
 }
 
 export async function rejectBlockedRoom(

@@ -444,13 +444,18 @@ export function MatchLobby() {
 
       const blockedIds = normalizeBlockedUserIds(getSessionBlockedUsers());
 
-      // Also exclude friends from AI practice matches — same as human matching
+      // Also exclude current friends from AI practice matches.
+      // Former friends are removed from blockedIds to make them matchable again.
       const { data: friendships } = await client
         .from("friendships")
         .select("friend_id")
         .eq("user_id", uid);
       const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
-      const allBlocked = Array.from(new Set([...blockedIds, ...friendIds]));
+      const friendIdSet = new Set(friendIds);
+
+      // Strip former friends from sessionStorage blocks (same logic as /api/match/try)
+      const modBlocked = blockedIds.filter((id) => !friendIdSet.has(id));
+      const allBlocked = Array.from(new Set([...modBlocked, ...friendIds]));
 
       const { data, error } = await client.rpc("try_match_ai_practice", {
         p_self_gender: activeSelfGender,

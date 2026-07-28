@@ -9,6 +9,7 @@ import { Avatar } from "./Avatar";
 import { DmConversation } from "./DmConversation";
 import type { FriendEntry, FriendProfile, IncomingRequest } from "./types";
 import { useFriendPresence } from "@/lib/hooks/use-friend-presence";
+import { unblockUserForSession } from "@/lib/moderation/session-block";
 
 type View = "list" | "dm";
 type UnreadMap = Record<string, number>;
@@ -72,6 +73,10 @@ export function FriendsPanel({
       .channel(`fp:fr:${currentUserId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "friend_requests", filter: `to_id=eq.${currentUserId}` }, () => void loadList())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "friend_requests", filter: `from_id=eq.${currentUserId}` }, () => void loadList())
+      // When either direction of the friendship is deleted, reload the list.
+      // This keeps both users' panels in sync when one side unfriends.
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "friendships", filter: `user_id=eq.${currentUserId}` }, () => void loadList())
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "friendships", filter: `friend_id=eq.${currentUserId}` }, () => void loadList())
       .subscribe();
     return () => { void supabase.removeChannel(ch); };
   }, [currentUserId, supabase, loadList]);
@@ -125,6 +130,8 @@ export function FriendsPanel({
   };
 
   const handleUnfriend = async (friendId: string) => {
+    // Remove from session blocks so they become matchable in anon chat again
+    unblockUserForSession(friendId);
     await fetch("/api/friends/unfriend", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

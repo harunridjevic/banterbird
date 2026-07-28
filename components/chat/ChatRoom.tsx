@@ -875,13 +875,27 @@ export function ChatRoom({ roomId }: Props) {
   );
 
   // ── Peer username resolution ────────────────────────────────
-  // When peerId is known, try to look up their profile. Updates live via
-  // friend_requests realtime (when peer accepts our request their profile
-  // becomes accessible and we swap "Stranger" for their username).
+  // Only show the peer's username if they are a CURRENT friend.
+  // Former friends or strangers always show as "Stranger".
   useEffect(() => {
     if (!peerId || isAiRoom || !ready) return;
     let cancelled = false;
     void (async () => {
+      // Check current friendship status first
+      const { data: friendship } = await client
+        .from("friendships")
+        .select("friend_id")
+        .eq("user_id", selfId!)
+        .eq("friend_id", peerId)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (!friendship) {
+        // Not friends — keep as Stranger
+        setPeerUsername(null);
+        return;
+      }
+      // Current friend — fetch their username
       const { data } = await client
         .from("profiles")
         .select("username")
@@ -890,7 +904,7 @@ export function ChatRoom({ roomId }: Props) {
       if (!cancelled && data?.username) setPeerUsername(data.username);
     })();
     return () => { cancelled = true; };
-  }, [peerId, isAiRoom, ready, client]);
+  }, [peerId, isAiRoom, ready, client, selfId]);
 
   // ── Friend request notifications in chat ────────────────────
   // Listen for friend_requests where to_id = selfId AND from_id = peerId.
