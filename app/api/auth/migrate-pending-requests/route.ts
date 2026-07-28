@@ -3,35 +3,39 @@ import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-/**
- * POST /api/auth/migrate-pending-requests
- * Called after an anonymous user signs up or signs in.
- * Migrates any pending friend requests addressed to their old
- * anonymous user ID to their new named account user ID.
- *
- * Body: { oldUserId: string }
- */
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const body = (await req.json()) as { oldUserId?: string };
+    const body = (await req.json()) as { oldUserId?: string; newUserId?: string };
     const oldUserId = body.oldUserId?.trim();
+    const explicitNewUserId = body.newUserId?.trim();
 
-    // If same ID or no old ID, nothing to migrate
-    if (!oldUserId || oldUserId === user.id) {
+    // Resolve the current user — try cookie session first, fall back to
+    // the explicitly passed newUserId (handles session timing race)
+    let newUserId: string | null = explicitNewUserId ?? null;
+
+    if (!newUserId) {
+      const cookieStore = await cookies();
+      const supabase = createClient(cookieStore);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      newUserId = user.id;
+    }
+
+    if (!oldUserId || oldUserId === newUserId) {
       return NextResponse.json({ ok: true, migrated: 0 });
     }
 
+    // Verify newUserId is a real user before migrating (security check)
     const svc = createServiceRoleClient();
+    const { data: targetUser } = await svc.auth.admin.getUserById(newUserId);
+    if (!targetUser?.user) {
+      return NextResponse.json({ error: "Target user not found" }, { status: 404 });
+    }
 
-    // Find pending friend requests sent TO the old anonymous ID
+    // Find pending friend requests sent to the old anonymous ID
     const { data: pending } = await svc
       .from("friend_requests")
-      .select("id, from_id, to_id, status")
+      .select("id, from_id")
       .eq("to_id", oldUserId)
       .eq("status", "pending");
 
@@ -39,27 +43,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, migrated: 0 });
     }
 
-    // Re-address each request to the new named user ID
     let migrated = 0;
-    for (const req of pending) {
-      // Skip if sender is the same as new user (self-request)
-      if (req.from_id === user.id) continue;
+    for (const request of pending) {
+      if (request.from_id === newUserId) continue;
 
-      // Check if request already exists for new user ID
       const { data: existing } = await svc
         .from("friend_requests")
         .select("id")
-        .eq("from_id", req.from_id)
-        .eq("to_id", user.id)
+        .eq("from_id", request.from_id)
+        .eq("to_id", newUserId)
         .maybeSingle();
 
       if (existing) continue;
 
-      // Update to_id to point at the new named user
       const { error } = await svc
         .from("friend_requests")
-        .update({ to_id: user.id })
-        .eq("id", req.id);
+        .update({ to_id: newUserId })
+        .eq("id", request.id);
 
       if (!error) migrated++;
     }

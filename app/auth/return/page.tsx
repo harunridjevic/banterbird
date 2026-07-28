@@ -40,14 +40,13 @@ export default function AuthReturnPage() {
         await fetch("/api/auth/migrate-pending-requests", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ oldUserId: oldAnonId }),
+          body: JSON.stringify({ oldUserId: oldAnonId, newUserId }),
         });
 
-        // Also try to migrate active room participation so the chat still works
         await fetch("/api/auth/migrate-room", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ oldUserId: oldAnonId }),
+          body: JSON.stringify({ oldUserId: oldAnonId, newUserId }),
         });
       }
 
