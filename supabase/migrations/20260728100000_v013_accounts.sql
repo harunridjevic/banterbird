@@ -239,6 +239,23 @@ $$;
 
 -- Ensure friendships table is tracked by Supabase Realtime (run if not already done)
 -- alter publication supabase_realtime add table public.friendships;
-alter publication supabase_realtime add table public.friend_requests;
-alter publication supabase_realtime add table public.friendships;
-alter publication supabase_realtime add table public.dm_messages;
+do $$
+begin
+  alter publication supabase_realtime add table public.friend_requests;
+exception when duplicate_object then
+  null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.friendships;
+exception when duplicate_object then
+  null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.dm_messages;
+exception when duplicate_object then
+  null;
+end $$;
