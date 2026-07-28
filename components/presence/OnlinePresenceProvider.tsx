@@ -51,6 +51,10 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
     const leaveOnline = () => {
       if (leavingRef.current) return;
+      // Don't fire presence/leave during an OAuth redirect — the user is
+      // coming back to the same chat. Clearing presence would end the room
+      // for the other person via end_user_active_rooms.
+      if (typeof window !== "undefined" && sessionStorage.getItem("banterbird:oauth_redirect") === "1") return;
       leavingRef.current = true;
 
       const ch = channelRef.current;

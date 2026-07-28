@@ -106,6 +106,9 @@ export function MatchLobby() {
       if (!ok) {
         releaseMatchClaim();
         await rejectBlockedRoom(client, roomId);
+        // Small backoff before re-entering the queue so both sides have time
+        // to register their blocked lists and avoid an immediate re-pair loop.
+        await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
         return false;
       }
       void client.rpc("leave_match_queue");
@@ -444,18 +447,27 @@ export function MatchLobby() {
 
       const blockedIds = normalizeBlockedUserIds(getSessionBlockedUsers());
 
-      // Also exclude current friends from AI practice matches.
-      // Former friends are removed from blockedIds to make them matchable again.
+      // Also exclude current friends and server-side skip blocks
       const { data: friendships } = await client
         .from("friendships")
         .select("friend_id")
         .eq("user_id", uid);
       const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
       const friendIdSet = new Set(friendIds);
-
-      // Strip former friends from sessionStorage blocks (same logic as /api/match/try)
       const modBlocked = blockedIds.filter((id) => !friendIdSet.has(id));
-      const allBlocked = Array.from(new Set([...modBlocked, ...friendIds]));
+
+      // Fetch DB session blocks (both directions)
+      const nowIso = new Date().toISOString();
+      const [{ data: asBlocker }, { data: asBlocked }] = await Promise.all([
+        client.from("session_blocks").select("blocked_id").eq("blocker_id", uid).gt("expires_at", nowIso),
+        client.from("session_blocks").select("blocker_id").eq("blocked_id", uid).gt("expires_at", nowIso),
+      ]);
+      const dbBlocked = [
+        ...((asBlocker ?? []).map((r: { blocked_id: string }) => r.blocked_id)),
+        ...((asBlocked ?? []).map((r: { blocker_id: string }) => r.blocker_id)),
+      ];
+
+      const allBlocked = Array.from(new Set([...modBlocked, ...friendIds, ...dbBlocked]));
 
       const { data, error } = await client.rpc("try_match_ai_practice", {
         p_self_gender: activeSelfGender,

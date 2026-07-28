@@ -47,13 +47,30 @@ export async function POST(req: Request) {
     const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
     const friendIdSet = new Set(friendIds);
 
-    // clientBlocked is sessionStorage — may contain former friends who were
-    // skipped while the friendship was active. Remove any ID from clientBlocked
-    // that is no longer a current friend so they become matchable again.
-    // Current friends are blocked via friendIds (DB-authoritative).
+    // Strip former friends from client blocks (they were unblocked on unfriend)
     const modBlocked = clientBlocked.filter((id) => !friendIdSet.has(id));
 
-    const allBlockedIds = Array.from(new Set([...modBlocked, ...friendIds]));
+    // Fetch server-side session blocks — users this person skipped OR
+    // users who skipped this person. Both directions prevent re-pairing.
+    const now = new Date().toISOString();
+    const { data: dbBlocksAsBlocker } = await supabase
+      .from("session_blocks")
+      .select("blocked_id")
+      .eq("blocker_id", user.id)
+      .gt("expires_at", now);
+
+    const { data: dbBlocksAsBlocked } = await supabase
+      .from("session_blocks")
+      .select("blocker_id")
+      .eq("blocked_id", user.id)
+      .gt("expires_at", now);
+
+    const dbBlocked = [
+      ...((dbBlocksAsBlocker ?? []).map((r: { blocked_id: string }) => r.blocked_id)),
+      ...((dbBlocksAsBlocked ?? []).map((r: { blocker_id: string }) => r.blocker_id)),
+    ];
+
+    const allBlockedIds = Array.from(new Set([...modBlocked, ...friendIds, ...dbBlocked]));
 
     const { data: roomId, error } = await supabase.rpc("try_match", {
       p_self_gender: body.selfGender ?? "male",

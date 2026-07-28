@@ -172,6 +172,9 @@ export function ChatRoom({ roomId }: Props) {
 
   const endRoomBeacon = useCallback(() => {
     if (unloadBeaconSentRef.current) return;
+    // Don't end the room if the user is doing an OAuth redirect -
+    // they're coming back to this chat after signing in.
+    if (typeof window !== "undefined" && sessionStorage.getItem("banterbird:oauth_redirect") === "1") return;
     unloadBeaconSentRef.current = true;
     tabCloseFetch("/api/chat/end-room", { roomId });
     tabCloseFetch("/api/presence/leave");
@@ -264,7 +267,10 @@ export function ChatRoom({ roomId }: Props) {
     if (!accept) {
       await rejectBlockedRoom(client, roomId);
       router.replace("/");
-      window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
+      // Delay before re-matching so blocked list propagates on both sides
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
+      }, 1500 + Math.random() * 1000);
       return;
     }
 
@@ -541,11 +547,14 @@ export function ChatRoom({ roomId }: Props) {
     async (clearFilters: boolean, blockPeer = false) => {
       resetInactivityStrikes();
       if (peerId && !isAiRoom) {
-        // Always session-block the peer on skip so they aren't re-matched this session.
-        // The back button passes clearFilters=true and blockPeer=false — we still
-        // block on skip (blockPeer=true) but NOT on back.
         if (blockPeer) {
           blockUserForSession(peerId);
+          // Also register server-side so try_match excludes this pair for both users
+          void fetch("/api/match/block", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ blockedId: peerId }),
+          });
         }
       }
       await endRoomAndGoMatch(clearFilters);
@@ -555,8 +564,14 @@ export function ChatRoom({ roomId }: Props) {
 
   const leaveForInactivity = useCallback(async () => {
     recordInactivitySkip();
-    // Block peer on inactivity skip too — same as manual skip
-    if (peerId && !isAiRoom) blockUserForSession(peerId);
+    if (peerId && !isAiRoom) {
+      blockUserForSession(peerId);
+      void fetch("/api/match/block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockedId: peerId }),
+      });
+    }
     await endRoomAndGoMatch(false);
   }, [endRoomAndGoMatch, peerId, isAiRoom]);
 

@@ -46,16 +46,45 @@ export function SignUpForm({
 
     const redirectTo = `${typeof window !== "undefined" ? window.location.origin : "https://banterbird.app"}/auth/callback`;
 
-    const { data, error: authErr } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: redirectTo },
-    });
+    // Check if current session is anonymous — if so, upgrade it in-place
+    // by calling updateUser instead of signUp. This preserves the user ID
+    // so active chat rooms, friend requests, and presence all keep working.
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    const isAnon = currentSession?.user
+      ? ((currentSession.user as { is_anonymous?: boolean }).is_anonymous ?? false)
+      : false;
 
-    if (authErr || !data.user) {
-      setError(authErr?.message ?? "Sign-up failed.");
-      setLoading(false);
-      return;
+    let userId: string | null = null;
+    let needsEmailConfirm = false;
+
+    if (isAnon) {
+      // Upgrade anonymous → named by attaching email + password
+      const { data: updateData, error: updateErr } = await supabase.auth.updateUser({
+        email,
+        password,
+      });
+      if (updateErr || !updateData.user) {
+        setError(updateErr?.message ?? "Sign-up failed.");
+        setLoading(false);
+        return;
+      }
+      userId = updateData.user.id;
+      // updateUser with email requires confirmation if email confirm is on
+      needsEmailConfirm = !currentSession;
+    } else {
+      // Fresh sign-up (no anonymous session)
+      const { data, error: authErr } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (authErr || !data.user) {
+        setError(authErr?.message ?? "Sign-up failed.");
+        setLoading(false);
+        return;
+      }
+      userId = data.user.id;
+      needsEmailConfirm = !data.session;
     }
 
     // Save username via server route (service role bypasses RLS race condition
@@ -76,7 +105,7 @@ export function SignUpForm({
     setLoading(false);
 
     // No session = email confirmation required
-    if (!data.session) {
+    if (needsEmailConfirm) {
       setAwaitingVerification(true);
       return;
     }

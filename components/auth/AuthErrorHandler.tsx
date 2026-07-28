@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, X } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 
 type AuthError = {
   title: string;
   message: string;
+  /** When true, automatically trigger a normal Google sign-in after a short delay */
+  autoSignIn?: boolean;
 };
 
-/** Maps Supabase error codes to friendly copy */
 function parseAuthError(params: URLSearchParams): AuthError | null {
   const error = params.get("error");
   const code = params.get("error_code");
@@ -23,52 +25,74 @@ function parseAuthError(params: URLSearchParams): AuthError | null {
       message: "This link has expired. Please request a new one and try again.",
     };
   }
+
+  if (
+    error === "access_denied" && (
+      description?.toLowerCase().includes("already linked") ||
+      description?.toLowerCase().includes("identity is already")
+    )
+  ) {
+    return {
+      title: "Signing you in…",
+      message: "This Google account is linked to an existing BanterBird account. Signing you in now.",
+      autoSignIn: true,
+    };
+  }
+
   if (error === "access_denied") {
     return {
       title: "Access denied",
       message: description ?? "This link is invalid or has already been used. Please try again.",
     };
   }
+
   if (code === "email_not_confirmed") {
     return {
       title: "Email not verified",
       message: "Please verify your email address before signing in.",
     };
   }
+
   if (description) {
-    return {
-      title: "Something went wrong",
-      message: description,
-    };
+    return { title: "Something went wrong", message: description };
   }
-  return {
-    title: "Something went wrong",
-    message: "An unexpected error occurred. Please try again.",
-  };
+
+  return { title: "Something went wrong", message: "An unexpected error occurred. Please try again." };
 }
 
-/**
- * Mounts invisibly in the app root. On page load it checks the URL hash
- * for Supabase auth errors (e.g. expired OTP links), shows a dismissible
- * banner, then cleans the hash from the URL so it doesn't persist.
- */
 export function AuthErrorHandler() {
   const [authError, setAuthError] = useState<AuthError | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const hash = window.location.hash.slice(1); // strip leading #
+    const hash = window.location.hash.slice(1);
     if (!hash) return;
 
     const params = new URLSearchParams(hash);
     const parsed = parseAuthError(params);
 
-    if (parsed) {
+    if (!parsed) return;
+
+    // Clean URL immediately
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+    if (parsed.autoSignIn) {
+      // The "already linked" error means their Google account belongs to an
+      // existing named user. Sign out the anonymous session and do a normal
+      // Google sign-in so they land in their existing account.
+      const supabase = createClient();
+      void supabase.auth.signOut({ scope: "local" }).then(() => {
+        const redirectTo = `${window.location.origin}/auth/callback`;
+        void supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo },
+        });
+      });
+      // Show a brief message while redirecting
       setAuthError(parsed);
-      // Clean the URL — remove the hash entirely without triggering a reload
-      const clean = window.location.pathname + window.location.search;
-      window.history.replaceState(null, "", clean);
+    } else {
+      setAuthError(parsed);
     }
   }, []);
 
@@ -84,24 +108,40 @@ export function AuthErrorHandler() {
           role="alert"
           aria-live="assertive"
         >
-          <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-white px-4 py-3.5 shadow-xl dark:border-rose-900/50 dark:bg-navy-900">
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+          <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3.5 shadow-xl ${
+            authError.autoSignIn
+              ? "border-blue-200 bg-white dark:border-blue-900/50 dark:bg-navy-900"
+              : "border-rose-200 bg-white dark:border-rose-900/50 dark:bg-navy-900"
+          }`}>
+            <AlertCircle className={`mt-0.5 h-5 w-5 shrink-0 ${
+              authError.autoSignIn ? "text-blue-500" : "text-rose-500"
+            }`} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">
+              <p className={`text-sm font-semibold ${
+                authError.autoSignIn
+                  ? "text-blue-700 dark:text-blue-400"
+                  : "text-rose-700 dark:text-rose-400"
+              }`}>
                 {authError.title}
               </p>
-              <p className="mt-0.5 text-sm text-rose-600/80 dark:text-rose-400/80">
+              <p className={`mt-0.5 text-sm ${
+                authError.autoSignIn
+                  ? "text-blue-600/80 dark:text-blue-400/80"
+                  : "text-rose-600/80 dark:text-rose-400/80"
+              }`}>
                 {authError.message}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setAuthError(null)}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-rose-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/30"
-              aria-label="Dismiss"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {!authError.autoSignIn && (
+              <button
+                type="button"
+                onClick={() => setAuthError(null)}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-rose-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/30"
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </motion.div>
       )}
