@@ -107,9 +107,6 @@ export default function OpsUsersPage() {
     );
   }
 
-  const namedCount = users.filter((u) => !u.is_anonymous && u.username).length;
-  const anonCount = users.filter((u) => u.is_anonymous).length;
-
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-5xl">
@@ -120,19 +117,18 @@ export default function OpsUsersPage() {
           <h1 className="text-2xl font-bold text-white">Users</h1>
         </div>
         <p className="mt-1 text-sm text-navy-400">
-          All registered and anonymous users · {total.toLocaleString()} total
+          Registered accounts only · {total.toLocaleString()} shown
         </p>
 
-        {/* Summary pills */}
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="rounded-xl border border-white/10 bg-navy-900/40 px-3 py-1.5 text-xs text-navy-300">
-            {total.toLocaleString()} total
+            {total.toLocaleString()} registered accounts
           </span>
           <span className="rounded-xl border border-white/10 bg-navy-900/40 px-3 py-1.5 text-xs text-navy-300">
-            {namedCount} named (this page)
+            {users.filter((u) => u.provider === "google").length} via Google (this page)
           </span>
           <span className="rounded-xl border border-white/10 bg-navy-900/40 px-3 py-1.5 text-xs text-navy-300">
-            {anonCount} anonymous (this page)
+            {users.filter((u) => u.provider === "email").length} via email (this page)
           </span>
         </div>
 

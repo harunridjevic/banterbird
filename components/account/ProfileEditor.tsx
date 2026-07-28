@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Camera, Lock, LogOut, Mail } from "lucide-react";
+import { Camera, Lock, LogOut, Mail, X } from "lucide-react";
 import { InlineSpinner } from "@/components/ui/Loading";
 import { FormField } from "./FormField";
 import type { Profile } from "@/lib/account/types";
@@ -68,6 +68,8 @@ export function ProfileEditor({
   };
 
   const uploadAvatar = async (userId: string): Promise<string | null> => {
+    // Explicitly cleared — set to null
+    if (!avatarPreview && !avatarFile) return null;
     if (!avatarFile) return avatarPreview;
     const ext = avatarFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
     const safeExt = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) ? ext : "jpg";
@@ -189,32 +191,53 @@ export function ProfileEditor({
   };
 
   return (
-    <div className="space-y-5">
-      <form onSubmit={handleSave} className="space-y-4">
+    <div className="flex h-full flex-col">
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+        <form id="profile-form" onSubmit={handleSave} className="space-y-4">
         {/* Avatar */}
         <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="group relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border-2 border-navy-200/70 bg-navy-100 transition hover:border-navy-400 dark:border-white/10 dark:bg-navy-800 dark:hover:border-white/30"
-            aria-label="Change profile picture"
-          >
-            {avatarPreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarPreview} alt="Your avatar" className="h-full w-full object-cover" />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-navy-400 dark:text-navy-500">
-                {(username || "?")[0]?.toUpperCase()}
-              </span>
-            )}
-            <div className="absolute inset-0 flex items-center justify-center bg-navy-950/50 opacity-0 transition group-hover:opacity-100">
-              <Camera className="h-5 w-5 text-white" />
-            </div>
-          </button>
+          <div className="shrink-0">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="group relative h-16 w-16 overflow-hidden rounded-2xl border-2 border-navy-200/70 bg-navy-100 transition hover:border-navy-400 dark:border-white/10 dark:bg-navy-800 dark:hover:border-white/30"
+              aria-label="Change profile picture"
+            >
+              {avatarPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarPreview} alt="Your avatar" className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-navy-400 dark:text-navy-500">
+                  {(username || "?")[0]?.toUpperCase()}
+                </span>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center bg-navy-950/50 opacity-0 transition group-hover:opacity-100">
+                <Camera className="h-5 w-5 text-white" />
+              </div>
+            </button>
+          </div>
           <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleAvatarChange} />
           <div className="min-w-0">
             <p className="truncate font-semibold text-navy-950 dark:text-navy-50">{profile.username ?? "No username set"}</p>
-            <p className="text-xs text-navy-500 dark:text-navy-400">{avatarFile ? "New photo ready to save" : "Tap photo to change"}</p>
+            <p className="text-xs text-navy-500 dark:text-navy-400">
+              {avatarFile ? "New photo ready to save" : avatarPreview ? "Tap to change" : "Tap to add a photo"}
+            </p>
+            {avatarPreview && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAvatarPreview(null);
+                  setAvatarFile(null);
+                  if (fileRef.current) fileRef.current.value = "";
+                }}
+                className="mt-1 flex items-center gap-1 text-xs text-navy-400 transition hover:text-rose-500 dark:text-navy-500 dark:hover:text-rose-400"
+                aria-label="Remove profile picture"
+              >
+                <X className="h-3 w-3" />
+                Remove photo
+              </button>
+            )}
           </div>
         </div>
 
@@ -294,8 +317,15 @@ export function ProfileEditor({
           <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">{success}</p>
         )}
 
+        </form>
+      </div>
+
+      {/* Sticky bottom action bar */}
+      <div className="shrink-0 space-y-2 border-t border-navy-200/60 bg-[var(--glass-bg)] px-0 pt-4 dark:border-white/10"
+           style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
         <button
           type="submit"
+          form="profile-form"
           disabled={saving}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-navy-900 py-3 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:opacity-60 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"
         >
@@ -312,45 +342,41 @@ export function ProfileEditor({
           Sign out
         </button>
 
-        {/* Close account */}
-        <div className="pt-1">
-          {confirmDelete ? (
-            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 space-y-3">
-              <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">
-                Are you sure? This is permanent.
-              </p>
-              <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
-                Your account, profile, friends and all messages will be deleted. This cannot be undone.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteAccount()}
-                  disabled={deletingAccount}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
-                >
-                  {deletingAccount ? <InlineSpinner className="h-4 w-4" /> : "Yes, delete my account"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="rounded-xl border border-navy-200/70 px-4 py-2.5 text-sm font-semibold text-navy-600 transition hover:bg-navy-100 dark:border-white/10 dark:text-navy-400 dark:hover:bg-navy-800"
-                >
-                  Cancel
-                </button>
-              </div>
+        {/* Close account — under sign out */}
+        {confirmDelete ? (
+          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 space-y-3">
+            <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">Are you sure? This is permanent.</p>
+            <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
+              Your account, profile, friends and all messages will be deleted. This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleDeleteAccount()}
+                disabled={deletingAccount}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+              >
+                {deletingAccount ? <InlineSpinner className="h-4 w-4" /> : "Yes, delete my account"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="rounded-xl border border-navy-200/70 px-4 py-2.5 text-sm font-semibold text-navy-600 transition hover:bg-navy-100 dark:border-white/10 dark:text-navy-400 dark:hover:bg-navy-800"
+              >
+                Cancel
+              </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="w-full text-center text-xs text-navy-400 underline-offset-2 transition hover:text-rose-500 hover:underline dark:text-navy-500 dark:hover:text-rose-400"
-            >
-              Close account
-            </button>
-          )}
-        </div>
-      </form>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="w-full text-center text-xs text-navy-400 underline-offset-2 transition hover:text-rose-500 hover:underline dark:text-navy-500 dark:hover:text-rose-400"
+          >
+            Close account
+          </button>
+        )}
+      </div>
     </div>
   );
 }

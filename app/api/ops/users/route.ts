@@ -25,33 +25,49 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(Number(searchParams.get("limit") ?? "50"), 100);
-  const offset = Number(searchParams.get("offset") ?? "0");
   const search = searchParams.get("q")?.trim() ?? "";
 
   const svc = createServiceRoleClient();
 
-  // Fetch users from auth.users via admin API (paginated)
-  const { data: authData, error: authErr } = await svc.auth.admin.listUsers({
-    page: Math.floor(offset / limit) + 1,
-    perPage: limit,
+  // Fetch ALL users across all pages (admin API pages at 1000/page max)
+  // We do this so we can filter client-side and return accurate counts.
+  let allUsers: Awaited<ReturnType<typeof svc.auth.admin.listUsers>>["data"]["users"] = [];
+  let page = 1;
+  const perPage = 1000;
+
+  while (true) {
+    const { data, error } = await svc.auth.admin.listUsers({ page, perPage });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    allUsers = [...allUsers, ...data.users];
+    if (data.users.length < perPage) break;
+    page++;
+    if (page > 20) break; // safety cap at 20k users
+  }
+
+  // Keep only real registered accounts:
+  // - Has an email address (anonymous sessions never have one)
+  // - Provider is not just "anonymous"
+  const registeredUsers = allUsers.filter((u) => {
+    const provider = (u.app_metadata?.provider as string | undefined) ?? "";
+    const hasEmail = typeof u.email === "string" && u.email.trim().length > 0;
+    const isAnon = provider === "anonymous" || (u.is_anonymous === true && !hasEmail);
+    return hasEmail && !isAnon;
   });
 
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 });
+  const userIds = registeredUsers.map((u) => u.id);
 
-  const users = authData.users;
-  const userIds = users.map((u) => u.id);
-
-  // Fetch profiles for these users
+  // Fetch profiles
   const { data: profiles } = userIds.length > 0
     ? await svc.from("profiles").select("id,username,avatar_url").in("id", userIds)
     : { data: [] };
 
-  const profileMap = new Map((profiles ?? []).map((p: { id: string; username: string | null; avatar_url: string | null }) => [p.id, p]));
+  const profileMap = new Map(
+    (profiles ?? []).map((p: { id: string; username: string | null; avatar_url: string | null }) => [p.id, p])
+  );
 
-  let rows: OpsUserRow[] = users.map((u) => {
+  let rows: OpsUserRow[] = registeredUsers.map((u) => {
     const profile = profileMap.get(u.id);
-    const provider = u.app_metadata?.provider ?? "email";
+    const provider = (u.app_metadata?.provider as string | undefined) ?? "email";
     return {
       id: u.id,
       email: u.email ?? null,
@@ -60,11 +76,14 @@ export async function GET(req: Request) {
       provider,
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at ?? null,
-      is_anonymous: u.is_anonymous ?? false,
+      is_anonymous: false,
     };
   });
 
-  // Client-side search filter (admin API doesn't support full-text search)
+  // Sort newest first
+  rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // Search filter
   if (search) {
     const q = search.toLowerCase();
     rows = rows.filter(
@@ -77,7 +96,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     users: rows,
-    total: authData.total ?? rows.length,
-    hasMore: offset + limit < (authData.total ?? 0),
+    total: rows.length,
+    hasMore: false,
   });
 }
