@@ -5,6 +5,7 @@
 -- Fix profiles table RLS - remove public read access
 -- =========================================================
 drop policy if exists "profiles: public read" on public.profiles;
+drop policy if exists "profiles: authenticated read" on public.profiles;
 
 -- Replace with restricted read: only allow reading profiles if you're authenticated
 -- AND only expose non-sensitive fields (username, display_name, avatar_url)
