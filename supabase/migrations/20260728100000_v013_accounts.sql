@@ -34,6 +34,11 @@ create trigger trg_profiles_updated_at
 -- Row Level Security
 alter table public.profiles enable row level security;
 
+-- Drop existing policies if they exist
+drop policy if exists "profiles: public read" on public.profiles;
+drop policy if exists "profiles: owner update" on public.profiles;
+drop policy if exists "profiles: owner insert" on public.profiles;
+
 -- Anyone can read public profile fields
 create policy "profiles: public read" on public.profiles
   for select using (true);
@@ -89,6 +94,12 @@ create trigger trg_friend_requests_updated_at
 
 alter table public.friend_requests enable row level security;
 
+-- Drop existing policies if they exist
+drop policy if exists "friend_requests: sender insert" on public.friend_requests;
+drop policy if exists "friend_requests: parties read" on public.friend_requests;
+drop policy if exists "friend_requests: recipient update" on public.friend_requests;
+drop policy if exists "friend_requests: sender delete" on public.friend_requests;
+
 -- Sender can create a request
 create policy "friend_requests: sender insert" on public.friend_requests
   for insert with check (auth.uid() = from_id);
@@ -119,6 +130,11 @@ create index if not exists friendships_friend_idx on public.friendships (friend_
 
 alter table public.friendships enable row level security;
 
+-- Drop existing policies if they exist
+drop policy if exists "friendships: own read" on public.friendships;
+drop policy if exists "friendships: service insert" on public.friendships;
+drop policy if exists "friendships: own delete" on public.friendships;
+
 create policy "friendships: own read" on public.friendships
   for select using (auth.uid() = user_id);
 
@@ -144,6 +160,10 @@ create index if not exists dm_rooms_user_b_idx on public.dm_rooms (user_b);
 
 alter table public.dm_rooms enable row level security;
 
+-- Drop existing policies if they exist
+drop policy if exists "dm_rooms: parties read" on public.dm_rooms;
+drop policy if exists "dm_rooms: parties insert" on public.dm_rooms;
+
 create policy "dm_rooms: parties read" on public.dm_rooms
   for select using (auth.uid() = user_a or auth.uid() = user_b);
 
@@ -164,6 +184,11 @@ create table if not exists public.dm_messages (
 create index if not exists dm_messages_room_idx on public.dm_messages (room_id, created_at);
 
 alter table public.dm_messages enable row level security;
+
+-- Drop existing policies if they exist
+drop policy if exists "dm_messages: parties read" on public.dm_messages;
+drop policy if exists "dm_messages: sender insert" on public.dm_messages;
+drop policy if exists "dm_messages: recipient read-mark" on public.dm_messages;
 
 -- Only room participants can read
 create policy "dm_messages: parties read" on public.dm_messages
