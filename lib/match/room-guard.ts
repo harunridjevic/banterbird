@@ -24,15 +24,9 @@ export async function checkMatchAccess(
       }
     }
 
-    if (res.status === 403) {
-      return { allowed: false, reason: "blocked" };
-    }
-    if (res.status === 401) {
-      return { allowed: false, reason: "unauthorized" };
-    }
-    if (!res.ok) {
-      return { allowed: false, reason: "error" };
-    }
+    if (res.status === 403) return { allowed: false, reason: "blocked" };
+    if (res.status === 401) return { allowed: false, reason: "unauthorized" };
+    if (!res.ok) return { allowed: false, reason: "error" };
     return { allowed: true };
   } catch {
     return { allowed: false, reason: "error" };
@@ -58,16 +52,54 @@ export async function shouldAcceptRoom(
   roomId: string,
   selfId: string,
 ): Promise<boolean> {
-  const blocked = getSessionBlockedUsers();
-  if (blocked.length === 0) return true;
+  const sessionBlocked = getSessionBlockedUsers();
+  if (sessionBlocked.length === 0) return true;
+
   const peerId = await peerIdForRoom(client, roomId, selfId);
   if (!peerId) return true;
-  return !blocked.includes(peerId);
+
+  if (!sessionBlocked.includes(peerId)) return true;
+
+  // Peer is session-blocked. Two cases:
+  // 1. They were blocked by an explicit skip (blockPeer=true) — respect the block.
+  // 2. They ended up in session storage as a stale entry from when they were
+  //    a friend who got skipped while the friendship was active, and then the
+  //    friendship was ended. In this case unblockUserForSession was called
+  //    when unfriending — so if they're still in the list here, it IS a
+  //    real skip block. Respect it.
+  //
+  // Exception: if they are currently a friend in the DB, this is a friend who
+  // was skipped (e.g. during an anonymous chat before becoming friends).
+  // Friends should not be matched randomly — block the room.
+  const { data: friendship } = await client
+    .from("friendships")
+    .select("friend_id")
+    .eq("user_id", selfId)
+    .eq("friend_id", peerId)
+    .maybeSingle();
+
+  if (friendship) {
+    // Current friend matched randomly — reject so they use DMs instead
+    return false;
+  }
+
+  // Not a current friend and in session blocks = explicit skip. Block.
+  return false;
 }
 
 export async function rejectBlockedRoom(
   client: SupabaseClient,
   roomId: string,
 ): Promise<void> {
-  await client.rpc("end_active_room", { p_room_id: roomId });
+  // Leave the room one-sidedly — don't end it for the other user.
+  // Using leave_match_queue + end_active_room would kill the room for both
+  // people and cause a re-match loop. Instead we just remove ourselves from
+  // the room so the other user can re-match freely.
+  try {
+    await client.rpc("leave_active_room", { p_room_id: roomId });
+  } catch {
+    // Fallback: if leave_active_room RPC doesn't exist, end the room
+    // (older schema). This may cause a brief re-match but avoids getting stuck.
+    await client.rpc("end_active_room", { p_room_id: roomId });
+  }
 }

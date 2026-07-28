@@ -90,7 +90,7 @@ export function MatchLobby() {
       if (matchedRoomIdRef.current) return true;
       if (isMatchingPausedForInactivity()) return false;
 
-      // Claim immediately — effect restarts / AI fallback must not wipe this.
+      // Claim immediately - effect restarts / AI fallback must not wipe this.
       matchedRoomIdRef.current = roomId;
       navigatedRef.current = true;
       cancelledRef.current = true;
@@ -106,6 +106,9 @@ export function MatchLobby() {
       if (!ok) {
         releaseMatchClaim();
         await rejectBlockedRoom(client, roomId);
+        // Small backoff before re-entering the queue so both sides have time
+        // to register their blocked lists and avoid an immediate re-pair loop.
+        await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
         return false;
       }
       void client.rpc("leave_match_queue");
@@ -196,7 +199,7 @@ export function MatchLobby() {
       return;
     }
 
-    // Already claimed a room this session — do not reset and re-poll (kills rematch).
+    // Already claimed a room this session - do not reset and re-poll (kills rematch).
     if (matchedRoomIdRef.current || navigatedRef.current) {
       setIsMatching(false);
       return;
@@ -371,7 +374,7 @@ export function MatchLobby() {
 
     return () => {
       stopMatchingLoops();
-      // Only cancel if we never claimed a room — otherwise a deps flicker would abort navigation.
+      // Only cancel if we never claimed a room - otherwise a deps flicker would abort navigation.
       if (!matchedRoomIdRef.current) {
         cancelledRef.current = true;
         setIsMatching(false);
@@ -443,10 +446,33 @@ export function MatchLobby() {
       if (!uid) return;
 
       const blockedIds = normalizeBlockedUserIds(getSessionBlockedUsers());
+
+      // Also exclude current friends and server-side skip blocks
+      const { data: friendships } = await client
+        .from("friendships")
+        .select("friend_id")
+        .eq("user_id", uid);
+      const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
+      const friendIdSet = new Set(friendIds);
+      const modBlocked = blockedIds.filter((id) => !friendIdSet.has(id));
+
+      // Fetch DB session blocks (both directions)
+      const nowIso = new Date().toISOString();
+      const [{ data: asBlocker }, { data: asBlocked }] = await Promise.all([
+        client.from("session_blocks").select("blocked_id").eq("blocker_id", uid).gt("expires_at", nowIso),
+        client.from("session_blocks").select("blocker_id").eq("blocked_id", uid).gt("expires_at", nowIso),
+      ]);
+      const dbBlocked = [
+        ...((asBlocker ?? []).map((r: { blocked_id: string }) => r.blocked_id)),
+        ...((asBlocked ?? []).map((r: { blocker_id: string }) => r.blocker_id)),
+      ];
+
+      const allBlocked = Array.from(new Set([...modBlocked, ...friendIds, ...dbBlocked]));
+
       const { data, error } = await client.rpc("try_match_ai_practice", {
         p_self_gender: activeSelfGender,
         p_wants_gender: activeWantsGender,
-        p_blocked_user_ids: blockedIds,
+        p_blocked_user_ids: allBlocked,
       });
       if (error || !alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
         return;

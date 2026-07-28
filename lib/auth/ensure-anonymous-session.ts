@@ -34,7 +34,7 @@ function isNetworkError(error: AuthError | null): boolean {
   return m.includes("failed to fetch") || m.includes("network");
 }
 
-/** DB rejected auth.uid() — common after ops reset deletes auth users while tabs stay open. */
+/** DB rejected auth.uid() - common after ops reset deletes auth users while tabs stay open. */
 export function isStaleUserDbError(message: string): boolean {
   const m = message.toLowerCase();
   return (
@@ -113,7 +113,7 @@ export async function ensureAnonymousSession(
   return inFlight;
 }
 
-/** Lightweight check — does not trigger sign-in. */
+/** Lightweight check - does not trigger sign-in. */
 export async function hasAuthenticatedSession(client: SupabaseClient): Promise<boolean> {
   const {
     data: { session },

@@ -122,12 +122,12 @@ export function formatBotSelfMemoryBlock(
   if (parts.length === 0) {
     return [
       `Your identity: ${persona.genderTag} from ${persona.country}.`,
-      "Share age or location only when they ask — once each per chat, never volunteer the same fact twice.",
+      "Share age or location only when they ask, once each per chat, never volunteer the same fact twice.",
     ].join(" ");
   }
 
   return [
-    `Already told them this chat — DO NOT repeat: ${parts.join(", ")}.`,
+    `Already told them this chat, DO NOT repeat: ${parts.join(", ")}.`,
     'If they ask again, tease ("lol i already said") instead of re-stating the same number.',
     "You may share NEW facts you have not mentioned yet, but never re-introduce age/location you already gave.",
   ].join(" ");
@@ -207,17 +207,17 @@ export function formatUserMemoryBlock(mem: UserMemory, persona?: BotPersona): st
   if (mem.name) parts.push(`name/call them: ${mem.name}`);
   if (mem.sexualVibe) {
     if (persona && personaAllowsSexualChat(persona, true)) {
-      parts.push("vibe: flirty/sexual — match with explicit dirty text chat");
+      parts.push("vibe: flirty/sexual, match with explicit dirty text chat");
     } else {
-      parts.push("vibe: they got sexual — you are NOT into it; deflect or skip");
+      parts.push("vibe: they got sexual, you are NOT into it; deflect or skip");
     }
   }
 
   if (parts.length === 0) {
-    return "Known about them so far: nothing solid yet — ask age/location if curious.";
+    return "Known about them so far: nothing solid yet, ask age/location if curious.";
   }
 
-  return `Known about them (they already told you — DO NOT forget):\n- ${parts.join("\n- ")}`;
+  return `Known about them (they already told you, DO NOT forget):\n- ${parts.join("\n- ")}`;
 }
 
 export function isDryConversation(history: ChatTurn[]): boolean {
@@ -317,7 +317,7 @@ export function formatRecentBotLinesBlock(history: ChatTurn[]): string {
     .filter(Boolean);
   if (botLines.length === 0) return "";
   return [
-    "You already said in this chat (stay consistent — do NOT contradict):",
+    "You already said in this chat (stay consistent, do NOT contradict):",
     ...botLines.map((l) => `- "${l}"`),
   ].join("\n");
 }
@@ -464,7 +464,7 @@ export function hasContradictoryReplyBatch(lines: string[]): boolean {
   return hasLove && deniesLove;
 }
 
-/** Drop contradictory follow-up lines — keep the first line only. */
+/** Drop contradictory follow-up lines - keep the first line only. */
 export function trimContradictoryReplyLines(lines: string[]): string[] {
   if (!hasContradictoryReplyBatch(lines)) return lines;
   return lines.length > 0 ? [lines[0]!] : lines;
@@ -520,7 +520,7 @@ export function isGenericCannedLine(text: string): boolean {
   );
 }
 
-/** User is reacting/acknowledging ("that's cool", "nice", "lol yeah") — not being vague. */
+/** User is reacting/acknowledging ("that's cool", "nice", "lol yeah"), not being vague. */
 export function isUserReactionOrAck(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/[!?.]+$/g, "").trim();
   if (!t || t.length > 32) return false;
@@ -583,7 +583,7 @@ export function contextualFallbackReply(
   return ["hey"];
 }
 
-/** Last-resort stub when the LLM fails mid-chat — not random one-word vibes. */
+/** Last-resort stub when the LLM fails mid-chat, not random one-word vibes. */
 export function midChatStubReply(history: ChatTurn[], allowSexual: boolean): string[] {
   const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
   const t = lastUser.trim();

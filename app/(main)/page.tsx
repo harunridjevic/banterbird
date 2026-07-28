@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { MatchLobby } from "@/components/match/MatchLobby";
 import { AgeGateWrapper } from "@/components/legal/AgeGateWrapper";
+import { SignInNudge } from "@/components/account/SignInNudge";
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 
 export const metadata: Metadata = {
   title: {
-    absolute: "BanterBird — Free Anonymous Chat Online (No Signup)",
+    absolute: "BanterBird - Free Anonymous Chat Online (No Signup)",
   },
   description:
     "BanterBird is free anonymous chat online with no signup and no download. Start instant 1-on-1 anonymous text chat with random people. Private, fast, and built for real conversation.",
@@ -44,24 +45,24 @@ export const metadata: Metadata = {
   },
   openGraph: {
     url: baseUrl,
-    title: "BanterBird — Free Anonymous Chat Online",
+    title: "BanterBird - Free Anonymous Chat Online",
     description:
-      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat on BanterBird.",
+      "Free anonymous chat online, no signup. Instant 1-on-1 anonymous text chat on BanterBird.",
     siteName: "BanterBird",
     images: [
       {
         url: "/logo_search.png",
         width: 1200,
         height: 630,
-        alt: "BanterBird — Anonymous Chat",
+        alt: "BanterBird - Anonymous Chat",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "BanterBird — Free Anonymous Chat Online",
+    title: "BanterBird - Free Anonymous Chat Online",
     description:
-      "Free anonymous chat online — no signup. Instant 1-on-1 anonymous text chat on BanterBird.",
+      "Free anonymous chat online, no signup. Instant 1-on-1 anonymous text chat on BanterBird.",
     images: ["/logo_search.png"],
   },
   robots: {
@@ -75,8 +76,9 @@ export default function HomePage() {
     <AgeGateWrapper>
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 sm:px-6">
         <div className="w-full max-w-2xl -translate-y-5 sm:-translate-y-8">
-          <h1 className="sr-only">BanterBird — free anonymous chat online</h1>
+          <h1 className="sr-only">BanterBird - free anonymous chat online</h1>
           <MatchLobby />
+          <SignInNudge />
         </div>
       </div>
     </AgeGateWrapper>

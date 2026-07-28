@@ -20,14 +20,17 @@ import { tabCloseFetch } from "@/lib/presence/tab-close-fetch";
 
 type OnlinePresenceCtx = {
   onlineCount: number;
+  /** Set of user IDs currently online — derived from presence state */
+  onlineUserIds: Set<string>;
 };
 
-const OnlinePresenceContext = createContext<OnlinePresenceCtx>({ onlineCount: 0 });
+const OnlinePresenceContext = createContext<OnlinePresenceCtx>({ onlineCount: 0, onlineUserIds: new Set() });
 
 export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
   const { client, ready } = useSupabase();
   const pathname = usePathname();
   const [onlineCount, setOnlineCount] = useState(0);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const channelRef = useRef<RealtimeChannel | null>(null);
   const leavingRef = useRef(false);
   const sessionUserIdRef = useRef<string | null>(null);
@@ -48,6 +51,10 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
     const leaveOnline = () => {
       if (leavingRef.current) return;
+      // Don't fire presence/leave during an OAuth redirect — the user is
+      // coming back to the same chat. Clearing presence would end the room
+      // for the other person via end_user_active_rooms.
+      if (typeof window !== "undefined" && sessionStorage.getItem("banterbird:oauth_redirect") === "1") return;
       leavingRef.current = true;
 
       const ch = channelRef.current;
@@ -71,7 +78,7 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
         await client.removeChannel(ch);
       }
 
-      // Supabase reuses channels by topic — remove leftovers before re-subscribing
+      // Supabase reuses channels by topic - remove leftovers before re-subscribing
       // so we never call .on("presence") after subscribe().
       for (const existing of client.getChannels()) {
         const topic = existing.topic ?? "";
@@ -91,7 +98,14 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
       // Presence callbacks must be registered before subscribe().
       const refreshCount = () => {
-        if (!cancelled) setOnlineCount(Object.keys(channel.presenceState()).length);
+        if (!cancelled) {
+          const state = channel.presenceState<{ online_at?: string; user_id?: string }>();
+          const keys = Object.keys(state);
+          setOnlineCount(keys.length);
+          // Build set of online user IDs from presence keys (which are userId)
+          const ids = new Set<string>(keys);
+          setOnlineUserIds(ids);
+        }
       };
       channel.on("presence", { event: "sync" }, refreshCount);
       channel.on("presence", { event: "join" }, refreshCount);
@@ -221,7 +235,7 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
   }, [client, ready, pathname]);
 
   return (
-    <OnlinePresenceContext.Provider value={{ onlineCount }}>
+    <OnlinePresenceContext.Provider value={{ onlineCount, onlineUserIds }}>
       {children}
     </OnlinePresenceContext.Provider>
   );
@@ -229,4 +243,8 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
 
 export function useOnlineCount(): number {
   return useContext(OnlinePresenceContext).onlineCount;
+}
+
+export function useOnlineUserIds(): Set<string> {
+  return useContext(OnlinePresenceContext).onlineUserIds;
 }

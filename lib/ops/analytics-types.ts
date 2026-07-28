@@ -61,7 +61,7 @@ export type AnalyticsSnapshot = {
     apiCostByDay: ApiCostDayPoint[];
     /** Peak + average concurrent online users per day (from minute snapshots). */
     onlineUsersByDay?: OnlineDayPoint[];
-    /** Peak + average concurrent online users per hour — populated only for the "today" period. */
+    /** Peak + average concurrent online users per hour - populated only for the "today" period. */
     onlineUsersByHour?: OnlineHourPoint[];
   };
 };
@@ -70,20 +70,20 @@ export const METRIC_TOOLTIPS = {
   uniqueUsers:
     "Distinct users who created a room or sent a message during the selected time window (UTC).",
   avgUserSessionMinutes:
-    "Average app-wide online time per user — accumulated from heartbeats while browsing (not only in rooms).",
+    "Average app-wide online time per user, accumulated from heartbeats while browsing (not only in rooms).",
   humanChats: "Rooms matched with a real person (is_ai_room = false).",
   botChats: "Practice bot rooms created when no human match was found.",
   totalRooms: "All rooms created during the selected window, human + bot.",
   avgHumanRoomMinutes:
-    "Average duration of ended human-human rooms — from created_at to ended_at. Open rooms are excluded.",
+    "Average duration of ended human-human rooms, from created_at to ended_at. Open rooms are excluded.",
   avgBotRoomMinutes:
-    "Average duration of ended AI practice rooms — from created_at to ended_at. Open rooms are excluded.",
+    "Average duration of ended AI practice rooms, from created_at to ended_at. Open rooms are excluded.",
   onlineUsersNow:
-    "Live count from Supabase Realtime presence — same source as the main app navbar.",
+    "Live count from Supabase Realtime presence, same source as the main app navbar.",
   recurringUsers:
     "Users who visited or chatted on 2 or more different calendar days (UTC) in the window.",
   totalUserSessionMinutes:
-    "Combined app-wide online time for all users — accumulated from heartbeats while browsing (not only in rooms).",
+    "Combined app-wide online time for all users, accumulated from heartbeats while browsing (not only in rooms).",
   bounceRate:
     "Share of new users (first-ever chat started in this period) who finished that chat and never opened another. Not total bot/human room count.",
   bouncedUsers:

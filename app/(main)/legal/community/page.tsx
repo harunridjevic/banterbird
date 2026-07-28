@@ -4,7 +4,7 @@ import { LegalPageShell } from "@/components/legal/LegalPageShell";
 export const metadata: Metadata = {
   title: "Community Guidelines",
   description:
-    "BanterBird (banterbird.app) Community Guidelines — be kind, respectful, and safe. Rules against harassment, illegal content, and spam.",
+    "BanterBird (banterbird.app) Community Guidelines - be kind, respectful, and safe. Rules against harassment, illegal content, and spam.",
   alternates: { canonical: "/legal/community" },
 };
 

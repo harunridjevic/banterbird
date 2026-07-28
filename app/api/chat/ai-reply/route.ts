@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { createClient } from "@/utils/supabase/server";
 import {
   PRACTICE_BOT_OUTPUT_JSON_RULES,
   PRACTICE_BOT_OUTPUT_JSON_RULES_COMPACT,
@@ -50,7 +51,7 @@ import {
   type AiReplyTrigger,
   type ChatTurn,
 } from "@/lib/ai-practice-bot/turn";
-import { createClient } from "@/utils/supabase/server";
+import { isImageMessage } from "@/lib/chat/image-upload";
 import { logError } from "@/lib/ops/error-log";
 import { clientIp } from "@/lib/moderation/client-ip";
 import type { NextRequest } from "next/server";
@@ -329,7 +330,7 @@ async function callLlm(
     };
   };
 
-  // 1) Cerebras / Groq key pool — rotate instantly on 429 within this request.
+  // 1) Cerebras / Groq key pool - rotate instantly on 429 within this request.
   const poolResult = await fetchWithKeyPool({
     history,
     systemPrompt,
@@ -392,7 +393,7 @@ async function callLlm(
     }
   }
 
-  // Never leave the chat silent on rate limits — seamless canned continuation.
+  // Never leave the chat silent on rate limits - seamless canned continuation.
   return softFallback();
 }
 
@@ -444,7 +445,32 @@ export async function POST(req: Request) {
     const userGender = (room.user_a_gender ?? "male") as SelfGender;
     const persona = buildBotPersona(roomId, botGender, userGender, botSettings);
     const historyLimit = botSettings.llmHistoryTurns;
-    const trimmedHistory = history.slice(-historyLimit);
+    const rawHistory = history.slice(-historyLimit);
+
+    // ── Image gaslighting ─────────────────────────────────────
+    // When the user sends an image, the bot can't see it — but it must
+    // not reveal this. Replace [img] messages with a generic marker and
+    // inject a system instruction telling the bot to react naturally
+    // (surprised, curious, changing subject) without ever admitting it
+    // can't see the image.
+    let imageReactionNeeded = false;
+    const trimmedHistory = rawHistory.map((turn) => {
+      if (turn.role === "user" && isImageMessage(turn.content)) {
+        imageReactionNeeded = true;
+        return { ...turn, content: "[sent an image]" };
+      }
+      return turn;
+    });
+
+    const IMAGE_REACTION_OVERLAY = imageReactionNeeded
+      ? `\nThe user just sent an image in chat. You CANNOT see it, but you must NEVER reveal that. React like a real person would — pick one of these natural reactions and vary them:
+- Surprised: "omg", "wait what", "lmaoo", "??", "no way"
+- Curious: "what is that", "wait explain", "why did you send this lol", "context??"
+- Playful deflect: "idk what im looking at", "im scared to ask", "ok then"
+- Change subject naturally after reacting
+NEVER say you "can't see", "can't view", "image isn't loading" or anything that hints at a technical limitation. Just react and move on like a human would.`
+      : "";
+
     const memory = buildUserMemory(trimmedHistory);
     const botSelf = buildBotSelfMemory(trimmedHistory, persona);
     const memoryBlock = formatUserMemoryBlock(memory, persona);
@@ -520,7 +546,7 @@ export async function POST(req: Request) {
 
     const poolKeys = await getAvailablePoolKeys();
     const preferGeminiSchema = poolKeys.length === 0 && !!googleApiKeyFromEnv();
-    const systemPrompt = preferGeminiSchema
+    const systemPrompt = (preferGeminiSchema
       ? geminiSystemPrompt(
           personaBlock,
           memoryBlock,
@@ -531,7 +557,8 @@ export async function POST(req: Request) {
           botSettings,
           isOpener,
         )
-      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings);
+      : buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, botSettings))
+      + IMAGE_REACTION_OVERLAY;
 
     let result = await callLlm(trimmedHistory, systemPrompt, persona, memory, botSettings, {
       roomId,

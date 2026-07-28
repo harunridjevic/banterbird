@@ -19,14 +19,14 @@ export type MatchMode = "user_choice" | "hidden_bots" | "humans_only";
 
 export type BotSettings = {
   /**
-   * user_choice — user picks humans-only vs humans+bot on /match.
-   * hidden_bots — always match humans+bot; chat UI hides bot indicators.
-   * humans_only — never offer bot matches; user cannot toggle.
+   * user_choice - user picks humans-only vs humans+bot on /match.
+   * hidden_bots - always match humans+bot; chat UI hides bot indicators.
+   * humans_only - never offer bot matches; user cannot toggle.
    */
   matchMode: MatchMode;
 
   /**
-   * When true, /match shows a single start button — no gender pickers.
+   * When true, /match shows a single start button, no gender pickers.
    * Users match anyone online; gender is assigned internally for the queue only.
    */
   hideGenderFilters: boolean;

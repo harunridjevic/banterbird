@@ -186,7 +186,7 @@ export default function OpsApiKeysPage() {
         <p className="mt-2 text-sm text-navy-300">
           Add Cerebras and Groq keys used in priority order. Env keys (
           <code className="text-navy-400">CEREBRAS_API_KEY</code> /{" "}
-          <code className="text-navy-400">GROQ_API_KEY</code>) show in the same list — move Cerebras
+          <code className="text-navy-400">GROQ_API_KEY</code>) show in the same list, move Cerebras
           to #1 and hit Test to verify it works.
         </p>
 
@@ -258,7 +258,7 @@ export default function OpsApiKeysPage() {
                   autoComplete="off"
                   value={newApiKey}
                   onChange={(e) => setNewApiKey(e.target.value)}
-                  placeholder="Paste full key — only prefix is shown later"
+                  placeholder="Paste full key - only prefix is shown later"
                   className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 font-mono text-sm text-white outline-none ring-violet-500/40 focus:ring-2"
                 />
               </label>
@@ -282,12 +282,12 @@ export default function OpsApiKeysPage() {
               </div>
               <p className="mt-2 text-xs text-navy-500">
                 Top of the list is tried first. Env keys are fully reorderable here (secret still
-                lives in server env — you can&apos;t delete them from this panel).
+                lives in server env, you can&apos;t delete them from this panel).
               </p>
 
               {keys.length === 0 ? (
                 <p className="mt-6 text-sm text-navy-400">
-                  No keys yet — add Cerebras or Groq keys above, or set env vars on the server.
+                  No keys yet - add Cerebras or Groq keys above, or set env vars on the server.
                 </p>
               ) : (
                 <ul className="mt-4 space-y-3">

@@ -37,12 +37,45 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Your access has been restricted." }, { status: 403 });
     }
 
-    const blockedIds = normalizeBlockedUserIds(body.blockedUserIds);
+    const clientBlocked = normalizeBlockedUserIds(body.blockedUserIds);
+
+    const { data: friendships } = await supabase
+      .from("friendships")
+      .select("friend_id")
+      .eq("user_id", user.id);
+
+    const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
+    const friendIdSet = new Set(friendIds);
+
+    // Strip former friends from client blocks (they were unblocked on unfriend)
+    const modBlocked = clientBlocked.filter((id) => !friendIdSet.has(id));
+
+    // Fetch server-side session blocks — users this person skipped OR
+    // users who skipped this person. Both directions prevent re-pairing.
+    const now = new Date().toISOString();
+    const { data: dbBlocksAsBlocker } = await supabase
+      .from("session_blocks")
+      .select("blocked_id")
+      .eq("blocker_id", user.id)
+      .gt("expires_at", now);
+
+    const { data: dbBlocksAsBlocked } = await supabase
+      .from("session_blocks")
+      .select("blocker_id")
+      .eq("blocked_id", user.id)
+      .gt("expires_at", now);
+
+    const dbBlocked = [
+      ...((dbBlocksAsBlocker ?? []).map((r: { blocked_id: string }) => r.blocked_id)),
+      ...((dbBlocksAsBlocked ?? []).map((r: { blocker_id: string }) => r.blocker_id)),
+    ];
+
+    const allBlockedIds = Array.from(new Set([...modBlocked, ...friendIds, ...dbBlocked]));
 
     const { data: roomId, error } = await supabase.rpc("try_match", {
       p_self_gender: body.selfGender ?? "male",
       p_wants_gender: body.wantsGender ?? "any",
-      p_blocked_user_ids: blockedIds,
+      p_blocked_user_ids: allBlockedIds,
     });
 
     if (error) {

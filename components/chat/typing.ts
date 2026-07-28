@@ -13,7 +13,7 @@ function scale(n: number, s: number) {
   return Math.round(n * (s > 0 ? s : 1));
 }
 
-/** Pause before we even ask the model — simulates reading what you wrote. */
+/** Pause before we even ask the model - simulates reading what you wrote. */
 export function readDelayBeforeReplyMs(userMessageLen: number, timing: TimingScale = {}) {
   const s = timing.readScale ?? 1;
   const base = 520 + Math.random() * 2200;
@@ -28,7 +28,7 @@ export function readDelayOpenerMs(timing: TimingScale = {}) {
 
 /**
  * Typing bubble duration from message length.
- * Tuned for casual phone typing — never flash-short even for "fast" personas.
+ * Tuned for casual phone typing - never flash-short even for "fast" personas.
  */
 const TYPING_BASE_MS = 850;
 const TYPING_MS_PER_CHAR = 130;
@@ -48,7 +48,7 @@ export function typingDurationForReply(reply: string, timing: TimingScale = {}) 
 
 /**
  * Show the typing bubble for exactly the duration needed for this message length,
- * then hide it (unless keepVisible — caller hides after the message is inserted).
+ * then hide it (unless keepVisible - caller hides after the message is inserted).
  */
 export async function runHumanlikeTyping(
   setTyping: (v: boolean) => void,

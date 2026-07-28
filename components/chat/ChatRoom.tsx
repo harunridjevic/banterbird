@@ -32,6 +32,7 @@ import { getDeviceId } from "@/lib/moderation/device-id";
 import { blockUserForSession } from "@/lib/moderation/session-block";
 import { ConnectionSignal } from "@/components/chat/ConnectionSignal";
 import { ReportUserDialog } from "@/components/chat/ReportUserDialog";
+import { FriendRequestButton } from "@/components/chat/FriendRequestButton";
 import { checkMatchAccess, rejectBlockedRoom, shouldAcceptRoom } from "@/lib/match/room-guard";
 import { useKeyboardInset } from "@/lib/hooks/use-keyboard-inset";
 import { useInactivityTimeout } from "@/lib/hooks/use-inactivity-timeout";
@@ -40,6 +41,8 @@ import {
   resetInactivityStrikes,
 } from "@/lib/moderation/inactivity-strikes";
 import { networkErrorMessage } from "@/lib/network-error";
+import { uploadChatImage, encodeImageMessage } from "@/lib/chat/image-upload";
+import { useAccount } from "@/lib/account/context";
 
 type Props = { roomId: string };
 
@@ -99,6 +102,9 @@ export function ChatRoom({ roomId }: Props) {
   const skipConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyboardInset = useKeyboardInset();
   const peerTypingRef = useRef(false);
+  // Dynamic peer username - updated when peer accepts our friend request
+  const [peerUsername, setPeerUsername] = useState<string | null>(null);
+  const { state } = useAccount();
 
   const cancelOpener = useCallback(() => {
     if (openerTimerRef.current !== null) {
@@ -166,6 +172,9 @@ export function ChatRoom({ roomId }: Props) {
 
   const endRoomBeacon = useCallback(() => {
     if (unloadBeaconSentRef.current) return;
+    // Don't end the room if the user is doing an OAuth redirect -
+    // they're coming back to this chat after signing in.
+    if (typeof window !== "undefined" && sessionStorage.getItem("banterbird:oauth_redirect") === "1") return;
     unloadBeaconSentRef.current = true;
     tabCloseFetch("/api/chat/end-room", { roomId });
     tabCloseFetch("/api/presence/leave");
@@ -245,7 +254,7 @@ export function ChatRoom({ roomId }: Props) {
 
     const access = await checkMatchAccess(client);
     if (!access.allowed) {
-      // Only end the room for hard moderation blocks — soft/auth errors must not kill a fresh match.
+      // Only end the room for hard moderation blocks - soft/auth errors must not kill a fresh match.
       if (access.reason === "blocked") {
         await client.rpc("end_active_room", { p_room_id: roomId });
         router.replace("/");
@@ -258,7 +267,10 @@ export function ChatRoom({ roomId }: Props) {
     if (!accept) {
       await rejectBlockedRoom(client, roomId);
       router.replace("/");
-      window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
+      // Delay before re-matching so blocked list propagates on both sides
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
+      }, 1500 + Math.random() * 1000);
       return;
     }
 
@@ -534,8 +546,16 @@ export function ChatRoom({ roomId }: Props) {
   const leaveManually = useCallback(
     async (clearFilters: boolean, blockPeer = false) => {
       resetInactivityStrikes();
-      if (blockPeer && peerId && !isAiRoom) {
-        blockUserForSession(peerId);
+      if (peerId && !isAiRoom) {
+        if (blockPeer) {
+          blockUserForSession(peerId);
+          // Also register server-side so try_match excludes this pair for both users
+          void fetch("/api/match/block", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ blockedId: peerId }),
+          });
+        }
       }
       await endRoomAndGoMatch(clearFilters);
     },
@@ -544,8 +564,16 @@ export function ChatRoom({ roomId }: Props) {
 
   const leaveForInactivity = useCallback(async () => {
     recordInactivitySkip();
+    if (peerId && !isAiRoom) {
+      blockUserForSession(peerId);
+      void fetch("/api/match/block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockedId: peerId }),
+      });
+    }
     await endRoomAndGoMatch(false);
-  }, [endRoomAndGoMatch]);
+  }, [endRoomAndGoMatch, peerId, isAiRoom]);
 
   const inactive = !loading && !error && !exiting && !showReport;
   const { bumpActivity } = useInactivityTimeout(
@@ -868,8 +896,125 @@ export function ChatRoom({ roomId }: Props) {
     [roomId, cancelOpener, router],
   );
 
+  // ── Helper: persist a system message to the DB ─────────────
+  // This ensures both users see it and it survives refresh.
+  const sendSystemMessage = useCallback(async (text: string) => {
+    await fetch("/api/chat/system-message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId, text }),
+    });
+    // The message arrives via the existing realtime subscription — no need
+    // to call setMessages directly.
+  }, [roomId]);
+
+  // ── Peer username resolution ────────────────────────────────
+  // Only show the peer's username if they are a CURRENT friend.
+  // Former friends or strangers always show as "Stranger".
+  useEffect(() => {
+    if (!peerId || isAiRoom || !ready) return;
+    let cancelled = false;
+    void (async () => {
+      // Check current friendship status first
+      const { data: friendship } = await client
+        .from("friendships")
+        .select("friend_id")
+        .eq("user_id", selfId!)
+        .eq("friend_id", peerId)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (!friendship) {
+        // Not friends — keep as Stranger
+        setPeerUsername(null);
+        return;
+      }
+      // Current friend — fetch their username
+      const { data } = await client
+        .from("profiles")
+        .select("username")
+        .eq("id", peerId)
+        .maybeSingle();
+      if (!cancelled && data?.username) setPeerUsername(data.username);
+    })();
+    return () => { cancelled = true; };
+  }, [peerId, isAiRoom, ready, client, selfId]);
+
+  // ── Friend request notifications in chat ────────────────────
+  // Listen for friend_requests where to_id = selfId AND from_id = peerId.
+  // When one arrives inject a system message so the user sees it in chat.
+  useEffect(() => {
+    if (!peerId || !selfId || isAiRoom) return;
+    const channel = client
+      .channel(`chat:fr:${roomId}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "friend_requests",
+        filter: `to_id=eq.${selfId}`,
+      }, (payload) => {
+        const row = payload.new as { from_id: string; to_id: string };
+        if (row.from_id !== peerId) return;
+        const isAnon = state.status === "anonymous" || state.status === "loading";
+        const sysText = isAnon
+          ? `${peerUsername ?? "Stranger"} sent you a friend request - sign in to accept it`
+          : `${peerUsername ?? "Stranger"} sent you a friend request`;
+        void sendSystemMessage(sysText);
+      })
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "friend_requests",
+        filter: `from_id=eq.${selfId}`,
+      }, async (payload) => {
+        // Peer accepted our request - fetch their username and update label
+        const row = payload.new as { to_id: string; status: string };
+        if (row.to_id !== peerId || row.status !== "accepted") return;
+        const { data } = await client
+          .from("profiles")
+          .select("username")
+          .eq("id", peerId)
+          .maybeSingle();
+        if (data?.username) {
+          setPeerUsername(data.username);
+          void sendSystemMessage(`${data.username} accepted your friend request`);
+        }
+      })
+      // We accepted their request — friendships row inserted for us
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "friendships",
+        filter: `user_id=eq.${selfId}`,
+      }, async (payload) => {
+        const row = payload.new as { friend_id: string };
+        if (row.friend_id !== peerId) return;
+        // We just became friends with this person mid-chat — update label
+        const { data } = await client
+          .from("profiles")
+          .select("username")
+          .eq("id", peerId)
+          .maybeSingle();
+        if (data?.username) {
+          setPeerUsername(data.username);
+          void sendSystemMessage(`You are now friends with ${data.username}`);
+        }
+      })
+      .subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, [peerId, selfId, isAiRoom, roomId, client, peerUsername, sendSystemMessage, state.status]);
+
+  // ── Image send handler ──────────────────────────────────────
+  const sendImage = useCallback(async (file: File) => {
+    if (!selfId) return;
+    const result = await uploadChatImage(file, client, selfId);
+    if (!result.ok) { setError(result.error); return; }
+    await sendMessage(encodeImageMessage(result.url));
+  }, [selfId, client, sendMessage]);
+
   const displayAsHuman = isAiRoom && hideBotUi;
   const showPeerGender = !hideGenderFilters;
+  const peerLabel = peerUsername ?? "Stranger";
 
   if (loading || !selfId) {
     return <PageLoader label="Opening your chat…" />;
@@ -893,21 +1038,22 @@ export function ChatRoom({ roomId }: Props) {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-navy-200/60 px-3 py-3 dark:border-white/10 sm:gap-3 sm:px-4">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-navy-200/60 px-3 py-2.5 dark:border-white/10 sm:gap-2 sm:px-4">
+        {/* Left: back button */}
         <motion.button
           type="button"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          disabled={exiting} // This is the "Cancel" button
+          disabled={exiting}
           onClick={() => void leaveManually(true)}
-          className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm font-medium text-navy-800 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl px-2 py-2 text-sm font-medium text-navy-800 transition hover:bg-navy-900/5 disabled:opacity-50 dark:text-navy-200 dark:hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Match</span>
         </motion.button>
         <div className="min-w-0 flex-1 text-center">
           <p className="hidden text-sm font-semibold text-navy-950 sm:block dark:text-navy-50">
-            Anonymous chat
+            {peerLabel === "Stranger" ? "Anonymous chat" : peerLabel}
           </p>
           <div className="flex flex-nowrap items-center justify-center gap-1 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:mt-1 sm:gap-1.5 [&::-webkit-scrollbar]:hidden">
             {!displayAsHuman && isAiRoom ? (
@@ -972,52 +1118,56 @@ export function ChatRoom({ roomId }: Props) {
             ) : null}
           </div>
           <p className="mt-1 hidden text-xs text-navy-600 sm:block dark:text-navy-400">
-            You are both strangers. Stay kind.
+            {peerLabel === "Stranger" ? "You are both strangers. Stay kind." : `Chatting with ${peerLabel}`}
           </p>
         </div>
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          disabled={exiting}
-          onClick={() => setShowReport(true)}
-          className="inline-flex items-center gap-1 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-2 text-xs font-semibold text-rose-800 disabled:opacity-50 dark:text-rose-200"
-          aria-label="Report user"
-        >
-          <Flag className="h-3.5 w-3.5" aria-hidden />
-          <span className="hidden sm:inline">Report</span>
-        </motion.button>
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          disabled={exiting} // This is the "Skip" button
-          onClick={() => {
-            if (!skipConfirm) {
-              setSkipConfirm(true);
-              if (skipConfirmTimer.current !== null) clearTimeout(skipConfirmTimer.current);
-              skipConfirmTimer.current = setTimeout(() => {
+        {/* Right: action buttons */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <FriendRequestButton peerId={peerId} isAiRoom={isAiRoom} hideBotUi={hideBotUi} />
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={exiting}
+            onClick={() => setShowReport(true)}
+            className="inline-flex items-center gap-1 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-2 text-xs font-semibold text-rose-800 disabled:opacity-50 dark:text-rose-200"
+            aria-label="Report user"
+          >
+            <Flag className="h-3.5 w-3.5" aria-hidden />
+            <span className="hidden sm:inline">Report</span>
+          </motion.button>
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={exiting}
+            onClick={() => {
+              if (!skipConfirm) {
+                setSkipConfirm(true);
+                if (skipConfirmTimer.current !== null) clearTimeout(skipConfirmTimer.current);
+                skipConfirmTimer.current = setTimeout(() => {
+                  setSkipConfirm(false);
+                  skipConfirmTimer.current = null;
+                }, 3000);
+              } else {
+                if (skipConfirmTimer.current !== null) {
+                  clearTimeout(skipConfirmTimer.current);
+                  skipConfirmTimer.current = null;
+                }
                 setSkipConfirm(false);
-                skipConfirmTimer.current = null;
-              }, 3000);
-            } else {
-              if (skipConfirmTimer.current !== null) {
-                clearTimeout(skipConfirmTimer.current);
-                skipConfirmTimer.current = null;
+                void leaveManually(false, true);
               }
-              setSkipConfirm(false);
-              void leaveManually(false, true);
-            }
-          }}
-          className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold shadow-sm disabled:opacity-50 transition-colors ${
-            skipConfirm
-              ? "bg-amber-500 text-white dark:bg-amber-400 dark:text-navy-950"
-              : "bg-navy-900 text-white dark:bg-navy-100 dark:text-navy-950"
-          }`}
-        >
-          <SkipForward className="h-3.5 w-3.5" aria-hidden />
-          {skipConfirm ? "Are you sure?" : "Skip"}
-        </motion.button>
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 ${
+              skipConfirm
+                ? "bg-amber-500 text-white dark:bg-amber-400 dark:text-navy-950"
+                : "bg-navy-900 text-white dark:bg-navy-100 dark:text-navy-950"
+            }`}
+          >
+            <SkipForward className="h-3.5 w-3.5" aria-hidden />
+            {skipConfirm ? "Sure?" : "Skip"}
+          </motion.button>
+        </div>
       </div>
 
       {showReport ? (
@@ -1055,7 +1205,7 @@ export function ChatRoom({ roomId }: Props) {
             selfId={selfId}
             peerTyping={peerTyping}
             peerIsBot={isAiRoom && !hideBotUi}
-            peerLabel="Stranger"
+            peerLabel={peerLabel}
           />
         )}
       </div>
@@ -1063,6 +1213,7 @@ export function ChatRoom({ roomId }: Props) {
       <div className="shrink-0 border-t border-navy-200/50 bg-[var(--page-bg)]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-white/10">
         <ChatComposer
           onSend={sendMessage}
+          onSendImage={sendImage}
           onTypingChange={handleComposerTyping}
           onFocus={() => scrollToBottom(true)}
         />

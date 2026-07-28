@@ -1,0 +1,4 @@
+-- Placeholder migration for version 20250126
+-- This version exists in the remote database but the original migration file is missing
+-- This file allows the Supabase CLI to sync successfully
+-- The actual migration logic is handled by 20260728100007_cleanup_stale_schema_migration.sql

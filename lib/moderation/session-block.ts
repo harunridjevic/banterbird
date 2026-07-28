@@ -21,6 +21,12 @@ export function blockUserForSession(userId: string): void {
   }
 }
 
+export function unblockUserForSession(userId: string): void {
+  if (typeof window === "undefined" || !userId) return;
+  const blocked = getSessionBlockedUsers().filter((id) => id !== userId);
+  sessionStorage.setItem(SESSION_BLOCK_KEY, JSON.stringify(blocked));
+}
+
 export function isUserBlockedForSession(userId: string): boolean {
   return getSessionBlockedUsers().includes(userId);
 }

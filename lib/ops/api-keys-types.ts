@@ -1,6 +1,6 @@
 export type ApiKeyProvider = "cerebras" | "groq";
 
-/** Safe for ops UI — never includes the full secret. */
+/** Safe for ops UI - never includes the full secret. */
 export type OpsApiKeyPublic = {
   id: string;
   name: string;

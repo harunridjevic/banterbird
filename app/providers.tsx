@@ -11,10 +11,13 @@ import {
 import { ThemeProvider } from "next-themes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
-import { ensureAnonymousSession } from "@/lib/auth/ensure-anonymous-session";
+import { ensureAnonymousSession, formatAuthError } from "@/lib/auth/ensure-anonymous-session";
 import { OnlinePresenceProvider } from "@/components/presence/OnlinePresenceProvider";
 import { ClientErrorReporter } from "@/components/monitoring/ClientErrorReporter";
 import { BotSettingsProvider } from "@/lib/ops/bot-settings-provider";
+import { AccountProvider } from "@/lib/account/context";
+import { AccountModal } from "@/components/account/AccountModal";
+import { AuthErrorHandler } from "@/components/auth/AuthErrorHandler";
 
 type SupabaseCtx = {
   client: SupabaseClient;
@@ -35,7 +38,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       const result = await ensureAnonymousSession(client);
       if (cancelled) return;
       if (!result.ok) {
-        setAuthError(result.error);
+        setAuthError(formatAuthError(result.error));
         console.error("Anonymous sign-in failed:", result.error);
       } else {
         setAuthError(null);
@@ -53,8 +56,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <SupabaseContext.Provider value={{ client, ready, authError }}>
         <BotSettingsProvider>
           <OnlinePresenceProvider>
-            <ClientErrorReporter />
-            {children}
+            <AccountProvider supabase={client}>
+              <ClientErrorReporter />
+              <AuthErrorHandler />
+              <AccountModal />
+              {children}
+            </AccountProvider>
           </OnlinePresenceProvider>
         </BotSettingsProvider>
       </SupabaseContext.Provider>

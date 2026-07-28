@@ -56,7 +56,7 @@ export const metadata: Metadata = {
     telephone: false,
   },
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app"),
-  // Per-route canonicals only — do not force "/" site-wide (was causing GSC "alternate canonical").
+  // Per-route canonicals only - do not force "/" site-wide (was causing GSC "alternate canonical").
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
         url: "/logo_search.png",
         width: 1200,
         height: 630,
-        alt: "BanterBird — Anonymous Chat",
+        alt: "BanterBird - Anonymous Chat",
       },
     ],
   },
@@ -144,7 +144,7 @@ export default function RootLayout({
         url: baseUrl,
         name: "BanterBird",
         description:
-          "BanterBird is a free anonymous chat platform at banterbird.app — start 1-on-1 text chat instantly with no registration.",
+          "BanterBird is a free anonymous chat platform at banterbird.app - start 1-on-1 text chat instantly with no registration.",
         publisher: {
           "@id": `${baseUrl}/#organization`,
         },
@@ -254,7 +254,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full antialiased">
         <AppProviders>{children}</AppProviders>
-        {/* Google tag (gtag.js) — placed in body via Next.js Script to avoid
+        {/* Google tag (gtag.js) - placed in body via Next.js Script to avoid
             head hydration conflicts */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-YWHJZBKFLM"
@@ -268,7 +268,7 @@ export default function RootLayout({
             gtag('config', 'G-YWHJZBKFLM');
           `}
         </Script>
-        {/* Google AdSense — afterInteractive keeps it out of the SSR head so
+        {/* Google AdSense - afterInteractive keeps it out of the SSR head so
             AdSense's own script injection cannot cause a hydration mismatch */}
         <Script
           id="adsense"
