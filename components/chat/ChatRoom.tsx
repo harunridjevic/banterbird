@@ -42,6 +42,7 @@ import {
 } from "@/lib/moderation/inactivity-strikes";
 import { networkErrorMessage } from "@/lib/network-error";
 import { uploadChatImage, encodeImageMessage } from "@/lib/chat/image-upload";
+import { useAccount } from "@/lib/account/context";
 
 type Props = { roomId: string };
 
@@ -103,6 +104,7 @@ export function ChatRoom({ roomId }: Props) {
   const peerTypingRef = useRef(false);
   // Dynamic peer username - updated when peer accepts our friend request
   const [peerUsername, setPeerUsername] = useState<string | null>(null);
+  const { state } = useAccount();
 
   const cancelOpener = useCallback(() => {
     if (openerTimerRef.current !== null) {
@@ -905,12 +907,17 @@ export function ChatRoom({ roomId }: Props) {
       }, (payload) => {
         const row = payload.new as { from_id: string; to_id: string };
         if (row.from_id !== peerId) return;
+        // Check if the recipient is anonymous — if so, add a note to sign in
+        const isAnon = state.status === "anonymous" || state.status === "loading";
+        const sysText = isAnon
+          ? `${peerUsername ?? "Stranger"} sent you a friend request — sign in to accept it`
+          : `${peerUsername ?? "Stranger"} sent you a friend request`;
         const sysMsg: MessageRow = {
           id: `sys-fr-${Date.now()}`,
           clientKey: `sys-fr-${Date.now()}`,
           room_id: roomId,
           user_id: null,
-          content: `[system]${peerUsername ?? "Stranger"} sent you a friend request`,
+          content: `[system]${sysText}`,
           created_at: new Date().toISOString(),
           is_from_ai: false,
         };

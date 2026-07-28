@@ -443,10 +443,19 @@ export function MatchLobby() {
       if (!uid) return;
 
       const blockedIds = normalizeBlockedUserIds(getSessionBlockedUsers());
+
+      // Also exclude friends from AI practice matches — same as human matching
+      const { data: friendships } = await client
+        .from("friendships")
+        .select("friend_id")
+        .eq("user_id", uid);
+      const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
+      const allBlocked = Array.from(new Set([...blockedIds, ...friendIds]));
+
       const { data, error } = await client.rpc("try_match_ai_practice", {
         p_self_gender: activeSelfGender,
         p_wants_gender: activeWantsGender,
-        p_blocked_user_ids: blockedIds,
+        p_blocked_user_ids: allBlocked,
       });
       if (error || !alive || cancelledRef.current || navigatedRef.current || matchedRoomIdRef.current) {
         return;
