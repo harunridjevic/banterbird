@@ -3,12 +3,6 @@ import { cookies } from "next/headers";
 import { logError } from "@/lib/ops/error-log";
 import { cookieSecret, verifyAnalyticsCookie, COOKIE_NAME } from "@/lib/ops/analytics-cookie";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { logError } from "@/lib/ops/error-log";
-import { cookieSecret, verifyAnalyticsCookie, COOKIE_NAME } from "@/lib/ops/analytics-cookie";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { createClient } from "@/utils/supabase/server";
 
 export async function POST(req: Request) {
