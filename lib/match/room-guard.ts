@@ -95,9 +95,11 @@ export async function rejectBlockedRoom(
   // Using leave_match_queue + end_active_room would kill the room for both
   // people and cause a re-match loop. Instead we just remove ourselves from
   // the room so the other user can re-match freely.
-  await client.rpc("leave_active_room", { p_room_id: roomId }).catch(() => {
+  try {
+    await client.rpc("leave_active_room", { p_room_id: roomId });
+  } catch {
     // Fallback: if leave_active_room RPC doesn't exist, end the room
     // (older schema). This may cause a brief re-match but avoids getting stuck.
-    return client.rpc("end_active_room", { p_room_id: roomId });
-  });
+    await client.rpc("end_active_room", { p_room_id: roomId });
+  }
 }

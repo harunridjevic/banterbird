@@ -7,6 +7,17 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(process.cwd()),
   },
+  // Vercel optimizations to reduce CPU usage
+  compress: true,
+  poweredByHeader: false,
+  reactStrictMode: true,
+  // Optimize images to reduce bandwidth
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 60,
+  },
+  // Reduce build time and improve caching
+  generateEtags: true,
   async redirects() {
     return [
       // Do NOT redirect www↔apex here — Vercel/DNS already handles the primary domain.
