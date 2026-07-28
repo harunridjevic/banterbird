@@ -5,32 +5,23 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as { oldUserId?: string; newUserId?: string };
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const body = (await req.json()) as { oldUserId?: string };
     const oldUserId = body.oldUserId?.trim();
-    const explicitNewUserId = body.newUserId?.trim();
 
-    // Resolve the current user — try cookie session first, fall back to
-    // the explicitly passed newUserId (handles session timing race)
-    let newUserId: string | null = explicitNewUserId ?? null;
-
-    if (!newUserId) {
-      const cookieStore = await cookies();
-      const supabase = createClient(cookieStore);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      newUserId = user.id;
-    }
+    // Always use the authenticated session user as the migration target.
+    // Never accept newUserId from the request body.
+    const newUserId = user.id;
 
     if (!oldUserId || oldUserId === newUserId) {
       return NextResponse.json({ ok: true, migrated: 0 });
     }
 
-    // Verify newUserId is a real user before migrating (security check)
     const svc = createServiceRoleClient();
-    const { data: targetUser } = await svc.auth.admin.getUserById(newUserId);
-    if (!targetUser?.user) {
-      return NextResponse.json({ error: "Target user not found" }, { status: 404 });
-    }
 
     // Find pending friend requests sent to the old anonymous ID
     const { data: pending } = await svc

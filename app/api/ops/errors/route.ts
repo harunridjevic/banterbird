@@ -4,8 +4,21 @@ import { logError } from "@/lib/ops/error-log";
 import { cookieSecret, verifyAnalyticsCookie, COOKIE_NAME } from "@/lib/ops/analytics-cookie";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { logError } from "@/lib/ops/error-log";
+import { cookieSecret, verifyAnalyticsCookie, COOKIE_NAME } from "@/lib/ops/analytics-cookie";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { createClient } from "@/utils/supabase/server";
+
 export async function POST(req: Request) {
   try {
+    // Require a valid Supabase session to prevent log poisoning by outsiders.
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const body = (await req.json()) as {
       source?: string;
       level?: "error" | "warn" | "info";

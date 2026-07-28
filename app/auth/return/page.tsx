@@ -36,17 +36,19 @@ export default function AuthReturnPage() {
       const newUserId = user?.id;
 
       if (oldAnonId && newUserId && oldAnonId !== newUserId) {
-        // Migrate friend requests AND room participation from anonymous ID
+        // Migrate friend requests AND room participation from anonymous ID.
+        // The routes derive newUserId from the session cookie — do not pass it
+        // in the body (that was the attack vector we closed).
         await fetch("/api/auth/migrate-pending-requests", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ oldUserId: oldAnonId, newUserId }),
+          body: JSON.stringify({ oldUserId: oldAnonId }),
         });
 
         await fetch("/api/auth/migrate-room", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ oldUserId: oldAnonId, newUserId }),
+          body: JSON.stringify({ oldUserId: oldAnonId }),
         });
       }
 
