@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UserPlus, Check } from "lucide-react";
 import { useAccount } from "@/lib/account/context";
 import { InlineSpinner } from "@/components/ui/Loading";
@@ -21,6 +21,7 @@ export function FriendRequestButton({
   const [status, setStatus] = useState<Status>("idle");
   const [tooltip, setTooltip] = useState<string | null>(null);
   const [showNudge, setShowNudge] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const isAnonymous = state.status === "anonymous" || state.status === "loading";
 
@@ -75,6 +76,7 @@ export function FriendRequestButton({
     <div className="relative">
       <button
         type="button"
+        ref={buttonRef}
         onClick={() => void handleClick()}
         disabled={status === "loading" || isSent}
         aria-label={
@@ -103,11 +105,13 @@ export function FriendRequestButton({
         </span>
       </button>
 
-      {/* Anonymous nudge */}
+      {/* Anonymous nudge — rendered via portal, positioned below button */}
       <AccountNudge
         visible={showNudge}
         onDismiss={() => setShowNudge(false)}
         message="Create a free account to add friends."
+        triggerRef={buttonRef}
+        preferBelow={true}
       />
 
       {/* Sent/error tooltip */}

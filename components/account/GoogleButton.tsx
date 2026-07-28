@@ -17,9 +17,11 @@ export function GoogleButton({
   const handleGoogle = async () => {
     setLoading(true);
     setError(null);
+    // Preserve the current page so after OAuth we return here
+    // (important when signing in from inside a chat room)
     const redirectTo =
       typeof window !== "undefined"
-        ? `${window.location.origin}/auth/callback`
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(window.location.pathname)}`
         : "/auth/callback";
 
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
@@ -30,7 +32,6 @@ export function GoogleButton({
       setError(oauthErr.message);
       setLoading(false);
     }
-    // On success the page redirects - no need to setLoading(false)
   };
 
   return (

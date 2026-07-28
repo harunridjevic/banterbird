@@ -20,6 +20,7 @@ export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, on
   const { state } = useAccount();
   const isAnonymous = state.status === "anonymous" || state.status === "loading";
   const [showImageNudge, setShowImageNudge] = useState(false);
+  const imageButtonRef = useRef<HTMLButtonElement>(null);
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -153,6 +154,7 @@ export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, on
           <div className="relative">
             <button
               type="button"
+              ref={imageButtonRef}
               disabled={disabled || sending}
               onClick={() => {
                 if (isAnonymous) { setShowImageNudge(true); return; }
@@ -167,6 +169,8 @@ export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, on
               visible={showImageNudge}
               onDismiss={() => setShowImageNudge(false)}
               message="Create a free account to send images."
+              triggerRef={imageButtonRef}
+              preferBelow={false}
             />
           </div>
         )}

@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -13,9 +14,7 @@ import type { AccountState, Profile } from "./types";
 
 type AccountCtx = {
   state: AccountState;
-  /** Re-fetch the profile from DB (call after sign-in / profile update). */
   refresh: () => Promise<void>;
-  /** Open the account modal (exposed so any component can trigger it). */
   openModal: () => void;
   closeModal: () => void;
   modalOpen: boolean;
@@ -33,20 +32,24 @@ export function AccountProvider({
   const [state, setState] = useState<AccountState>({ status: "loading" });
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Track the last known anonymous user ID so we can migrate
+  // pending friend requests when they sign up / sign in.
+  const lastAnonIdRef = useRef<string | null>(null);
+
   const refresh = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
       setState({ status: "anonymous" });
       return;
     }
 
-    // Anonymous users have is_anonymous = true in Supabase
     const isAnonymous = (user as { is_anonymous?: boolean }).is_anonymous ?? false;
+
     if (isAnonymous) {
-      // Check if they have a profile with a username (i.e. they converted)
+      // Remember the anonymous user ID — needed for migration if they sign up
+      lastAnonIdRef.current = user.id;
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("id,username,display_name,avatar_url,self_gender,wants_gender")
@@ -61,7 +64,7 @@ export function AccountProvider({
       return;
     }
 
-    // Named / OAuth user - always fetch profile
+    // Named / OAuth user — fetch profile
     const { data: profile } = await supabase
       .from("profiles")
       .select("id,username,display_name,avatar_url,self_gender,wants_gender")
@@ -70,11 +73,29 @@ export function AccountProvider({
 
     setState({
       status: "named",
-      profile: (profile ?? { id: user.id, username: null, display_name: null, avatar_url: null, self_gender: null, wants_gender: null }) as Profile,
+      profile: (profile ?? {
+        id: user.id,
+        username: null,
+        display_name: null,
+        avatar_url: null,
+        self_gender: null,
+        wants_gender: null,
+      }) as Profile,
     });
+
+    // If we have a previous anonymous ID that is different from this named ID,
+    // migrate any pending friend requests that were addressed to the anon session.
+    const oldAnonId = lastAnonIdRef.current;
+    if (oldAnonId && oldAnonId !== user.id) {
+      lastAnonIdRef.current = null; // clear so we only migrate once
+      void fetch("/api/auth/migrate-pending-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldUserId: oldAnonId }),
+      });
+    }
   }, [supabase]);
 
-  // Subscribe to auth changes so the context stays in sync automatically
   useEffect(() => {
     void refresh();
 
