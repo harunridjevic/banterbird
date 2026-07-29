@@ -105,8 +105,8 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   openerDelayMs: 5000,
   openerDelayMinMs: 3000,
   openerDelayMaxMs: 8000,
-  aiMatchDelayMinMs: 3600,
-  aiMatchDelayMaxMs: 5200,
+  aiMatchDelayMinMs: 15000,
+  aiMatchDelayMaxMs: 25000,
 
   maxUserTurnsBeforeSkip: 10,
   drySkipMinUserTurns: 3,

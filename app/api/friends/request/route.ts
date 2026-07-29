@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { sendFriendSystemMessage } from "@/lib/friends/chat-system-message";
 
 /**
  * POST /api/friends/request
@@ -50,9 +51,16 @@ export async function POST(req: Request) {
 
     if (alreadyFriend) return NextResponse.json({ error: "Already friends." }, { status: 409 });
 
-    // Delete any prior request (accepted/declined/pending) so we can INSERT fresh.
-    // A fresh INSERT guarantees the Realtime INSERT event fires for the recipient.
+    // Resolve sender's username for system message text
     const svc = createServiceRoleClient();
+    const { data: senderProfile } = await svc
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .maybeSingle();
+    const senderName = senderProfile?.username ?? "Someone";
+
+    // Delete any prior request (accepted/declined/pending) so we can INSERT fresh.
     await svc
       .from("friend_requests")
       .delete()
@@ -76,6 +84,10 @@ export async function POST(req: Request) {
         { user_id: user.id, friend_id: targetId },
         { user_id: targetId, friend_id: user.id },
       ], { onConflict: "user_id,friend_id" });
+
+      // System message: you are now friends (visible to both sides)
+      await sendFriendSystemMessage(user.id, targetId, `You are now friends with ${senderName}`);
+
       return NextResponse.json({ ok: true, autoAccepted: true });
     }
 
@@ -85,6 +97,10 @@ export async function POST(req: Request) {
       .insert({ from_id: user.id, to_id: targetId, status: "pending" });
 
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
+
+    // System message to both sides: sender sees confirmation, recipient sees the request
+    await sendFriendSystemMessage(user.id, targetId, `${senderName} sent a friend request`);
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
