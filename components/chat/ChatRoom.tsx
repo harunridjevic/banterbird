@@ -252,23 +252,24 @@ export function ChatRoom({ roomId }: Props) {
       setLoading(false);
       return;
     }
-    const isAi = Boolean(room.is_ai_room);
+    const safeRoom = room as RoomRow;
+    const isAi = Boolean(safeRoom.is_ai_room);
     setIsAiRoom(isAi);
     if (isAi) {
-      const botG = (room.bot_gender ?? room.user_b_gender ?? "female") as SelfGender;
-      const userG = (room.user_a_gender ?? "male") as SelfGender;
+      const botG = (safeRoom.bot_gender ?? safeRoom.user_b_gender ?? "female") as SelfGender;
+      const userG = (safeRoom.user_a_gender ?? "male") as SelfGender;
       botPersonaRef.current = buildBotPersona(roomId, botG, userG, botSettingsRef.current);
     } else {
       botPersonaRef.current = null;
     }
-    if (room.user_a !== session.user.id && room.user_b !== session.user.id) {
+    if (safeRoom.user_a !== session.user.id && safeRoom.user_b !== session.user.id) {
       setPeerId(null);
       setPeerGender(null);
       setError("You are not a participant in this chat.");
       setLoading(false);
       return;
     }
-    if (room.ended_at) {
+    if (safeRoom.ended_at) {
       setPeerId(null);
       setPeerGender(null);
       router.replace("/");
@@ -297,7 +298,7 @@ export function ChatRoom({ roomId }: Props) {
       return;
     }
 
-    const meIsUserA = room.user_a === session.user.id;
+    const meIsUserA = safeRoom.user_a === session.user.id;
 
     const msgsPromise = client
       .from("messages")
@@ -305,11 +306,11 @@ export function ChatRoom({ roomId }: Props) {
       .eq("room_id", roomId)
       .order("created_at", { ascending: true });
 
-    setPeerId(meIsUserA ? room.user_b : room.user_a);
+    setPeerId(meIsUserA ? safeRoom.user_b : safeRoom.user_a);
     if (isAi && meIsUserA) {
-      setPeerGender((room.user_b_gender as SelfGender | null) ?? (room.bot_gender as SelfGender | null) ?? null);
+      setPeerGender((safeRoom.user_b_gender as SelfGender | null) ?? (safeRoom.bot_gender as SelfGender | null) ?? null);
     } else {
-      setPeerGender((meIsUserA ? room.user_b_gender : room.user_a_gender) ?? null);
+      setPeerGender((meIsUserA ? safeRoom.user_b_gender : safeRoom.user_a_gender) ?? null);
     }
 
     const { data: msgs, error: msgErr } = await msgsPromise;
