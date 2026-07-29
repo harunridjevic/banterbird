@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     const providers: string[] = Array.isArray(userData.user.app_metadata?.providers)
       ? (userData.user.app_metadata.providers as string[])
       : [provider];
-    const isGoogleOnly = providers.every((p) => p === "google") && !providers.includes("email");
+    const isGoogleOnly = providers.every((p) => p === "google") && !(providers as string[]).includes("email");
 
     if (isGoogleOnly) {
       return NextResponse.json({ error: "That account is linked to Google. Use \"Sign in with Google\" instead.", code: "google_account" }, { status: 400 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Users, X } from "lucide-react";
 import { FriendsPanel } from "./FriendsPanel";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -30,10 +30,26 @@ export function FriendsDrawer({
     return () => document.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
+  // When the drawer closes, blur any focused input inside it so the mobile
+  // keyboard dismisses before the slide-out animation runs. Without this,
+  // the virtual keyboard stays up during the transition and some browsers
+  // (Android Chrome, iOS Safari) leave the main layout at the reduced
+  // keyboard-height, pushing the footer up until the next repaint.
+  const drawerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && drawerRef.current?.contains(active)) {
+        active.blur();
+      }
+    }
+  }, [open]);
+
   // The panel is ALWAYS mounted so unread state survives open/close cycles.
   // We use CSS translate + visibility to show/hide rather than conditional render.
   return (
     <aside
+      ref={drawerRef}
       aria-label="Friends &amp; Messages"
       aria-hidden={!open}
       className={[
