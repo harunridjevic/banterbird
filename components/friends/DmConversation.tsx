@@ -265,8 +265,7 @@ export function DmConversation({
     scrollToBottom();
   }, [friend.id, roomId, scrollToBottom]);
 
-  const handleSend = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const handleSend = async () => {
     if (sending) return;
 
     // Stop broadcasting "typing" immediately on send
@@ -307,6 +306,12 @@ export function DmConversation({
         <span className="flex-1 truncate text-sm font-semibold text-navy-950 sm:text-base dark:text-navy-50">
           {friend.username ?? "Unknown"}
         </span>
+        {/* Auto-delete badge — only shown when keyboard is up and the notice bar is hidden */}
+        {keyboardOpen && (
+          <span className="shrink-0 rounded-full border border-rose-300/60 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400">
+            Auto-delete on
+          </span>
+        )}
       </div>
 
       {/* Ephemeral notice — hidden when keyboard is open to save space */}
@@ -375,9 +380,9 @@ export function DmConversation({
         </div>
       )}
 
-      {/* Composer */}
-      <form
-        onSubmit={handleSend}
+      {/* Composer — plain div, no <form>, matching ChatComposer's pattern so
+          the browser never triggers a form-submit blur on mobile */}
+      <div
         className="flex shrink-0 items-center gap-2 border-t border-navy-200 px-4 py-3 dark:border-white/10"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
       >
@@ -400,7 +405,7 @@ export function DmConversation({
           <ImagePlus className="h-5 w-5" />
         </button>
 
-        {/* Message input — fixed height to match buttons */}
+        {/* Message input */}
         <textarea
           ref={textareaRef}
           rows={1}
@@ -410,9 +415,6 @@ export function DmConversation({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              // Synchronously keep focus before the async send — prevents iOS
-              // from dismissing the keyboard during the async gap
-              textareaRef.current?.focus();
               void handleSend();
             }
           }}
@@ -422,8 +424,8 @@ export function DmConversation({
           maxLength={2000}
         />
 
-        {/* Send button — type="button" + onMouseDown/onTouchStart preventDefault
-            keeps the keyboard up on mobile (no form submit blur, no focus loss) */}
+        {/* Send button — onMouseDown/onTouchStart preventDefault stops the browser
+            from blurring the textarea, keeping the mobile keyboard up */}
         <button
           type="button"
           disabled={!canSend}
@@ -435,7 +437,7 @@ export function DmConversation({
         >
           {sending ? <InlineSpinner className="h-5 w-5" /> : <Send className="h-5 w-5" />}
         </button>
-      </form>
+      </div>
 
       {error && (
         <p className="shrink-0 px-4 pb-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>
