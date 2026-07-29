@@ -68,10 +68,19 @@ export async function GET(req: Request) {
   let rows: OpsUserRow[] = registeredUsers.map((u) => {
     const profile = profileMap.get(u.id);
     const provider = (u.app_metadata?.provider as string | undefined) ?? "email";
+    // Prefer profile row username; fall back to auth metadata username.
+    // Use || instead of ?? so a null/empty profile username still falls
+    // through to the metadata value (email-only accounts may not have a
+    // profile row yet, or their profile username column may be null while
+    // the username is stored in user_metadata by create-profile).
+    const username =
+      (profile?.username || null) ??
+      ((u.user_metadata?.username as string | undefined) || null);
+
     return {
       id: u.id,
       email: u.email ?? null,
-      username: profile?.username ?? (u.user_metadata?.username as string | null) ?? null,
+      username,
       avatar_url: profile?.avatar_url ?? null,
       provider,
       created_at: u.created_at,
