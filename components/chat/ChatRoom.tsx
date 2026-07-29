@@ -310,7 +310,7 @@ export function ChatRoom({ roomId }: Props) {
     if (isAi && meIsUserA) {
       setPeerGender((safeRoom.user_b_gender as SelfGender | null) ?? (safeRoom.bot_gender as SelfGender | null) ?? null);
     } else {
-      setPeerGender((meIsUserA ? safeRoom.user_b_gender : safeRoom.user_a_gender) ?? null);
+      setPeerGender((meIsUserA ? safeRoom.user_b_gender : safeRoom.user_a_gender) as SelfGender | null ?? null);
     }
 
     const { data: msgs, error: msgErr } = await msgsPromise;
