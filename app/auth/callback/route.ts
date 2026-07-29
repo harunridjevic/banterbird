@@ -58,12 +58,13 @@ export async function GET(request: Request) {
         .replace(/^_+|_+$/g, "")
         .slice(0, 24);
 
-      // Fallback if base ends up empty after processing
       const safeBase = base || "user";
 
       let username = safeBase;
       let attempt = 0;
 
+      // Try the base name, then base_2, base_3 … base_10,
+      // then fall back to a random suffix to guarantee uniqueness.
       while (attempt < 10) {
         const { data: taken } = await svc
           .from("profiles")
@@ -75,12 +76,23 @@ export async function GET(request: Request) {
         username = `${safeBase}_${attempt + 1}`;
       }
 
+      // If all 10 attempts collided, append a random 4-char hex suffix
+      if (attempt === 10) {
+        const rand = Math.floor(Math.random() * 0xffff).toString(16).padStart(4, "0");
+        username = `${safeBase.slice(0, 20)}_${rand}`;
+      }
+
       const { error: upsertErr } = await svc
         .from("profiles")
-        .upsert({ id: user.id, username }, { onConflict: "id" });
+        .update({ username })
+        .eq("id", user.id);
 
       if (upsertErr) {
         console.error("[auth/callback] Failed to assign username for Google user:", upsertErr.message);
+      } else {
+        await svc.auth.admin.updateUserById(user.id, {
+          user_metadata: { username },
+        });
       }
     }
 
