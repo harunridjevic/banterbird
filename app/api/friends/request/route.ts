@@ -41,12 +41,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You can't add yourself." }, { status: 400 });
     }
 
+    // targetId is guaranteed non-null here — all null paths returned above
+    const resolvedTargetId: string = targetId;
+
     // Already friends → bail
     const { data: alreadyFriend } = await supabase
       .from("friendships")
       .select("friend_id")
       .eq("user_id", user.id)
-      .eq("friend_id", targetId)
+      .eq("friend_id", resolvedTargetId)
       .maybeSingle();
 
     if (alreadyFriend) return NextResponse.json({ error: "Already friends." }, { status: 409 });
@@ -65,14 +68,14 @@ export async function POST(req: Request) {
       .from("friend_requests")
       .delete()
       .eq("from_id", user.id)
-      .eq("to_id", targetId);
+      .eq("to_id", resolvedTargetId);
 
     // Also delete any reverse request (in case they already sent one to us).
     // If so, just accept it and become friends instead of creating a loop.
     const { data: reverseRequest } = await supabase
       .from("friend_requests")
       .select("id")
-      .eq("from_id", targetId)
+      .eq("from_id", resolvedTargetId)
       .eq("to_id", user.id)
       .eq("status", "pending")
       .maybeSingle();
@@ -81,12 +84,12 @@ export async function POST(req: Request) {
       // Auto-accept: they already asked us, so just become friends
       await svc.from("friend_requests").update({ status: "accepted" }).eq("id", reverseRequest.id);
       await svc.from("friendships").upsert([
-        { user_id: user.id, friend_id: targetId },
-        { user_id: targetId, friend_id: user.id },
+        { user_id: user.id, friend_id: resolvedTargetId },
+        { user_id: resolvedTargetId, friend_id: user.id },
       ], { onConflict: "user_id,friend_id" });
 
       // System message: you are now friends (visible to both sides)
-      await sendFriendSystemMessage(user.id, targetId, `You are now friends with ${senderName}`);
+      await sendFriendSystemMessage(user.id, resolvedTargetId, `You are now friends with ${senderName}`);
 
       return NextResponse.json({ ok: true, autoAccepted: true });
     }
@@ -94,12 +97,12 @@ export async function POST(req: Request) {
     // Fresh INSERT - triggers Realtime INSERT event on recipient
     const { error: insertErr } = await svc
       .from("friend_requests")
-      .insert({ from_id: user.id, to_id: targetId, status: "pending" });
+      .insert({ from_id: user.id, to_id: resolvedTargetId, status: "pending" });
 
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
 
     // System message to both sides: sender sees confirmation, recipient sees the request
-    await sendFriendSystemMessage(user.id, targetId, `${senderName} sent a friend request`);
+    await sendFriendSystemMessage(user.id, resolvedTargetId, `${senderName} sent a friend request`);
 
     return NextResponse.json({ ok: true });
   } catch (e) {
