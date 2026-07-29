@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ImagePlus, Send, Trash2, X } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { InlineSpinner } from "@/components/ui/Loading";
@@ -14,6 +15,41 @@ import {
 } from "@/lib/chat/image-upload";
 import { ImageMessage } from "@/components/chat/ImageMessage";
 
+// ── Typing bubble (3-dot bounce) ────────────────────────────────────────────
+function TypingBubble() {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 4, scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 420, damping: 30 }}
+      className="flex justify-start"
+      aria-live="polite"
+      aria-label="Friend is typing"
+    >
+      <div className="rounded-2xl rounded-bl-sm bg-navy-100 px-4 py-3 dark:bg-navy-800">
+        <div className="flex items-center gap-1.5 px-0.5 py-0.5">
+          {[0, 1, 2].map((i) => (
+            <motion.span
+              key={i}
+              className="h-2 w-2 rounded-full bg-navy-400 dark:bg-navy-500"
+              animate={{ y: [0, -5, 0], opacity: [0.45, 1, 0.45] }}
+              transition={{
+                duration: 0.9,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: i * 0.14,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 export function DmConversation({
   friend,
   currentUserId,
@@ -31,20 +67,43 @@ export function DmConversation({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [peerTyping, setPeerTyping] = useState(false);
+
+  // Hide headers when mobile keyboard is open (visualViewport shrinks)
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const roomIdRef = useRef<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Image attachment
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [peerTyping, setPeerTyping] = useState(false);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const typingHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
+  // ── Detect mobile keyboard via visualViewport ──────────────────────────────
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    // Threshold: if visible height shrinks by more than 120 px vs screen height,
+    // we assume the software keyboard is open.
+    const THRESHOLD = 120;
+    const measure = () => {
+      const diff = window.screen.height - vv.height;
+      setKeyboardOpen(diff > THRESHOLD);
+    };
+
+    measure();
+    vv.addEventListener("resize", measure);
+    return () => vv.removeEventListener("resize", measure);
+  }, []);
+
+  // ── Image helpers ──────────────────────────────────────────────────────────
   const clearImage = () => {
     setImageFile(null);
     setImagePreview(null);
@@ -62,6 +121,12 @@ export function DmConversation({
     reader.readAsDataURL(file);
   };
 
+  // ── Scroll helper ──────────────────────────────────────────────────────────
+  const scrollToBottom = useCallback((instant = false) => {
+    bottomRef.current?.scrollIntoView({ behavior: instant ? "instant" : "smooth" } as ScrollIntoViewOptions);
+  }, []);
+
+  // ── Fetch messages ─────────────────────────────────────────────────────────
   const fetchMessages = useCallback(async (rid: string) => {
     const res = await fetch(`/api/dm/messages?roomId=${rid}`);
     if (!res.ok) return;
@@ -85,77 +150,17 @@ export function DmConversation({
     return () => { cancelled = true; };
   }, [friend.id, supabase, fetchMessages]);
 
+  // Scroll to bottom when messages load or change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
-  // Detect keyboard visibility on mobile
+  // Also scroll when typing bubble appears/disappears
   useEffect(() => {
-    const handleResize = () => {
-      const vv = window.visualViewport;
-      if (!vv) return;
-      const isMobile = window.matchMedia("(max-width: 640px)").matches;
-      if (isMobile) {
-        setKeyboardVisible(vv.height < window.innerHeight * 0.85);
-      }
-    };
+    if (peerTyping) scrollToBottom();
+  }, [peerTyping, scrollToBottom]);
 
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", handleResize);
-    window.addEventListener("resize", handleResize);
-    handleResize();
-
-    return () => {
-      vv?.removeEventListener("resize", handleResize);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
-
-  // Typing broadcast channel
-  useEffect(() => {
-    if (!roomId) return;
-
-    const channel = supabase
-      .channel(`dm:${roomId}:typing`, { config: { broadcast: { self: true } } })
-      .on("broadcast", { event: "typing" }, ({ payload }) => {
-        const p = payload as { userId?: string; active?: boolean };
-        if (!p?.userId || p.userId === currentUserId) return;
-        if (p.active) {
-          setPeerTyping(true);
-          if (typingHideRef.current) clearTimeout(typingHideRef.current);
-          typingHideRef.current = setTimeout(() => setPeerTyping(false), 2000);
-        } else {
-          setPeerTyping(false);
-        }
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          typingChannelRef.current = channel;
-        }
-      });
-
-    return () => {
-      if (typingHideRef.current) clearTimeout(typingHideRef.current);
-      typingChannelRef.current = null;
-      void supabase.removeChannel(channel);
-    };
-  }, [roomId, supabase, currentUserId]);
-
-  // Send typing broadcast when input changes
-  useEffect(() => {
-    if (!roomId) return;
-    const ch = typingChannelRef.current;
-    if (!ch) return;
-    
-    if (input.trim()) {
-      void ch.send({
-        type: "broadcast",
-        event: "typing",
-        payload: { userId: currentUserId, active: true },
-      });
-    }
-  }, [input, roomId, currentUserId]);
-
+  // ── Realtime: new DM messages ──────────────────────────────────────────────
   useEffect(() => {
     if (!roomId) return;
     const channel = supabase
@@ -173,7 +178,70 @@ export function DmConversation({
     return () => { void supabase.removeChannel(channel); };
   }, [roomId, supabase]);
 
-  // Core send - accepts plain text or encoded [img] content
+  // ── Realtime: typing broadcast ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!roomId) return;
+    const bc = supabase
+      .channel(`dm:${roomId}:typing`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        const p = payload as { userId?: string; active?: boolean };
+        // Only show indicator for the peer, not ourselves
+        if (!p?.userId || p.userId === currentUserId) return;
+        if (p.active) {
+          setPeerTyping(true);
+          if (typingHideTimer.current) clearTimeout(typingHideTimer.current);
+          typingHideTimer.current = setTimeout(() => setPeerTyping(false), 3000);
+        } else {
+          if (typingHideTimer.current) clearTimeout(typingHideTimer.current);
+          setPeerTyping(false);
+        }
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") typingChannelRef.current = bc;
+      });
+
+    return () => {
+      if (typingHideTimer.current) clearTimeout(typingHideTimer.current);
+      typingChannelRef.current = null;
+      void supabase.removeChannel(bc);
+    };
+  }, [roomId, supabase, currentUserId]);
+
+  // ── Broadcast our own typing state ────────────────────────────────────────
+  const sendTypingBroadcast = useCallback((active: boolean) => {
+    const ch = typingChannelRef.current;
+    if (!ch) return;
+    void ch.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: currentUserId, active },
+    });
+  }, [currentUserId]);
+
+  const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleInputChange = (val: string) => {
+    setInput(val);
+    if (val.trim()) {
+      sendTypingBroadcast(true);
+      if (typingStopTimer.current) clearTimeout(typingStopTimer.current);
+      typingStopTimer.current = setTimeout(() => sendTypingBroadcast(false), 1500);
+    } else {
+      if (typingStopTimer.current) clearTimeout(typingStopTimer.current);
+      sendTypingBroadcast(false);
+    }
+  };
+
+  // Clean up typing stop timer on unmount
+  useEffect(() => {
+    return () => {
+      if (typingStopTimer.current) clearTimeout(typingStopTimer.current);
+      sendTypingBroadcast(false);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Core send ──────────────────────────────────────────────────────────────
   const sendContent = useCallback(async (content: string) => {
     setSending(true);
     setError(null);
@@ -190,12 +258,20 @@ export function DmConversation({
     const rid = json.roomId;
     if (rid && !roomId) setRoomId(rid);
     const msg = json.message;
-    if (msg) setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
-  }, [friend.id, roomId]);
+    if (msg) {
+      setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
+    }
+    // Scroll after send regardless of whether realtime fires
+    scrollToBottom();
+  }, [friend.id, roomId, scrollToBottom]);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (sending) return;
+
+    // Stop broadcasting "typing" immediately on send
+    if (typingStopTimer.current) clearTimeout(typingStopTimer.current);
+    sendTypingBroadcast(false);
 
     // Send image if one is staged
     if (imageFile) {
@@ -203,8 +279,8 @@ export function DmConversation({
       if (!result.ok) { setError(result.error); return; }
       clearImage();
       await sendContent(encodeImageMessage(result.url));
-      // Scroll to bottom after sending
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      // Return focus to textarea after sending image
+      textareaRef.current?.focus();
       return;
     }
 
@@ -212,16 +288,23 @@ export function DmConversation({
     if (!content) return;
     setInput("");
     await sendContent(content);
-    // Scroll to bottom after sending
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    // Return focus to textarea so the mobile keyboard stays up
+    textareaRef.current?.focus();
   };
 
   const canSend = !sending && (imageFile != null || input.trim().length > 0);
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col">
-      {/* Header - hide on mobile when keyboard is visible */}
-      <div className={`flex shrink-0 items-center gap-3 border-b border-navy-200 px-4 py-4 dark:border-white/10 ${keyboardVisible ? 'hidden sm:flex' : ''}`}>
+      {/* Header — hidden when mobile keyboard is open to maximise message space */}
+      <div
+        className={[
+          "flex shrink-0 items-center gap-3 border-b border-navy-200 px-4 py-4 dark:border-white/10",
+          "transition-all duration-200",
+          keyboardOpen ? "hidden" : "",
+        ].join(" ")}
+      >
         <button
           type="button"
           onClick={() => onBack(roomIdRef.current)}
@@ -236,8 +319,14 @@ export function DmConversation({
         </span>
       </div>
 
-      {/* Ephemeral notice - hide on mobile when keyboard is visible */}
-      <div className={`flex shrink-0 items-center gap-2 border-b border-navy-200/60 bg-rose-500/5 px-4 py-2.5 dark:border-white/10 ${keyboardVisible ? 'hidden sm:flex' : ''}`}>
+      {/* Ephemeral notice — also hidden when keyboard is open */}
+      <div
+        className={[
+          "flex shrink-0 items-center gap-2 border-b border-navy-200/60 bg-rose-500/5 px-4 py-2.5 dark:border-white/10",
+          "transition-all duration-200",
+          keyboardOpen ? "hidden" : "",
+        ].join(" ")}
+      >
         <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-500" />
         <p className="text-xs text-rose-600 dark:text-rose-400">
           Messages are deleted after both parties have read them, or after 30 days.
@@ -271,26 +360,19 @@ export function DmConversation({
             </div>
           );
         })}
+
         {/* Typing indicator */}
-        {peerTyping && (
-          <div className="flex justify-start px-1">
-            <div className="flex items-center gap-1.5 rounded-2xl bg-navy-100 px-4 py-3 dark:bg-navy-800">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="h-2 w-2 rounded-full bg-navy-400 dark:bg-navy-500 animate-pulse"
-                  style={{ animationDelay: `${i * 0.14}s` }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        <AnimatePresence>
+          {peerTyping && <TypingBubble key="typing" />}
+        </AnimatePresence>
+
+        {/* Scroll anchor */}
         <div ref={bottomRef} />
       </div>
 
       {/* Image preview strip */}
       {imagePreview && (
-        <div className="shrink-0 flex items-center gap-3 border-t border-navy-200/60 px-4 py-3 dark:border-white/10">
+        <div className="flex shrink-0 items-center gap-3 border-t border-navy-200/60 px-4 py-3 dark:border-white/10">
           <div className="relative">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={imagePreview} alt="Attachment" className="h-16 w-16 rounded-xl object-cover" />
@@ -310,7 +392,7 @@ export function DmConversation({
       {/* Composer */}
       <form
         onSubmit={handleSend}
-        className="flex shrink-0 items-end gap-2 border-t border-navy-200 px-4 py-3 dark:border-white/10"
+        className="flex shrink-0 items-center gap-2 border-t border-navy-200 px-4 py-3 dark:border-white/10"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
       >
         <input
@@ -320,35 +402,44 @@ export function DmConversation({
           className="hidden"
           onChange={handleFileChange}
         />
+
+        {/* Image attach button */}
         <button
           type="button"
           disabled={sending}
           onClick={() => fileRef.current?.click()}
-          onMouseDown={(e) => e.preventDefault()}
-          onTouchStart={(e) => e.preventDefault()}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-600 transition active:scale-95 hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800"
           aria-label="Attach image"
         >
           <ImagePlus className="h-5 w-5" />
         </button>
+
+        {/* Message input — fixed height to match buttons */}
         <textarea
+          ref={textareaRef}
           rows={1}
           value={input}
           disabled={!!imageFile || sending}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(e); }
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void handleSend();
+            }
           }}
           placeholder={imageFile ? "Image ready - hit send" : "Message..."}
-          className="min-h-[44px] flex-1 resize-none rounded-xl border border-navy-200/80 bg-white px-4 py-3 text-base text-navy-950 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/20 disabled:opacity-60 dark:border-white/10 dark:bg-navy-900 dark:text-navy-50 dark:placeholder:text-navy-500"
-          maxLength={2000}
           enterKeyHint="send"
+          className="h-11 flex-1 resize-none rounded-xl border border-navy-200/80 bg-white px-4 py-0 text-base leading-[44px] text-navy-950 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/20 disabled:opacity-60 dark:border-white/10 dark:bg-navy-900 dark:text-navy-50 dark:placeholder:text-navy-500"
+          maxLength={2000}
         />
+
+        {/* Send button — prevents blur (keeps keyboard up) via onMouseDown/onTouchStart */}
         <button
           type="submit"
           disabled={!canSend}
           onMouseDown={(e) => e.preventDefault()}
           onTouchStart={(e) => e.preventDefault()}
+          onClick={() => void handleSend()}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition active:scale-95 hover:bg-navy-800 disabled:opacity-50 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"
           aria-label="Send"
         >

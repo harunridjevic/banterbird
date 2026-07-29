@@ -34,6 +34,35 @@ export function SignInForm({
   const [resetError, setResetError] = useState<string | null>(null);
 
   // ── Sign in ──────────────────────────────────────────────────
+  const resolveEmail = async (username: string): Promise<{ email: string } | { error: string }> => {
+    const res = await fetch("/api/auth/resolve-username", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { email?: string; error?: string; code?: string };
+
+    if (res.status === 401) {
+      // We have a named session already — sign it out so the resolve can proceed
+      await supabase.auth.signOut({ scope: "local" });
+      const retry = await fetch("/api/auth/resolve-username", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+      });
+      const retryJson = (await retry.json().catch(() => ({}))) as { email?: string; error?: string; code?: string };
+      if (!retry.ok || !retryJson.email) {
+        return { error: retryJson.error ?? "Couldn't find that account. Check your username and try again." };
+      }
+      return { email: retryJson.email };
+    }
+
+    if (!res.ok || !json.email) {
+      return { error: json.error ?? "Couldn't find that account. Check your username and try again." };
+    }
+    return { email: json.email };
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     const id = identifier.trim();
@@ -43,23 +72,31 @@ export function SignInForm({
 
     let email = id;
     if (!looksLikeEmail(id)) {
-      const res = await fetch("/api/auth/resolve-username", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: id }),
-      });
-      const json = (await res.json().catch(() => ({}))) as { email?: string; error?: string; code?: string };
-      if (!res.ok || !json.email) {
-        setError(json.error ?? "Invalid username or password.");
+      const result = await resolveEmail(id);
+      if ("error" in result) {
+        setError(result.error);
         setLoading(false);
         return;
       }
-      email = json.email;
+      email = result.email;
     }
 
     const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (authErr) { setError("Invalid username or password."); return; }
+    if (authErr) {
+      // Map Supabase auth errors to friendly messages
+      const msg = authErr.message.toLowerCase();
+      if (msg.includes("invalid login") || msg.includes("invalid credentials") || msg.includes("wrong password")) {
+        setError("That password doesn't match. Double-check it and try again.");
+      } else if (msg.includes("email not confirmed")) {
+        setError("Please verify your email before signing in. Check your inbox.");
+      } else if (msg.includes("too many requests") || msg.includes("rate limit")) {
+        setError("Too many attempts. Wait a moment and try again.");
+      } else {
+        setError("Couldn't sign in. Check your details and try again.");
+      }
+      return;
+    }
     onSuccess();
   };
 
@@ -185,7 +222,12 @@ export function SignInForm({
           </div>
         </div>
 
-        {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+        {error && (
+          <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 dark:border-rose-500/20 dark:bg-rose-500/8">
+            <span className="mt-px h-4 w-4 shrink-0 text-rose-500">⚠</span>
+            <p className="text-sm text-rose-700 dark:text-rose-400">{error}</p>
+          </div>
+        )}
 
         <button
           type="submit"
