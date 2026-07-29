@@ -6,6 +6,20 @@ export const metadata: Metadata = {
   description:
     "How BanterBird (banterbird.app) uses cookies and local storage for auth, preferences, and essential features. No third-party ad trackers.",
   alternates: { canonical: "/legal/cookies" },
+  robots: { index: true, follow: true },
+  openGraph: {
+    url: "https://banterbird.app/legal/cookies",
+    title: "Cookie Policy · BanterBird",
+    description: "How BanterBird uses cookies and local storage for auth and essential features. No third-party ad trackers.",
+    siteName: "BanterBird",
+    images: [{ url: "/logo_search.png", width: 1200, height: 630, alt: "BanterBird" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Cookie Policy · BanterBird",
+    description: "How BanterBird uses cookies and local storage for auth and essential features. No third-party ad trackers.",
+    images: ["/logo_search.png"],
+  },
 };
 
 export default function CookiesPage() {

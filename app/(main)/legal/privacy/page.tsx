@@ -7,6 +7,20 @@ export const metadata: Metadata = {
   description:
     "Learn how BanterBird (banterbird.app) protects your privacy. We collect minimal data and prioritize anonymous, secure chat.",
   alternates: { canonical: "/legal/privacy" },
+  robots: { index: true, follow: true },
+  openGraph: {
+    url: "https://banterbird.app/legal/privacy",
+    title: "Privacy Policy · BanterBird",
+    description: "Learn how BanterBird protects your privacy. Minimal data collection, anonymous chat, no ad trackers.",
+    siteName: "BanterBird",
+    images: [{ url: "/logo_search.png", width: 1200, height: 630, alt: "BanterBird" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Privacy Policy · BanterBird",
+    description: "Learn how BanterBird protects your privacy. Minimal data collection, anonymous chat, no ad trackers.",
+    images: ["/logo_search.png"],
+  },
 };
 
 export default function PrivacyPage() {
