@@ -37,7 +37,7 @@ export function FriendsDrawer({
       aria-label="Friends &amp; Messages"
       aria-hidden={!open}
       className={[
-        "fixed inset-y-0 right-0 z-[200] flex h-screen w-full flex-col",
+        "fixed inset-y-0 right-0 z-[200] flex h-dvh w-full flex-col",
         "border-l border-navy-200 bg-[var(--page-bg)] shadow-2xl",
         "dark:border-white/10 dark:bg-navy-950",
         "sm:max-w-sm",
