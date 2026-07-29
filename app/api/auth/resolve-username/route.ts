@@ -44,12 +44,23 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (!profile) {
-      return NextResponse.json({ error: "Invalid username or password." }, { status: 401 });
+      return NextResponse.json({ error: "No account with that username exists.", code: "username_not_found" }, { status: 404 });
     }
 
     const { data: userData, error: userErr } = await svc.auth.admin.getUserById(profile.id);
     if (userErr || !userData?.user?.email) {
-      return NextResponse.json({ error: "Invalid username or password." }, { status: 401 });
+      return NextResponse.json({ error: "No account with that username exists.", code: "username_not_found" }, { status: 404 });
+    }
+
+    // Check if the account is Google-only (no password set)
+    const provider = (userData.user.app_metadata?.provider as string | undefined) ?? "";
+    const providers: string[] = Array.isArray(userData.user.app_metadata?.providers)
+      ? (userData.user.app_metadata.providers as string[])
+      : [provider];
+    const isGoogleOnly = providers.every((p) => p === "google") && !providers.includes("email");
+
+    if (isGoogleOnly) {
+      return NextResponse.json({ error: "That account is linked to Google. Use \"Sign in with Google\" instead.", code: "google_account" }, { status: 400 });
     }
 
     return NextResponse.json({ email: userData.user.email });

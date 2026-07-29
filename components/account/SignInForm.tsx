@@ -48,9 +48,9 @@ export function SignInForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: id }),
       });
-      const json = (await res.json().catch(() => ({}))) as { email?: string; error?: string };
+      const json = (await res.json().catch(() => ({}))) as { email?: string; error?: string; code?: string };
       if (!res.ok || !json.email) {
-        setError("Invalid username or password.");
+        setError(json.error ?? "Invalid username or password.");
         setLoading(false);
         return;
       }

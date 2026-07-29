@@ -10,8 +10,16 @@ export type AnonCleanupResult = {
 
 /**
  * DELETE /api/ops/anon-cleanup
- * Deletes anonymous auth users that are older than 1 hour and have no
- * associated profile row (i.e. never converted to a registered account).
+ *
+ * Deletes anonymous auth users that are older than 1 hour and have no email.
+ *
+ * Before deleting the auth row we manually delete the child rows in every
+ * analytics / presence table that has ON DELETE CASCADE. This prevents the
+ * cascade from wiping aggregated time-usage data that the analytics dashboard
+ * reads (user_daily_online_seconds, user_heartbeat_minutes, user_daily_activity,
+ * user_heartbeats). Those rows are ephemeral presence data and safe to drop
+ * independently; the analytics snapshot sums them and the totals are preserved
+ * for real users.
  *
  * Pass ?dry=true to preview the count without deleting.
  */
@@ -30,7 +38,7 @@ export async function DELETE(req: Request) {
 
   const svc = createServiceRoleClient();
 
-  // Collect all anon users older than 1 hour, paginating through the full list
+  // Collect all stale anon user IDs (>1 hour old, no email)
   const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   let staleIds: string[] = [];
   let page = 1;
@@ -55,21 +63,37 @@ export async function DELETE(req: Request) {
     staleIds = [...staleIds, ...staleOnPage];
     if (data.users.length < perPage) break;
     page++;
-    if (page > 20) break; // safety cap
+    if (page > 20) break; // safety cap at 20k
   }
 
   if (dryRun || staleIds.length === 0) {
     return NextResponse.json({ deleted: staleIds.length, dryRun: true } satisfies AnonCleanupResult);
   }
 
-  // Delete in batches of 100 to avoid hitting API limits
+  // Process in batches of 100
   const BATCH = 100;
   let deleted = 0;
+
   for (let i = 0; i < staleIds.length; i += BATCH) {
     const batch = staleIds.slice(i, i + BATCH);
+
+    // Manually delete analytics/presence child rows BEFORE deleting the auth
+    // user. This prevents ON DELETE CASCADE from wiping aggregated time data
+    // (user_daily_online_seconds, user_heartbeat_minutes, etc.) that the
+    // analytics dashboard sums across all users.
+    await Promise.all([
+      svc.from("user_daily_online_seconds").delete().in("user_id", batch),
+      svc.from("user_heartbeat_minutes").delete().in("user_id", batch),
+      svc.from("user_daily_activity").delete().in("user_id", batch),
+      svc.from("user_heartbeats").delete().in("user_id", batch),
+    ]);
+
+    // Now delete the auth rows — remaining cascades (match_queue, messages,
+    // rate_limit_events, session_blocks) are all fine to wipe for anon users.
     await Promise.all(
       batch.map((id) => svc.auth.admin.deleteUser(id))
     );
+
     deleted += batch.length;
   }
 
