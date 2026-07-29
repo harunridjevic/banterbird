@@ -59,7 +59,7 @@ async function signInFresh(client: SupabaseClient): Promise<EnsureSessionResult>
   if (error || !data.user) {
     const message =
       error?.message ??
-      "Anonymous sign-in failed. Enable Anonymous auth in Supabase → Authentication → Providers.";
+      "Anonymous sign-in failed.";
     if (isRateLimitError(message)) {
       rateLimitedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
     }
