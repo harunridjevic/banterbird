@@ -279,8 +279,6 @@ export function DmConversation({
       if (!result.ok) { setError(result.error); return; }
       clearImage();
       await sendContent(encodeImageMessage(result.url));
-      // Return focus to textarea after sending image
-      textareaRef.current?.focus();
       return;
     }
 
@@ -288,8 +286,6 @@ export function DmConversation({
     if (!content) return;
     setInput("");
     await sendContent(content);
-    // Return focus to textarea so the mobile keyboard stays up
-    textareaRef.current?.focus();
   };
 
   const canSend = !sending && (imageFile != null || input.trim().length > 0);
@@ -297,41 +293,31 @@ export function DmConversation({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col">
-      {/* Header — hidden when mobile keyboard is open to maximise message space */}
-      <div
-        className={[
-          "flex shrink-0 items-center gap-3 border-b border-navy-200 px-4 py-4 dark:border-white/10",
-          "transition-all duration-200",
-          keyboardOpen ? "hidden" : "",
-        ].join(" ")}
-      >
+      {/* Header — always visible, compact on mobile */}
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-navy-200 px-3 py-2 sm:gap-3 sm:px-4 sm:py-4 dark:border-white/10">
         <button
           type="button"
           onClick={() => onBack(roomIdRef.current)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-navy-500 transition active:scale-95 hover:bg-navy-100 hover:text-navy-900 dark:text-navy-400 dark:hover:bg-navy-800 dark:hover:text-navy-100"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-navy-500 transition active:scale-95 hover:bg-navy-100 hover:text-navy-900 sm:h-10 sm:w-10 dark:text-navy-400 dark:hover:bg-navy-800 dark:hover:text-navy-100"
           aria-label="Back"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
-        <Avatar url={friend.avatar_url} username={friend.username} size="md" />
-        <span className="flex-1 truncate text-base font-semibold text-navy-950 dark:text-navy-50">
+        <Avatar url={friend.avatar_url} username={friend.username} size="sm" />
+        <span className="flex-1 truncate text-sm font-semibold text-navy-950 sm:text-base dark:text-navy-50">
           {friend.username ?? "Unknown"}
         </span>
       </div>
 
-      {/* Ephemeral notice — also hidden when keyboard is open */}
-      <div
-        className={[
-          "flex shrink-0 items-center gap-2 border-b border-navy-200/60 bg-rose-500/5 px-4 py-2.5 dark:border-white/10",
-          "transition-all duration-200",
-          keyboardOpen ? "hidden" : "",
-        ].join(" ")}
-      >
-        <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-        <p className="text-xs text-rose-600 dark:text-rose-400">
-          Messages are deleted after both parties have read them, or after 30 days.
-        </p>
-      </div>
+      {/* Ephemeral notice — hidden when keyboard is open to save space */}
+      {!keyboardOpen && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-navy-200/60 bg-rose-500/5 px-3 py-2 sm:px-4 sm:py-2.5 dark:border-white/10">
+          <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+          <p className="text-xs text-rose-600 dark:text-rose-400">
+            Messages are deleted after both parties have read them, or after 30 days.
+          </p>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
@@ -424,18 +410,22 @@ export function DmConversation({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
+              // Synchronously keep focus before the async send — prevents iOS
+              // from dismissing the keyboard during the async gap
+              textareaRef.current?.focus();
               void handleSend();
             }
           }}
           placeholder={imageFile ? "Image ready - hit send" : "Message..."}
           enterKeyHint="send"
-          className="h-11 flex-1 resize-none rounded-xl border border-navy-200/80 bg-white px-4 py-0 text-base leading-[44px] text-navy-950 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/20 disabled:opacity-60 dark:border-white/10 dark:bg-navy-900 dark:text-navy-50 dark:placeholder:text-navy-500"
+          className="h-11 flex-1 resize-none overflow-hidden rounded-xl border border-navy-200/80 bg-white px-4 py-0 text-base leading-[44px] text-navy-950 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/20 disabled:opacity-60 dark:border-white/10 dark:bg-navy-900 dark:text-navy-50 dark:placeholder:text-navy-500"
           maxLength={2000}
         />
 
-        {/* Send button — prevents blur (keeps keyboard up) via onMouseDown/onTouchStart */}
+        {/* Send button — type="button" + onMouseDown/onTouchStart preventDefault
+            keeps the keyboard up on mobile (no form submit blur, no focus loss) */}
         <button
-          type="submit"
+          type="button"
           disabled={!canSend}
           onMouseDown={(e) => e.preventDefault()}
           onTouchStart={(e) => e.preventDefault()}

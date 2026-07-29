@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Mail } from "lucide-react";
+import { useState, useRef } from "react";
+import { Mail, AlertCircle } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { InlineSpinner } from "@/components/ui/Loading";
 import { FormField } from "./FormField";
@@ -34,32 +34,30 @@ export function SignInForm({
   const [resetError, setResetError] = useState<string | null>(null);
 
   // ── Sign in ──────────────────────────────────────────────────
+
+  // Cache the resolved email so a failed password attempt doesn't require
+  // another resolve-username call (Supabase clears the anon session on a
+  // failed signInWithPassword, which would make the next resolve fail).
+  const resolvedEmailRef = useRef<{ username: string; email: string } | null>(null);
+
   const resolveEmail = async (username: string): Promise<{ email: string } | { error: string }> => {
+    // Return cached result if the username hasn't changed
+    if (resolvedEmailRef.current?.username === username.toLowerCase()) {
+      return { email: resolvedEmailRef.current.email };
+    }
+
     const res = await fetch("/api/auth/resolve-username", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username }),
     });
     const json = (await res.json().catch(() => ({}))) as { email?: string; error?: string; code?: string };
-
-    if (res.status === 401) {
-      // We have a named session already — sign it out so the resolve can proceed
-      await supabase.auth.signOut({ scope: "local" });
-      const retry = await fetch("/api/auth/resolve-username", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-      });
-      const retryJson = (await retry.json().catch(() => ({}))) as { email?: string; error?: string; code?: string };
-      if (!retry.ok || !retryJson.email) {
-        return { error: retryJson.error ?? "Couldn't find that account. Check your username and try again." };
-      }
-      return { email: retryJson.email };
-    }
-
     if (!res.ok || !json.email) {
       return { error: json.error ?? "Couldn't find that account. Check your username and try again." };
     }
+
+    // Cache it for retries with the same username
+    resolvedEmailRef.current = { username: username.toLowerCase(), email: json.email };
     return { email: json.email };
   };
 
@@ -203,7 +201,7 @@ export function SignInForm({
         <FormField
           id="signin-identifier" label="Username or email" type="text" autoComplete="username"
           placeholder="coolbird42 or you@example.com" value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)} required
+          onChange={(e) => { setIdentifier(e.target.value); resolvedEmailRef.current = null; }} required
         />
         <div className="space-y-1.5">
           <FormField
@@ -223,8 +221,8 @@ export function SignInForm({
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 dark:border-rose-500/20 dark:bg-rose-500/8">
-            <span className="mt-px h-4 w-4 shrink-0 text-rose-500">⚠</span>
+          <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 dark:border-rose-500/20 dark:bg-rose-500/8">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
             <p className="text-sm text-rose-700 dark:text-rose-400">{error}</p>
           </div>
         )}
