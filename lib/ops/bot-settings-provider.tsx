@@ -20,13 +20,17 @@ import {
 
 const BotSettingsContext = createContext<BotSettings | null>(null);
 const BotSettingsLoadedContext = createContext<boolean>(false);
-const AgeGateContext = createContext<AgeGateSettings>(DEFAULT_APP_SETTINGS.ageGate);
+// Default to disabled while loading — the gate is applied once settings are
+// confirmed from the server. Failing open prevents the modal from blocking
+// the page permanently on network errors or cold-start timeouts.
+const AGE_GATE_LOADING_DEFAULT: AgeGateSettings = { enabled: false, minimumAge: DEFAULT_APP_SETTINGS.ageGate.minimumAge };
+const AgeGateContext = createContext<AgeGateSettings>(AGE_GATE_LOADING_DEFAULT);
 
 const REFRESH_MS = 30_000;
 
 export function BotSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<BotSettings | null>(null);
-  const [ageGate, setAgeGate] = useState<AgeGateSettings>(DEFAULT_APP_SETTINGS.ageGate);
+  const [ageGate, setAgeGate] = useState<AgeGateSettings>(AGE_GATE_LOADING_DEFAULT);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {

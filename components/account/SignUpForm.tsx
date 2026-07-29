@@ -62,6 +62,7 @@ export function SignUpForm({
       const { data: updateData, error: updateErr } = await supabase.auth.updateUser({
         email,
         password,
+        options: { emailRedirectTo: redirectTo },
       });
       if (updateErr || !updateData.user) {
         setError(updateErr?.message ?? "Sign-up failed.");
@@ -69,8 +70,8 @@ export function SignUpForm({
         return;
       }
       userId = updateData.user.id;
-      // updateUser with email requires confirmation if email confirm is on
-      needsEmailConfirm = !currentSession;
+      // email_confirmed_at will be null if Supabase sent a confirmation email
+      needsEmailConfirm = !updateData.user.email_confirmed_at;
     } else {
       // Fresh sign-up (no anonymous session)
       const { data, error: authErr } = await supabase.auth.signUp({

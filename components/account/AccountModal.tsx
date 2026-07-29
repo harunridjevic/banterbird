@@ -94,7 +94,7 @@ export function AccountModal() {
                 <ProfileEditor profile={state.profile} supabase={client} onClose={closeModal} />
               </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <div className="min-h-0 flex-1 flex flex-col overflow-y-auto px-5 py-4">
                 <MobileSignInContent tab={tab} setTab={setTab} client={client} closeModal={closeModal} />
               </div>
             )}
@@ -147,7 +147,7 @@ export function AccountModal() {
                   <ProfileEditor profile={state.profile} supabase={client} onClose={closeModal} />
                 </div>
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+                <div className="min-h-0 flex-1 flex flex-col overflow-y-auto px-5 py-5 sm:px-6">
                   <MobileSignInContent tab={tab} setTab={setTab} client={client} closeModal={closeModal} />
                 </div>
               )}
