@@ -215,11 +215,33 @@ export function ChatRoom({ roomId }: Props) {
     }
     setSelfId(session.user.id);
 
-    const { data: room, error: roomErr } = await client
-      .from("rooms")
-      .select("id,user_a,user_b,user_a_gender,user_b_gender,is_ai_room,bot_gender,ended_at")
-      .eq("id", roomId)
-      .maybeSingle();
+    // Retry fetching the room a few times with backoff to handle read-replica
+    // replication lag. The try_match RPC writes to the primary and both clients
+    // navigate immediately — the row may not yet be visible on the replica when
+    // the first SELECT fires.
+    let room: {
+      id: string;
+      user_a: string;
+      user_b: string | null;
+      user_a_gender: string | null;
+      user_b_gender: string | null;
+      is_ai_room: boolean;
+      bot_gender: string | null;
+      ended_at: string | null;
+    } | null = null;
+    let roomErr: unknown = null;
+    const RETRY_DELAYS = [0, 300, 700, 1500, 3000];
+    for (const delay of RETRY_DELAYS) {
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      const result = await client
+        .from("rooms")
+        .select("id,user_a,user_b,user_a_gender,user_b_gender,is_ai_room,bot_gender,ended_at")
+        .eq("id", roomId)
+        .maybeSingle();
+      roomErr = result.error;
+      room = result.data as typeof room;
+      if (!result.error && result.data) break;
+    }
 
     if (roomErr || !room) {
       setPeerId(null);
