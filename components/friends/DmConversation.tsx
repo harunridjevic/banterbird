@@ -38,6 +38,10 @@ export function DmConversation({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const typingHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
@@ -84,6 +88,73 @@ export function DmConversation({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Detect keyboard visibility on mobile
+  useEffect(() => {
+    const handleResize = () => {
+      const vv = window.visualViewport;
+      if (!vv) return;
+      const isMobile = window.matchMedia("(max-width: 640px)").matches;
+      if (isMobile) {
+        setKeyboardVisible(vv.height < window.innerHeight * 0.85);
+      }
+    };
+
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", handleResize);
+    window.addEventListener("resize", handleResize);
+    handleResize();
+
+    return () => {
+      vv?.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  // Typing broadcast channel
+  useEffect(() => {
+    if (!roomId) return;
+
+    const channel = supabase
+      .channel(`dm:${roomId}:typing`, { config: { broadcast: { self: true } } })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        const p = payload as { userId?: string; active?: boolean };
+        if (!p?.userId || p.userId === currentUserId) return;
+        if (p.active) {
+          setPeerTyping(true);
+          if (typingHideRef.current) clearTimeout(typingHideRef.current);
+          typingHideRef.current = setTimeout(() => setPeerTyping(false), 2000);
+        } else {
+          setPeerTyping(false);
+        }
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          typingChannelRef.current = channel;
+        }
+      });
+
+    return () => {
+      if (typingHideRef.current) clearTimeout(typingHideRef.current);
+      typingChannelRef.current = null;
+      void supabase.removeChannel(channel);
+    };
+  }, [roomId, supabase, currentUserId]);
+
+  // Send typing broadcast when input changes
+  useEffect(() => {
+    if (!roomId) return;
+    const ch = typingChannelRef.current;
+    if (!ch) return;
+    
+    if (input.trim()) {
+      void ch.send({
+        type: "broadcast",
+        event: "typing",
+        payload: { userId: currentUserId, active: true },
+      });
+    }
+  }, [input, roomId, currentUserId]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -132,6 +203,8 @@ export function DmConversation({
       if (!result.ok) { setError(result.error); return; }
       clearImage();
       await sendContent(encodeImageMessage(result.url));
+      // Scroll to bottom after sending
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       return;
     }
 
@@ -139,14 +212,16 @@ export function DmConversation({
     if (!content) return;
     setInput("");
     await sendContent(content);
+    // Scroll to bottom after sending
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
   const canSend = !sending && (imageFile != null || input.trim().length > 0);
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-navy-200 px-4 py-4 dark:border-white/10">
+      {/* Header - hide on mobile when keyboard is visible */}
+      <div className={`flex shrink-0 items-center gap-3 border-b border-navy-200 px-4 py-4 dark:border-white/10 ${keyboardVisible ? 'hidden sm:flex' : ''}`}>
         <button
           type="button"
           onClick={() => onBack(roomIdRef.current)}
@@ -161,8 +236,8 @@ export function DmConversation({
         </span>
       </div>
 
-      {/* Ephemeral notice */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-navy-200/60 bg-rose-500/5 px-4 py-2.5 dark:border-white/10">
+      {/* Ephemeral notice - hide on mobile when keyboard is visible */}
+      <div className={`flex shrink-0 items-center gap-2 border-b border-navy-200/60 bg-rose-500/5 px-4 py-2.5 dark:border-white/10 ${keyboardVisible ? 'hidden sm:flex' : ''}`}>
         <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-500" />
         <p className="text-xs text-rose-600 dark:text-rose-400">
           Messages are deleted after both parties have read them, or after 30 days.
@@ -196,6 +271,20 @@ export function DmConversation({
             </div>
           );
         })}
+        {/* Typing indicator */}
+        {peerTyping && (
+          <div className="flex justify-start px-1">
+            <div className="flex items-center gap-1.5 rounded-2xl bg-navy-100 px-4 py-3 dark:bg-navy-800">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="h-2 w-2 rounded-full bg-navy-400 dark:bg-navy-500 animate-pulse"
+                  style={{ animationDelay: `${i * 0.14}s` }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -235,6 +324,8 @@ export function DmConversation({
           type="button"
           disabled={sending}
           onClick={() => fileRef.current?.click()}
+          onMouseDown={(e) => e.preventDefault()}
+          onTouchStart={(e) => e.preventDefault()}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-600 transition active:scale-95 hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800"
           aria-label="Attach image"
         >
@@ -249,12 +340,15 @@ export function DmConversation({
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(e); }
           }}
           placeholder={imageFile ? "Image ready - hit send" : "Message..."}
-          className="flex-1 resize-none rounded-xl border border-navy-200/80 bg-white px-4 py-3 text-base text-navy-950 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/20 disabled:opacity-60 dark:border-white/10 dark:bg-navy-900 dark:text-navy-50 dark:placeholder:text-navy-500"
+          className="min-h-[44px] flex-1 resize-none rounded-xl border border-navy-200/80 bg-white px-4 py-3 text-base text-navy-950 placeholder:text-navy-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/20 disabled:opacity-60 dark:border-white/10 dark:bg-navy-900 dark:text-navy-50 dark:placeholder:text-navy-500"
           maxLength={2000}
+          enterKeyHint="send"
         />
         <button
           type="submit"
           disabled={!canSend}
+          onMouseDown={(e) => e.preventDefault()}
+          onTouchStart={(e) => e.preventDefault()}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-navy-900 text-white transition active:scale-95 hover:bg-navy-800 disabled:opacity-50 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"
           aria-label="Send"
         >
