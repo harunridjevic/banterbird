@@ -62,7 +62,6 @@ export function SignUpForm({
       const { data: updateData, error: updateErr } = await supabase.auth.updateUser({
         email,
         password,
-        options: { emailRedirectTo: redirectTo },
       });
       if (updateErr || !updateData.user) {
         setError(updateErr?.message ?? "Sign-up failed.");
