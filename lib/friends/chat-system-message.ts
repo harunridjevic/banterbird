@@ -12,23 +12,34 @@ export async function sendFriendSystemMessage(
   try {
     const svc = createServiceRoleClient();
 
-    // Look for an active room where both users are participants
-    const { data: room } = await svc
-      .from("rooms")
-      .select("id")
-      .or(
-        `and(user_a.eq.${userIdA},user_b.eq.${userIdB}),and(user_a.eq.${userIdB},user_b.eq.${userIdA})`,
-      )
-      .is("ended_at", null)
-      .maybeSingle();
+    // Use two separate queries to avoid fragile PostgREST compound-or syntax.
+    // Check both orderings since user_a/user_b assignment depends on who matched first.
+    const [{ data: roomAB }, { data: roomBA }] = await Promise.all([
+      svc
+        .from("rooms")
+        .select("id")
+        .eq("user_a", userIdA)
+        .eq("user_b", userIdB)
+        .is("ended_at", null)
+        .maybeSingle(),
+      svc
+        .from("rooms")
+        .select("id")
+        .eq("user_a", userIdB)
+        .eq("user_b", userIdA)
+        .is("ended_at", null)
+        .maybeSingle(),
+    ]);
 
+    const room = roomAB ?? roomBA;
     if (!room) return;
 
+    // messages_sender_ai_check constraint: user_id null requires is_from_ai true
     await svc.from("messages").insert({
       room_id: room.id,
       user_id: null,
       content: `[system]${text}`,
-      is_from_ai: false,
+      is_from_ai: true,
     });
   } catch {
     // System messages are best-effort — never block the main action

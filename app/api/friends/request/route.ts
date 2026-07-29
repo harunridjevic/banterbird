@@ -101,8 +101,15 @@ export async function POST(req: Request) {
 
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
 
-    // System message to both sides: sender sees confirmation, recipient sees the request
-    await sendFriendSystemMessage(user.id, resolvedTargetId, `${senderName} sent a friend request`);
+    // Check if the recipient is anonymous — if so, nudge them to sign in
+    const { data: recipientAuth } = await svc.auth.admin.getUserById(resolvedTargetId);
+    const recipientIsAnon = recipientAuth?.user?.is_anonymous ?? false;
+
+    const recipientMessage = recipientIsAnon
+      ? `${senderName} sent you a friend request — sign in to accept it`
+      : `${senderName} sent you a friend request`;
+
+    await sendFriendSystemMessage(user.id, resolvedTargetId, recipientMessage);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

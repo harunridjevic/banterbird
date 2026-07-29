@@ -47,8 +47,25 @@ export async function POST(req: Request) {
     const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
     const friendIdSet = new Set(friendIds);
 
-    // Strip former friends from client blocks (they were unblocked on unfriend)
-    const modBlocked = clientBlocked.filter((id) => !friendIdSet.has(id));
+    // Fetch accepted friend requests to identify former friends.
+    // Former friends should not be permanently blocked from matching just because
+    // they appeared in the session-block list while the friendship was active.
+    const { data: acceptedRequests } = await supabase
+      .from("friend_requests")
+      .select("from_id, to_id")
+      .eq("status", "accepted")
+      .or(`from_id.eq.${user.id},to_id.eq.${user.id}`);
+
+    const formerFriendIds = new Set(
+      (acceptedRequests ?? []).flatMap((r: { from_id: string; to_id: string }) =>
+        r.from_id === user.id ? [r.to_id] : [r.from_id]
+      )
+    );
+
+    // Strip current AND former friends from client-side session blocks
+    const modBlocked = clientBlocked.filter(
+      (id) => !friendIdSet.has(id) && !formerFriendIds.has(id)
+    );
 
     // Fetch server-side session blocks — users this person skipped OR
     // users who skipped this person. Both directions prevent re-pairing.

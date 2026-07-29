@@ -60,17 +60,7 @@ export async function shouldAcceptRoom(
 
   if (!sessionBlocked.includes(peerId)) return true;
 
-  // Peer is session-blocked. Two cases:
-  // 1. They were blocked by an explicit skip (blockPeer=true) — respect the block.
-  // 2. They ended up in session storage as a stale entry from when they were
-  //    a friend who got skipped while the friendship was active, and then the
-  //    friendship was ended. In this case unblockUserForSession was called
-  //    when unfriending — so if they're still in the list here, it IS a
-  //    real skip block. Respect it.
-  //
-  // Exception: if they are currently a friend in the DB, this is a friend who
-  // was skipped (e.g. during an anonymous chat before becoming friends).
-  // Friends should not be matched randomly — block the room.
+  // Peer is session-blocked. Check current friendship status.
   const { data: friendship } = await client
     .from("friendships")
     .select("friend_id")
@@ -83,7 +73,23 @@ export async function shouldAcceptRoom(
     return false;
   }
 
-  // Not a current friend and in session blocks = explicit skip. Block.
+  // Not a current friend. Check if they were a former friend — if so, the
+  // session block may be stale (set while they were still a friend, before
+  // the unfriend removed them from session storage on this device). Former
+  // friends should be allowed to rematch.
+  const { data: formerFriendship } = await client
+    .from("friend_requests")
+    .select("id")
+    .or(`and(from_id.eq.${selfId},to_id.eq.${peerId}),and(from_id.eq.${peerId},to_id.eq.${selfId})`)
+    .eq("status", "accepted")
+    .maybeSingle();
+
+  if (formerFriendship) {
+    // Was a friend at some point — stale session block, allow the match
+    return true;
+  }
+
+  // Not a current or former friend and in session blocks = explicit skip. Block.
   return false;
 }
 
