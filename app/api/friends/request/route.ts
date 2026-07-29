@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     }
 
     // targetId is guaranteed non-null here — all null paths returned above
-    const resolvedTargetId: string = targetId;
+    const resolvedTargetId: string = targetId!;
 
     // Already friends → bail
     const { data: alreadyFriend } = await supabase
