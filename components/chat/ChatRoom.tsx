@@ -219,7 +219,7 @@ export function ChatRoom({ roomId }: Props) {
     // replication lag. The try_match RPC writes to the primary and both clients
     // navigate immediately — the row may not yet be visible on the replica when
     // the first SELECT fires.
-    let room: {
+    type RoomRow = {
       id: string;
       user_a: string;
       user_b: string | null;
@@ -228,7 +228,8 @@ export function ChatRoom({ roomId }: Props) {
       is_ai_room: boolean;
       bot_gender: string | null;
       ended_at: string | null;
-    } | null = null;
+    };
+    let room: RoomRow | null = null;
     let roomErr: unknown = null;
     const RETRY_DELAYS = [0, 300, 700, 1500, 3000];
     for (const delay of RETRY_DELAYS) {
