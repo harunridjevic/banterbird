@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Users, X } from "lucide-react";
 import { FriendsPanel } from "./FriendsPanel";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -31,10 +31,7 @@ export function FriendsDrawer({
   }, [open, onClose]);
 
   // When the drawer closes, blur any focused input inside it so the mobile
-  // keyboard dismisses before the slide-out animation runs. Without this,
-  // the virtual keyboard stays up during the transition and some browsers
-  // (Android Chrome, iOS Safari) leave the main layout at the reduced
-  // keyboard-height, pushing the footer up until the next repaint.
+  // keyboard dismisses before the slide-out animation runs.
   const drawerRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!open) {
@@ -45,15 +42,44 @@ export function FriendsDrawer({
     }
   }, [open]);
 
-  // The panel is ALWAYS mounted so unread state survives open/close cycles.
-  // We use CSS translate + visibility to show/hide rather than conditional render.
+  // ── Track visualViewport height so the drawer shrinks with the keyboard ──
+  // This is the same mechanism ChatViewportShell uses for the match chat.
+  // Without it, h-dvh stays fixed on iOS Safari when the keyboard opens,
+  // the composer scrolls out of view, the textarea loses focus, and the
+  // keyboard dismisses after every sent message.
+  const [vvHeight, setVvHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const measure = () => {
+      // Only constrain on mobile (< 640 px wide)
+      if (window.innerWidth >= 640) { setVvHeight(null); return; }
+      setVvHeight(Math.round(vv.height));
+    };
+
+    measure();
+    vv.addEventListener("resize", measure);
+    vv.addEventListener("scroll", measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      vv.removeEventListener("resize", measure);
+      vv.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
   return (
     <aside
       ref={drawerRef}
       aria-label="Friends &amp; Messages"
       aria-hidden={!open}
+      style={vvHeight !== null ? { height: vvHeight, maxHeight: vvHeight } : undefined}
       className={[
-        "fixed inset-y-0 right-0 z-[200] flex h-dvh w-full flex-col",
+        "fixed inset-y-0 right-0 z-[200] flex w-full flex-col",
+        // h-dvh used only when visualViewport tracking is unavailable/desktop
+        vvHeight === null ? "h-dvh" : "",
         "border-l border-navy-200 bg-[var(--page-bg)] shadow-2xl",
         "dark:border-white/10 dark:bg-navy-950",
         "sm:max-w-sm",
