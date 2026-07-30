@@ -9,36 +9,9 @@ import { OnlineCountPill } from "@/components/presence/OnlineCountPill";
 import { useAccount } from "@/lib/account/context";
 import { useSupabase } from "@/app/providers";
 import { FriendsDrawer } from "@/components/friends/FriendsDrawer";
+import { useKeyboardOpen } from "@/lib/hooks/use-keyboard-open";
 
-/** Returns true when a text input is focused (keyboard is up on mobile). */
-function useKeyboardOpen(): boolean {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const isTextInput = (el: Element | null): boolean => {
-      if (!el) return false;
-      const tag = (el as HTMLElement).tagName;
-      if (tag === "TEXTAREA") return true;
-      if (tag === "INPUT") {
-        const type = (el as HTMLInputElement).type;
-        return !["checkbox", "radio", "button", "submit", "reset", "file", "range", "color"].includes(type);
-      }
-      return (el as HTMLElement).isContentEditable;
-    };
-
-    const onFocusIn  = (e: FocusEvent) => { if (isTextInput(e.target as Element)) setOpen(true); };
-    const onFocusOut = (e: FocusEvent) => { if (isTextInput(e.target as Element)) setOpen(false); };
-
-    document.addEventListener("focusin",  onFocusIn);
-    document.addEventListener("focusout", onFocusOut);
-    return () => {
-      document.removeEventListener("focusin",  onFocusIn);
-      document.removeEventListener("focusout", onFocusOut);
-    };
-  }, []);
-
-  return open;
-}
+  // Remove the inline duplicate now that we use the shared hook
 
 export function Navbar() {
   const { setTheme, resolvedTheme } = useTheme();
@@ -117,10 +90,10 @@ export function Navbar() {
           className={`relative z-10 shrink-0 transition-all duration-150 ${compact ? "scale-75 origin-left" : "scale-90 sm:scale-100"}`}
         />
 
-        {/* Centre: Online pill */}
+        {/* Centre: Online pill — always shown, slightly smaller in compact mode */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="pointer-events-auto">
-            {!compact && <OnlineCountPill />}
+          <div className={`pointer-events-auto transition-transform duration-150 ${compact ? "scale-90" : ""}`}>
+            <OnlineCountPill />
           </div>
         </div>
 
