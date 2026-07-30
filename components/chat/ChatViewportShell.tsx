@@ -4,7 +4,14 @@ import { useEffect, useState, type ReactNode } from "react";
 
 type Props = { children: ReactNode };
 
-/** Sizes the chat column to the visible viewport so the composer stays above the mobile keyboard. */
+/**
+ * Sizes the chat column to the visible viewport so the composer stays pinned
+ * to the bottom above the mobile keyboard at all times.
+ *
+ * Also accounts for the ExoClick banner slot (data-ad-banner) which sits
+ * between the navbar and main — without this the banner steals height from
+ * the flex layout and the composer gets pushed off-screen on mobile.
+ */
 export function ChatViewportShell({ children }: Props) {
   const [height, setHeight] = useState<number | null>(null);
 
@@ -17,11 +24,15 @@ export function ChatViewportShell({ children }: Props) {
         setHeight(null);
         return;
       }
-      const nav = document.querySelector("header");
+      const nav    = document.querySelector("header");
+      const banner = document.querySelector("[data-ad-banner]");
       const footer = document.querySelector("[data-site-footer]");
-      const navH = nav?.getBoundingClientRect().height ?? 56;
+
+      const navH    = nav?.getBoundingClientRect().height    ?? 56;
+      const bannerH = banner?.getBoundingClientRect().height ?? 0;
       const footerH = footer?.getBoundingClientRect().height ?? 0;
-      const h = Math.round(vv.height - navH - footerH);
+
+      const h = Math.round(vv.height - navH - bannerH - footerH);
       setHeight(Math.max(120, h));
     };
 
