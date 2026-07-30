@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     "anonymous AI chat",
   ],
   alternates: {
-    canonical: "/",
+    canonical: `${baseUrl}`,
   },
   openGraph: {
     url: baseUrl,
