@@ -88,35 +88,47 @@ function AdUnit({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Never reached on first attempt but keeps layout stable across retries
-  if (state === "empty" && attemptRef.current > 0 && retryRef.current === null) return null;
+  // Hide the entire slot — including the background bar — whenever there's
+  // nothing to show. During the 30s retry window we still hide it; it will
+  // reappear with a shimmer when the next attempt starts.
+  if (state === "empty" || state === "loading" && attemptRef.current > 0) {
+    // Keep the hidden ad container in the DOM during retry so ExoClick can
+    // inject into it, but render nothing visible.
+    return (
+      <div style={{ position: "absolute", opacity: 0, pointerEvents: "none", height: 0, overflow: "hidden" }}>
+        <div ref={ref} />
+      </div>
+    );
+  }
 
-  return (
-    <div
-      className="flex w-full shrink-0 items-center justify-center bg-[var(--glass-bg)]"
-      style={{ height }}
-    >
-      {state === "loading" && (
+  if (state === "loading") {
+    // First-ever load — show shimmer so space is reserved
+    return (
+      <div
+        className="flex w-full shrink-0 items-center justify-center bg-[var(--glass-bg)]"
+        style={{ height }}
+      >
         <div
           aria-hidden
           className="animate-pulse rounded bg-navy-100 dark:bg-navy-800/60"
           style={{ width, height: height - 8, borderRadius: 6 }}
         />
-      )}
-      {/* The actual ad container — always in the DOM so ExoClick can inject into it */}
+        {/* Keep ref target in DOM off-screen */}
+        <div ref={ref} style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />
+      </div>
+    );
+  }
+
+  // state === "filled"
+  return (
+    <div
+      className="flex w-full shrink-0 items-center justify-center bg-[var(--glass-bg)]"
+      style={{ height }}
+    >
       <div
         ref={ref}
         aria-label="Advertisement"
-        style={{
-          width,
-          height,
-          minHeight: height,
-          overflow: "hidden",
-          // Hide visually while loading/empty but keep in DOM for injection
-          position: state === "loading" ? "absolute" : "static",
-          opacity: state === "filled" ? 1 : 0,
-          pointerEvents: state === "filled" ? "auto" : "none",
-        }}
+        style={{ width, height, minHeight: height, overflow: "hidden" }}
       />
     </div>
   );

@@ -67,16 +67,26 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Completely hidden when empty and no retry pending
+  // Nothing showing and no retry pending — disappear completely
   if (state === "empty" && !retryRef.current) return null;
+
+  // During retry wait: invisible but keep container in DOM for next injection
+  if (state === "empty") {
+    return (
+      <div style={{ position: "absolute", opacity: 0, pointerEvents: "none", height: 0, overflow: "hidden" }}>
+        <div ref={containerRef} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-sm px-4">
+      {/* "Sponsored" label only shown when ad is actually filling or filled */}
       <p className="mb-1.5 text-center text-[10px] font-medium uppercase tracking-widest text-navy-400 dark:text-navy-500">
         Sponsored
       </p>
 
-      {/* Shimmer shown while loading or retrying */}
+      {/* Shimmer on first load */}
       {state === "loading" && (
         <div
           aria-hidden
@@ -85,7 +95,7 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
         />
       )}
 
-      {/* Ad container — always in DOM so ExoClick can inject, hidden until filled */}
+      {/* Ad container — hidden until filled, always in DOM for injection */}
       <div
         ref={containerRef}
         aria-label="Advertisement"
