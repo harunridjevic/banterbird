@@ -410,7 +410,7 @@ export function DmConversation({
           ref={textareaRef}
           rows={1}
           value={input}
-          disabled={!!imageFile || sending}
+          disabled={!!imageFile}
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
