@@ -84,8 +84,7 @@ export async function GET(request: Request) {
 
       const { error: upsertErr } = await svc
         .from("profiles")
-        .update({ username })
-        .eq("id", user.id);
+        .upsert({ id: user.id, username }, { onConflict: "id" });
 
       if (upsertErr) {
         console.error("[auth/callback] Failed to assign username for Google user:", upsertErr.message);

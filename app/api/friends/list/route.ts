@@ -61,26 +61,45 @@ export async function GET() {
       profiles: senderProfiles.find((p) => p.id === r.from_id) ?? { id: r.from_id, username: null, avatar_url: null },
     }));
 
-    // ── Unread DM count ───────────────────────────────────────────
+    // ── Unread DM counts (per friend) ────────────────────────────
+    // Fetch all DM rooms the user is in, noting which friend each room belongs to.
     const { data: rooms } = await supabase
       .from("dm_rooms")
-      .select("id")
+      .select("id,user_a,user_b")
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
     const roomIds = (rooms ?? []).map((r: { id: string }) => r.id);
 
+    // Map room_id → friend_id so we can attribute unread messages to the right friend.
+    const roomToFriend: Record<string, string> = {};
+    for (const r of rooms ?? []) {
+      const room = r as { id: string; user_a: string; user_b: string };
+      roomToFriend[room.id] = room.user_a === user.id ? room.user_b : room.user_a;
+    }
+
+    // unread_dm_counts: { [friendId]: number }
+    const unreadDmCounts: Record<string, number> = {};
     let unreadDmCount = 0;
+
     if (roomIds.length > 0) {
-      const { count } = await supabase
+      const { data: unreadMessages } = await supabase
         .from("dm_messages")
-        .select("id", { count: "exact", head: true })
+        .select("room_id")
         .neq("sender_id", user.id)
         .is("read_at", null)
         .in("room_id", roomIds);
-      unreadDmCount = count ?? 0;
+
+      for (const msg of unreadMessages ?? []) {
+        const m = msg as { room_id: string };
+        const friendId = roomToFriend[m.room_id];
+        if (friendId) {
+          unreadDmCounts[friendId] = (unreadDmCounts[friendId] ?? 0) + 1;
+          unreadDmCount++;
+        }
+      }
     }
 
-    return NextResponse.json({ friends, incoming, unread_dm_count: unreadDmCount });
+    return NextResponse.json({ friends, incoming, unread_dm_count: unreadDmCount, unread_dm_counts: unreadDmCounts });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Server error" }, { status: 500 });
   }

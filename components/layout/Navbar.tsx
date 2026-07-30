@@ -39,10 +39,13 @@ export function Navbar() {
       try {
         const res = await fetch("/api/friends/list");
         if (!res.ok) return;
-        const data = (await res.json()) as { incoming: { id: string }[] };
-        // Navbar badge = pending friend requests only.
-        // DM unread counts live on per-friend rows inside the drawer.
-        setNotifCount(data.incoming?.length ?? 0);
+        const data = (await res.json()) as {
+          incoming: { id: string }[];
+          unread_dm_count?: number;
+        };
+        // Badge = pending friend requests + unread DMs so the user knows
+        // something needs attention even before opening the drawer.
+        setNotifCount((data.incoming?.length ?? 0) + (data.unread_dm_count ?? 0));
       } catch { /* ignore */ }
     };
 

@@ -45,9 +45,18 @@ export function FriendsPanel({
     setLoading(true);
     const res = await fetch("/api/friends/list");
     if (res.ok) {
-      const data = (await res.json()) as { friends: FriendEntry[]; incoming: IncomingRequest[] };
+      const data = (await res.json()) as {
+        friends: FriendEntry[];
+        incoming: IncomingRequest[];
+        unread_dm_counts?: Record<string, number>;
+      };
       setFriends(data.friends);
       setIncoming(data.incoming);
+      // Seed per-friend unread counts from the server so messages received
+      // while the panel was closed (or the user was offline) show badges.
+      if (data.unread_dm_counts) {
+        setUnread((prev) => ({ ...data.unread_dm_counts, ...prev }));
+      }
     }
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -57,15 +66,17 @@ export function FriendsPanel({
 
   useEffect(() => {
     if (!loading) {
-      // Navbar badge = pending friend requests only
-      if (incoming.length === 0) {
+      // Navbar badge = pending friend requests + total unread DMs
+      const totalUnread = Object.values(unread).reduce((s, n) => s + n, 0);
+      const total = incoming.length + totalUnread;
+      if (total === 0) {
         onNotifClear?.();
       } else {
-        onNotifSync?.(incoming.length);
+        onNotifSync?.(total);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, incoming.length]);
+  }, [loading, incoming.length, unread]);
 
   // ── Realtime: friend requests ─────────────────────────────
   useEffect(() => {

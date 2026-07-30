@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Mail, AlertCircle } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { InlineSpinner } from "@/components/ui/Loading";
+import { ensureAnonymousSession } from "@/lib/auth/ensure-anonymous-session";
 import { FormField } from "./FormField";
 import { GoogleButton } from "./GoogleButton";
 
@@ -67,6 +68,16 @@ export function SignInForm({
     if (!id || !password) return;
     setLoading(true);
     setError(null);
+
+    // Ensure there is a valid Supabase session before calling resolve-username.
+    // On first load the anonymous session may still be initialising; this call
+    // is a no-op if a session already exists, so it's safe to always await it.
+    const sessionResult = await ensureAnonymousSession(supabase);
+    if (!sessionResult.ok) {
+      setError("Couldn't connect. Please check your internet and try again.");
+      setLoading(false);
+      return;
+    }
 
     let email = id;
     if (!looksLikeEmail(id)) {
