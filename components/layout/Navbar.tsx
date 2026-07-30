@@ -10,21 +10,31 @@ import { useAccount } from "@/lib/account/context";
 import { useSupabase } from "@/app/providers";
 import { FriendsDrawer } from "@/components/friends/FriendsDrawer";
 
-/** Returns true when the mobile virtual keyboard is open (visualViewport shrinks). */
+/** Returns true when a text input is focused (keyboard is up on mobile). */
 function useKeyboardOpen(): boolean {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      // Keyboard is considered open when viewport height drops more than 120px
-      // below the window height — avoids false positives from browser chrome.
-      setOpen(window.innerHeight - vv.height > 120);
+    const isTextInput = (el: Element | null): boolean => {
+      if (!el) return false;
+      const tag = (el as HTMLElement).tagName;
+      if (tag === "TEXTAREA") return true;
+      if (tag === "INPUT") {
+        const type = (el as HTMLInputElement).type;
+        return !["checkbox", "radio", "button", "submit", "reset", "file", "range", "color"].includes(type);
+      }
+      return (el as HTMLElement).isContentEditable;
     };
-    update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
+
+    const onFocusIn  = (e: FocusEvent) => { if (isTextInput(e.target as Element)) setOpen(true); };
+    const onFocusOut = (e: FocusEvent) => { if (isTextInput(e.target as Element)) setOpen(false); };
+
+    document.addEventListener("focusin",  onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("focusin",  onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
   }, []);
 
   return open;
@@ -93,18 +103,18 @@ export function Navbar() {
   return (
     <header
       className="shrink-0 border-b border-navy-200/60 bg-[var(--glass-bg)] backdrop-blur-xl dark:border-white/10"
-      style={{ zIndex: 50, overflow: "hidden" }}
+      style={{ zIndex: 50 }}
     >
       <div
-        className={`relative mx-auto flex max-w-6xl items-center px-3 transition-[height] duration-150 ${
-          compact ? "h-10" : "h-14 sm:h-16"
-        } ${compact ? "px-2" : "sm:px-6"}`}
+        className={`relative mx-auto flex max-w-6xl items-center transition-[height] duration-150 ${
+          compact ? "h-10 px-2" : "h-14 px-3 sm:h-16 sm:px-6"
+        }`}
       >
         {/* Left: Logo — hide wordmark when compact to save space */}
         <Logo
           showWordmark={!compact}
           priority
-          className={`relative z-10 shrink-0 transition-all duration-150 ${compact ? "scale-75" : "scale-90 sm:scale-100"}`}
+          className={`relative z-10 shrink-0 transition-all duration-150 ${compact ? "scale-75 origin-left" : "scale-90 sm:scale-100"}`}
         />
 
         {/* Centre: Online pill */}
@@ -122,14 +132,16 @@ export function Navbar() {
             <button
               type="button"
               aria-label="Toggle dark mode"
-              className={`flex items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-600 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800 ${
-                compact ? "h-7 w-7 rounded-lg" : "h-8 w-8"
+              className={`flex items-center justify-center border border-navy-200/80 bg-white/70 text-navy-600 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800 ${
+                compact
+                  ? "rounded-xl p-2"
+                  : "h-8 w-8 rounded-xl"
               }`}
               onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             >
               {resolvedTheme === "dark"
-                ? <Sun className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
-                : <Moon className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />}
+                ? <Sun className="h-4 w-4" />
+                : <Moon className="h-4 w-4" />}
             </button>
           )}
 
@@ -139,11 +151,13 @@ export function Navbar() {
               type="button"
               aria-label={`Friends${notifCount > 0 ? ` · ${notifCount}` : ""}`}
               onClick={handleOpenFriends}
-              className={`relative flex items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-700 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-300 dark:hover:bg-navy-800 ${
-                compact ? "h-7 w-7 rounded-lg" : "h-8 w-8 sm:h-10 sm:w-10 sm:rounded-2xl"
+              className={`relative flex items-center justify-center border border-navy-200/80 bg-white/70 text-navy-700 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-300 dark:hover:bg-navy-800 ${
+                compact
+                  ? "rounded-xl p-2"
+                  : "h-8 w-8 rounded-xl sm:h-10 sm:w-10 sm:rounded-2xl"
               }`}
             >
-              <Users className={compact ? "h-3 w-3" : "h-4 w-4"} />
+              <Users className="h-4 w-4" />
               {notifCount > 0 && !friendsOpen && (
                 <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
                   {notifCount > 99 ? "99+" : notifCount}
@@ -170,25 +184,24 @@ export function Navbar() {
             type="button"
             aria-label={isNamed ? `Account: ${username ?? "profile"}` : "Sign in"}
             onClick={openModal}
-            className={`flex items-center gap-1.5 rounded-xl border border-navy-200/80 bg-white/70 text-navy-900 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-100 dark:hover:bg-navy-800 ${
+            className={`flex items-center border border-navy-200/80 bg-white/70 text-navy-900 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-100 dark:hover:bg-navy-800 ${
               compact
-                ? "h-7 px-1.5 rounded-lg"
-                : "h-8 px-2 sm:h-10 sm:gap-2 sm:rounded-2xl sm:px-3"
+                ? "gap-1 rounded-xl p-2"
+                : "h-8 gap-1.5 rounded-xl px-2 sm:h-10 sm:gap-2 sm:rounded-2xl sm:px-3"
             }`}
           >
-            <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"}`}>
+            <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-md ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"}`}>
               {isNamed && avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : isNamed && initial ? (
-                <span className="flex h-full w-full items-center justify-center rounded-lg bg-navy-200 text-[10px] font-bold text-navy-800 dark:bg-navy-700 dark:text-navy-100">
+                <span className="flex h-full w-full items-center justify-center rounded-md bg-navy-200 text-[10px] font-bold text-navy-800 dark:bg-navy-700 dark:text-navy-100">
                   {initial}
                 </span>
               ) : (
                 <UserCircle className={compact ? "h-4 w-4 opacity-70" : "h-5 w-5 opacity-70"} />
               )}
             </span>
-            {/* Label hidden in compact mode and on mobile normally */}
             {!compact && (
               <span className="hidden text-sm font-semibold sm:block">
                 {isNamed ? (username ?? "Account") : "Sign in"}
