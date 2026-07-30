@@ -58,11 +58,29 @@ export function AccountProvider({
     }
 
     // Named / OAuth user — fetch profile
-    const { data: profile } = await supabase
+    let { data: profile } = await supabase
       .from("profiles")
       .select("id,username,display_name,avatar_url,self_gender,wants_gender")
       .eq("id", user.id)
       .maybeSingle();
+
+    // Self-healing: if a Google (or any OAuth) user has no username yet,
+    // ask the server to assign one derived from their email, then re-fetch.
+    if (!profile?.username) {
+      try {
+        const res = await fetch("/api/auth/repair-username", { method: "POST" });
+        if (res.ok) {
+          const { data: repaired } = await supabase
+            .from("profiles")
+            .select("id,username,display_name,avatar_url,self_gender,wants_gender")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (repaired) profile = repaired;
+        }
+      } catch {
+        // Non-fatal — fall through with whatever profile we have.
+      }
+    }
 
     setState({
       status: "named",
