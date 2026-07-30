@@ -3,13 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
 const ZONES = {
-  desktop: { zoneId: "5991070", insClass: "eas6a97888e2",  width: 728, height: 90 },
-  mobile:  { zoneId: "5991072", insClass: "eas6a97888e10", width: 320, height: 50 },
+  desktop: { zoneId: "5991070", insClass: "eas6a97888e2",  maxWidth: 728, height: 90 },
+  mobile:  { zoneId: "5991072", insClass: "eas6a97888e10", maxWidth: 320, height: 50 },
 };
 
-// How long to wait for ExoClick to fill the slot before giving up (ms)
-const FILL_TIMEOUT_MS = 3000;
-// How often to retry after a failed fill (matches ExoClick's own refresh rate)
+const FILL_TIMEOUT_MS   = 3000;
 const RETRY_INTERVAL_MS = 30_000;
 
 function loadExoClickScript() {
@@ -32,33 +30,32 @@ function pushServe() {
 function AdUnit({
   zoneId,
   insClass,
-  width,
+  maxWidth,
   height,
 }: {
   zoneId: string;
   insClass: string;
-  width: number;
+  maxWidth: number;
   height: number;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  // "loading" → shimmer, "filled" → show ad, "empty" → retry shimmer
-  const [state, setState] = useState<"loading" | "filled" | "empty">("loading");
+  // Single ref — always stays in the DOM so ExoClick's injected iframe
+  // is never detached when state changes.
+  const adRef   = useRef<HTMLDivElement>(null);
   const retryRef = useRef<number | null>(null);
   const attemptRef = useRef(0);
+  const [state, setState] = useState<"loading" | "filled" | "empty">("loading");
 
   const attempt = useCallback(() => {
-    const container = ref.current;
+    const container = adRef.current;
     if (!container) return;
 
     setState("loading");
 
-    // Re-inject a fresh <ins> so ExoClick sees a new element on retry
+    // Fresh <ins> for each attempt
     container.innerHTML = `<ins class="${insClass}" data-zoneid="${zoneId}"></ins>`;
 
-    // Small delay so the script can register the new element
     const serve = window.setTimeout(pushServe, 200);
 
-    // Check if it filled
     const check = window.setTimeout(() => {
       window.clearTimeout(serve);
       const ins = container.querySelector("ins");
@@ -67,7 +64,6 @@ function AdUnit({
       } else {
         setState("empty");
         attemptRef.current += 1;
-        // Schedule retry
         retryRef.current = window.setTimeout(attempt, RETRY_INTERVAL_MS);
       }
     }, FILL_TIMEOUT_MS);
@@ -88,49 +84,47 @@ function AdUnit({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Hide the entire slot — including the background bar — whenever there's
-  // nothing to show. During the 30s retry window we still hide it; it will
-  // reappear with a shimmer when the next attempt starts.
-  if (state === "empty" || state === "loading" && attemptRef.current > 0) {
-    // Keep the hidden ad container in the DOM during retry so ExoClick can
-    // inject into it, but render nothing visible.
-    return (
-      <div style={{ position: "absolute", opacity: 0, pointerEvents: "none", height: 0, overflow: "hidden" }}>
-        <div ref={ref} />
-      </div>
-    );
-  }
+  // Outer visibility: show the bar only when loading (first attempt) or filled.
+  // Empty state (retry pending): bar hidden, takes no space.
+  const barVisible = state === "filled" || (state === "loading" && attemptRef.current === 0);
 
-  if (state === "loading") {
-    // First-ever load — show shimmer so space is reserved
-    return (
-      <div
-        className="flex w-full shrink-0 items-center justify-center bg-[var(--glass-bg)]"
-        style={{ height }}
-      >
-        <div
-          aria-hidden
-          className="animate-pulse rounded bg-navy-100 dark:bg-navy-800/60"
-          style={{ width, height: height - 8, borderRadius: 6 }}
-        />
-        {/* Keep ref target in DOM off-screen */}
-        <div ref={ref} style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />
-      </div>
-    );
-  }
-
-  // state === "filled"
   return (
-    <div
-      className="flex w-full shrink-0 items-center justify-center bg-[var(--glass-bg)]"
-      style={{ height }}
-    >
+    <>
+      {/* The slot wrapper — shown when loading or filled, gone when empty */}
       <div
-        ref={ref}
-        aria-label="Advertisement"
-        style={{ width, height, minHeight: height, overflow: "hidden" }}
-      />
-    </div>
+        className="w-full shrink-0 bg-[var(--glass-bg)]"
+        style={{
+          height: barVisible ? height : 0,
+          overflow: "hidden",
+          transition: "height 150ms ease",
+        }}
+      >
+        {/* Shimmer: only on first-ever load, hidden once filled */}
+        {state === "loading" && attemptRef.current === 0 && (
+          <div className="mx-auto h-full" style={{ maxWidth }}>
+            <div
+              aria-hidden
+              className="mx-2 h-full animate-pulse rounded bg-navy-100 dark:bg-navy-800/60"
+            />
+          </div>
+        )}
+
+        {/* Ad container: single div, always in DOM, opacity controls visibility.
+            ExoClick injects an iframe here — we never replace this element. */}
+        <div
+          ref={adRef}
+          aria-label="Advertisement"
+          className="mx-auto overflow-hidden"
+          style={{
+            maxWidth,
+            height,
+            // Invisible during shimmer phase, fully visible when filled
+            opacity: state === "filled" ? 1 : 0,
+            position: state === "loading" ? "absolute" : "relative",
+          }}
+        />
+      </div>
+    </>
   );
 }
 

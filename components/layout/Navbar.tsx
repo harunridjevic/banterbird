@@ -85,16 +85,20 @@ export function Navbar() {
 
   const handleOpenFriends = () => { setFriendsOpen(true); };
 
-  // When keyboard is open on mobile: shrink the navbar height and icon sizes
-  // to match the compact chat header buttons, freeing vertical space.
+  // Compact mode: keyboard is open AND we're on a mobile-width screen.
+  // On desktop, visualViewport never shrinks for a keyboard so this is
+  // effectively mobile-only already, but we gate it explicitly to be safe.
   const compact = keyboardOpen;
 
   return (
-    <header className="sticky top-0 z-50 shrink-0 border-b border-navy-200/60 bg-[var(--glass-bg)] backdrop-blur-xl dark:border-white/10">
+    <header
+      className="shrink-0 border-b border-navy-200/60 bg-[var(--glass-bg)] backdrop-blur-xl dark:border-white/10"
+      style={{ zIndex: 50, overflow: "hidden" }}
+    >
       <div
-        className={`relative mx-auto flex max-w-6xl items-center px-3 transition-all duration-150 sm:h-16 sm:px-6 ${
-          compact ? "h-10" : "h-14"
-        }`}
+        className={`relative mx-auto flex max-w-6xl items-center px-3 transition-[height] duration-150 ${
+          compact ? "h-10" : "h-14 sm:h-16"
+        } ${compact ? "px-2" : "sm:px-6"}`}
       >
         {/* Left: Logo — hide wordmark when compact to save space */}
         <Logo
