@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const ZONE_ID  = "5991074";
+const ZONE_ID   = "5991074";
 const INS_CLASS = "eas6a97888e37";
 
 function loadExoClickScript() {
@@ -17,8 +17,12 @@ function loadExoClickScript() {
 type Props = { zoneId?: string };
 
 export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [filled, setFilled] = useState(true);
+
   useEffect(() => {
     loadExoClickScript();
+
     const t = window.setTimeout(() => {
       (
         (window as unknown as Record<string, unknown>).AdProvider as
@@ -26,8 +30,21 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
           | undefined
       )?.push({ serve: {} });
     }, 200);
-    return () => window.clearTimeout(t);
+
+    const check = window.setTimeout(() => {
+      const ins = containerRef.current?.querySelector("ins");
+      if (!ins || ins.childElementCount === 0) {
+        setFilled(false);
+      }
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(t);
+      window.clearTimeout(check);
+    };
   }, []);
+
+  if (!filled) return null;
 
   return (
     <div className="mx-auto w-full max-w-sm px-4">
@@ -35,6 +52,7 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
         Sponsored
       </p>
       <div
+        ref={containerRef}
         aria-label="Advertisement"
         className="overflow-hidden rounded-2xl border border-navy-200/60 bg-white/50 dark:border-white/10 dark:bg-navy-900/30"
         style={{ minHeight: 200 }}
