@@ -43,7 +43,7 @@ function AdUnit({
   const ref = useRef<HTMLDivElement>(null);
   // "loading" → shimmer, "filled" → show ad, "empty" → retry shimmer
   const [state, setState] = useState<"loading" | "filled" | "empty">("loading");
-  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryRef = useRef<number | null>(null);
   const attemptRef = useRef(0);
 
   const attempt = useCallback(() => {

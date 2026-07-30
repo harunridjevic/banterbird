@@ -28,7 +28,7 @@ type Props = { zoneId?: string };
 
 export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryRef = useRef<number | null>(null);
   const [state, setState] = useState<"loading" | "filled" | "empty">("loading");
 
   const attempt = useCallback(() => {
