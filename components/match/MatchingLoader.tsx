@@ -1,38 +1,30 @@
 "use client";
 
-/**
- * MatchingLoader
- * ──────────────
- * Shown while the user waits for a match. The animation stays at the top so
- * the user always sees they're being matched. Below it, an Outstream video ad
- * fills the idle time — this is the highest-earning placement because the
- * user is captive with nothing else to look at.
- *
- * AD ZONE ID — fill this in once you have it from ExoClick.
- *
- * How to get it:
- *   1. ExoClick dashboard → Sites & Zones → New Zone
- *   2. Select your site → Format category: Video → Outstream → Next
- *   3. Maximum Width: leave as Responsive
- *   4. "Once closed, hide for" → Show on every page
- *   5. Save — copy the numeric Zone ID (e.g. "5678901") → paste below
- *
- * One zone ID works for both desktop and mobile automatically.
- */
-
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { ExoClickOutstream } from "@/components/ads/ExoClickOutstream";
 
 const OUTSTREAM_ZONE_ID = "5991074";
+const MIN_DISPLAY_MS = 2000;
 
 type Props = { onCancel: () => void };
 
 export function MatchingLoader({ onCancel }: Props) {
+  const [canCancel, setCanCancel] = useState(false);
+  const mountedAt = useRef(Date.now());
+
+  useEffect(() => {
+    const elapsed = Date.now() - mountedAt.current;
+    const remaining = Math.max(0, MIN_DISPLAY_MS - elapsed);
+    const t = window.setTimeout(() => setCanCancel(true), remaining);
+    return () => window.clearTimeout(t);
+  }, []);
+
   return (
     <div className="w-full px-4 py-6 text-center">
 
-      {/* ── Matching animation (always at the top) ── */}
+      {/* ── Matching animation ── */}
       <motion.div
         className="relative mx-auto flex h-20 w-20 items-center justify-center rounded-[1.75rem] border border-navy-200/70 bg-white/80 shadow-lg sm:h-24 sm:w-24 sm:rounded-[2rem] dark:border-white/10 dark:bg-navy-900/40"
         animate={{ scale: [1, 1.08, 1], rotate: [0, 3, -3, 0] }}
@@ -53,18 +45,19 @@ export function MatchingLoader({ onCancel }: Props) {
         Hang tight. We&apos;re pairing you with someone now.
       </p>
 
-      {/* ── Outstream video ad (fills the idle wait time) ── */}
+      {/* ── Outstream video ad ── */}
       <div className="mt-6">
         <ExoClickOutstream zoneId={OUTSTREAM_ZONE_ID} />
       </div>
 
-      {/* ── Cancel button below the ad ── */}
+      {/* ── Cancel button — disabled for first 2s ── */}
       <motion.button
         type="button"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={onCancel}
-        className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-navy-800 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-navy-200"
+        whileHover={canCancel ? { scale: 1.02 } : {}}
+        whileTap={canCancel ? { scale: 0.98 } : {}}
+        disabled={!canCancel}
+        onClick={canCancel ? onCancel : undefined}
+        className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-navy-800 disabled:opacity-40 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-navy-200"
       >
         <ArrowLeft className="h-4 w-4" /> Cancel
       </motion.button>

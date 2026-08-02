@@ -28,11 +28,16 @@ export function ExoClickBannerSlot() {
       className="flex w-full shrink-0 items-center justify-center"
       style={{
         minHeight: zone.height,
-        // Subtle checkerboard — makes the zone obviously an ad slot while
-        // remaining tasteful in both light and dark mode.
-        backgroundImage:
-          "repeating-conic-gradient(rgba(0,0,0,0.04) 0% 25%, transparent 0% 50%)",
-        backgroundSize: "16px 16px",
+        // Checkerboard pattern — clearly marks this as an ad zone.
+        // Two overlapping linear-gradients form the classic check.
+        backgroundImage: `
+          linear-gradient(45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
+          linear-gradient(-45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, rgba(120,130,155,0.13) 75%),
+          linear-gradient(-45deg, transparent 75%, rgba(120,130,155,0.13) 75%)
+        `,
+        backgroundSize: "12px 12px",
+        backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0px",
       }}
     >
       {/* ExoClick embed — exactly as provided by the dashboard */}

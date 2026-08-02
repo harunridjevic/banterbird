@@ -9,9 +9,6 @@ import { OnlineCountPill } from "@/components/presence/OnlineCountPill";
 import { useAccount } from "@/lib/account/context";
 import { useSupabase } from "@/app/providers";
 import { FriendsDrawer } from "@/components/friends/FriendsDrawer";
-import { useKeyboardOpen } from "@/lib/hooks/use-keyboard-open";
-
-  // Remove the inline duplicate now that we use the shared hook
 
 export function Navbar() {
   const { setTheme, resolvedTheme } = useTheme();
@@ -19,7 +16,6 @@ export function Navbar() {
   const { client } = useSupabase();
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
-  const keyboardOpen = useKeyboardOpen();
 
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -68,46 +64,35 @@ export function Navbar() {
 
   const handleOpenFriends = () => { setFriendsOpen(true); };
 
-  // Compact mode: keyboard is open on mobile (hook already gates to <640px).
-  const compact = keyboardOpen;
-
   return (
     <header
       className="shrink-0 border-b border-navy-200/60 bg-[var(--glass-bg)] backdrop-blur-xl dark:border-white/10"
       style={{ zIndex: 50 }}
     >
-      <div
-        className={`relative mx-auto flex max-w-6xl items-center transition-[height] duration-150 ${
-          compact ? "h-10 px-2" : "h-14 px-3 sm:h-16 sm:px-6"
-        }`}
-      >
-        {/* Left: Logo — hide wordmark when compact to save space */}
+      <div className="relative mx-auto flex max-w-6xl items-center h-14 px-3 sm:h-16 sm:px-6">
+        {/* Left: Logo */}
         <Logo
-          showWordmark={!compact}
+          showWordmark
           priority
-          className={`relative z-10 shrink-0 transition-all duration-150 ${compact ? "scale-75 origin-left" : "scale-90 sm:scale-100"}`}
+          className="relative z-10 shrink-0 scale-90 sm:scale-100"
         />
 
-        {/* Centre: Online pill — always shown, slightly smaller in compact mode */}
+        {/* Centre: Online pill */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className={`pointer-events-auto transition-transform duration-150 ${compact ? "scale-90" : ""}`}>
+          <div className="pointer-events-auto">
             <OnlineCountPill />
           </div>
         </div>
 
         {/* Right: buttons */}
-        <div className={`relative z-10 ml-auto flex shrink-0 items-center ${compact ? "gap-1" : "gap-1.5 sm:gap-2"}`}>
+        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
 
           {/* Theme toggle */}
           {mounted && (
             <button
               type="button"
               aria-label="Toggle dark mode"
-              className={`flex items-center justify-center border border-navy-200/80 bg-white/70 text-navy-600 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800 ${
-                compact
-                  ? "rounded-xl p-2"
-                  : "h-8 w-8 rounded-xl"
-              }`}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-600 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800"
               onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             >
               {resolvedTheme === "dark"
@@ -122,11 +107,7 @@ export function Navbar() {
               type="button"
               aria-label={`Friends${notifCount > 0 ? ` · ${notifCount}` : ""}`}
               onClick={handleOpenFriends}
-              className={`relative flex items-center justify-center border border-navy-200/80 bg-white/70 text-navy-700 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-300 dark:hover:bg-navy-800 ${
-                compact
-                  ? "rounded-xl p-2"
-                  : "h-8 w-8 rounded-xl sm:h-10 sm:w-10 sm:rounded-2xl"
-              }`}
+              className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-navy-200/80 bg-white/70 text-navy-700 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-300 dark:hover:bg-navy-800 sm:h-10 sm:w-10 sm:rounded-2xl"
             >
               <Users className="h-4 w-4" />
               {notifCount > 0 && !friendsOpen && (
@@ -155,13 +136,9 @@ export function Navbar() {
             type="button"
             aria-label={isNamed ? `Account: ${username ?? "profile"}` : "Sign in"}
             onClick={openModal}
-            className={`flex items-center border border-navy-200/80 bg-white/70 text-navy-900 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-100 dark:hover:bg-navy-800 ${
-              compact
-                ? "gap-1 rounded-xl p-2"
-                : "h-8 gap-1.5 rounded-xl px-2 sm:h-10 sm:gap-2 sm:rounded-2xl sm:px-3"
-            }`}
+            className="flex h-8 items-center gap-1.5 rounded-xl border border-navy-200/80 bg-white/70 px-2 text-navy-900 transition hover:bg-white dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-100 dark:hover:bg-navy-800 sm:h-10 sm:gap-2 sm:rounded-2xl sm:px-3"
           >
-            <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-md ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"}`}>
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-md sm:h-6 sm:w-6">
               {isNamed && avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
@@ -170,14 +147,12 @@ export function Navbar() {
                   {initial}
                 </span>
               ) : (
-                <UserCircle className={compact ? "h-4 w-4 opacity-70" : "h-5 w-5 opacity-70"} />
+                <UserCircle className="h-5 w-5 opacity-70" />
               )}
             </span>
-            {!compact && (
-              <span className="hidden text-sm font-semibold sm:block">
-                {isNamed ? (username ?? "Account") : "Sign in"}
-              </span>
-            )}
+            <span className="hidden text-sm font-semibold sm:block">
+              {isNamed ? (username ?? "Account") : "Sign in"}
+            </span>
           </button>
         </div>
       </div>
