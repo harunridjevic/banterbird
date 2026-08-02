@@ -68,9 +68,7 @@ export function Navbar() {
 
   const handleOpenFriends = () => { setFriendsOpen(true); };
 
-  // Compact mode: keyboard is open AND we're on a mobile-width screen.
-  // On desktop, visualViewport never shrinks for a keyboard so this is
-  // effectively mobile-only already, but we gate it explicitly to be safe.
+  // Compact mode: keyboard is open on mobile (hook already gates to <640px).
   const compact = keyboardOpen;
 
   return (

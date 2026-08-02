@@ -2,9 +2,27 @@
 
 import { useEffect, useState } from "react";
 
-/** Returns true when a text input is focused — i.e. the mobile keyboard is up. */
+/**
+ * Returns true when a text input is focused AND the screen is mobile-width
+ * (< 640px) — i.e. a software keyboard is likely open.
+ *
+ * On desktop and tablet the hook always returns false so navbar compacting
+ * and footer hiding never trigger on larger screens.
+ */
 export function useKeyboardOpen(): boolean {
   const [open, setOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const mqHandler = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      if (!e.matches) setOpen(false); // clear when switching to desktop
+    };
+    mq.addEventListener("change", mqHandler);
+    return () => mq.removeEventListener("change", mqHandler);
+  }, []);
 
   useEffect(() => {
     const isTextInput = (el: Element | null): boolean => {
@@ -29,5 +47,6 @@ export function useKeyboardOpen(): boolean {
     };
   }, []);
 
-  return open;
+  // Only report keyboard open on mobile — desktop/tablet never compact
+  return isMobile && open;
 }

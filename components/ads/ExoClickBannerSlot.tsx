@@ -25,8 +25,15 @@ export function ExoClickBannerSlot() {
 
   return (
     <div
-      className="flex w-full shrink-0 items-center justify-center bg-[var(--glass-bg)]"
-      style={{ minHeight: zone.height }}
+      className="flex w-full shrink-0 items-center justify-center"
+      style={{
+        minHeight: zone.height,
+        // Subtle checkerboard — makes the zone obviously an ad slot while
+        // remaining tasteful in both light and dark mode.
+        backgroundImage:
+          "repeating-conic-gradient(rgba(0,0,0,0.04) 0% 25%, transparent 0% 50%)",
+        backgroundSize: "16px 16px",
+      }}
     >
       {/* ExoClick embed — exactly as provided by the dashboard */}
       <ins className={zone.insClass} data-zoneid={zone.zoneId} />

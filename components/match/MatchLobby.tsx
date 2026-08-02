@@ -55,6 +55,7 @@ export function MatchLobby() {
   const [matchMode, setMatchMode] = useState<MatchMode | null>(null);
   const [hideGenderFilters, setHideGenderFilters] = useState<boolean | null>(null);
   const [accessBlocked, setAccessBlocked] = useState(false);
+  const [matchAttempt, setMatchAttempt] = useState(0);
   const matchingPaused = isMatchingPausedForInactivity();
   const matchGendersRef = useRef<{ self: SelfGender; wants: WantsGender } | null>(null);
   const navigatedRef = useRef(false);
@@ -135,6 +136,7 @@ export function MatchLobby() {
   useEffect(() => {
     if (!globalSettingsLoaded || hideGenderFilters || matchingPaused) return;
     if (selfGender && wantsGender) {
+      setMatchAttempt((n) => n + 1);
       setMatchRequested(true);
     }
   }, [globalSettingsLoaded, hideGenderFilters, matchingPaused, selfGender, wantsGender]);
@@ -417,6 +419,7 @@ export function MatchLobby() {
     if (hideGenderFilters) {
       matchGendersRef.current = anonymousMatchGenders();
     }
+    setMatchAttempt((n) => n + 1);
     setMatchRequested(true);
   }, [hideGenderFilters, releaseMatchClaim]);
 
@@ -550,7 +553,7 @@ export function MatchLobby() {
   }
 
   if (isMatching) {
-    return <MatchingLoader onCancel={handleCancelMatching} />;
+    return <MatchingLoader key={matchAttempt} onCancel={handleCancelMatching} />;
   }
 
   return (
