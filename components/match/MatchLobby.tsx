@@ -557,7 +557,7 @@ export function MatchLobby() {
   }
 
   return (
-    <div className="mx-auto flex w-full flex-col items-center gap-4 md:gap-7">
+    <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-4 md:gap-7">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

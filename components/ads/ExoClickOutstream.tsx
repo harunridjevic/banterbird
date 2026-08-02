@@ -6,9 +6,9 @@ import { useId, useEffect, useRef, useState } from "react";
 const ZONE_ID   = "5991074";
 const INS_CLASS = "eas6a97888e37";
 
-type Props = { zoneId?: string };
+type Props = { zoneId?: string; className?: string };
 
-export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
+export function ExoClickOutstream({ zoneId = ZONE_ID, className }: Props) {
   const uid = useId();
   const insRef = useRef<HTMLElement | null>(null);
   // "visible" = ad is present; "closed" = ExoClick removed/emptied the ins element
@@ -35,7 +35,7 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-sm px-4">
+    <div className={className ?? "mx-auto w-full max-w-sm px-4"}>
       {/* Label hides when the ad is closed */}
       {!closed && (
         <p className="mb-1.5 text-center text-[10px] font-medium uppercase tracking-widest text-navy-400 dark:text-navy-500">
