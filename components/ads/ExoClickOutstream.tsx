@@ -17,11 +17,13 @@ function loadExoClickScript() {
 }
 
 function pushServe() {
-  (
-    (window as unknown as Record<string, unknown>).AdProvider as
-      | { push: (o: unknown) => void }
-      | undefined
-  )?.push({ serve: {} });
+  // Mirror ExoClick's own embed pattern exactly:
+  //   (AdProvider = window.AdProvider || []).push({"serve": {}})
+  // This ensures the array is created if the script hasn't loaded yet,
+  // so the serve call is queued and replayed once ad-provider.js initialises.
+  const w = window as unknown as Record<string, { push: (o: unknown) => void } | unknown[]>;
+  w.AdProvider = (w.AdProvider as unknown[] | undefined) || [];
+  (w.AdProvider as { push: (o: unknown) => void }).push({ serve: {} });
 }
 
 type Props = { zoneId?: string };
@@ -36,12 +38,15 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
     if (!container) return;
 
     setState("loading");
+    // Fresh <ins> for each attempt
     container.innerHTML = `<ins class="${INS_CLASS}" data-zoneid="${zoneId}"></ins>`;
 
-    const serve = window.setTimeout(pushServe, 200);
+    // Push serve immediately after inserting the <ins> — mirrors ExoClick's
+    // own embed pattern where the push script is inline right after the tag.
+    pushServe();
 
     const check = window.setTimeout(() => {
-      window.clearTimeout(serve);
+      window.clearTimeout(check);
       const ins = container.querySelector("ins");
       if (ins && ins.childElementCount > 0) {
         setState("filled");
@@ -52,7 +57,6 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
     }, FILL_TIMEOUT_MS);
 
     return () => {
-      window.clearTimeout(serve);
       window.clearTimeout(check);
     };
   }, [zoneId]);
@@ -70,32 +74,25 @@ export function ExoClickOutstream({ zoneId = ZONE_ID }: Props) {
   // Nothing showing and no retry pending — disappear completely
   if (state === "empty" && !retryRef.current) return null;
 
-  // During retry wait: invisible but keep container in DOM for next injection
-  if (state === "empty") {
-    return (
-      <div style={{ position: "absolute", opacity: 0, pointerEvents: "none", height: 0, overflow: "hidden" }}>
-        <div ref={containerRef} />
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto w-full max-w-sm px-4">
-      {/* "Sponsored" label only shown when ad is actually filling or filled */}
-      <p className="mb-1.5 text-center text-[10px] font-medium uppercase tracking-widest text-navy-400 dark:text-navy-500">
-        Sponsored
-      </p>
-
-      {/* Shimmer on first load */}
-      {state === "loading" && (
+      {/* Hidden during retry wait or first load; visible once filled */}
+      {(state === "loading" || (state === "empty" && retryRef.current)) && (
         <div
           aria-hidden
           className="animate-pulse rounded-2xl bg-navy-100 dark:bg-navy-800/60"
-          style={{ height: 200 }}
+          style={{ height: state === "loading" ? 200 : 0 }}
         />
       )}
 
-      {/* Ad container — hidden until filled, always in DOM for injection */}
+      {/* "Sponsored" label — only visible when filled */}
+      {state === "filled" && (
+        <p className="mb-1.5 text-center text-[10px] font-medium uppercase tracking-widest text-navy-400 dark:text-navy-500">
+          Sponsored
+        </p>
+      )}
+
+      {/* Ad container — always in DOM so the ref never detaches between retries */}
       <div
         ref={containerRef}
         aria-label="Advertisement"

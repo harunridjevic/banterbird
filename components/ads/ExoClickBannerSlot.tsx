@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 const ZONES = {
   desktop: { zoneId: "5991070", insClass: "eas6a97888e2",  maxWidth: 728, height: 90 },
-  mobile:  { zoneId: "5991072", insClass: "eas6a97888e10", maxWidth: 320, height: 50 },
+  mobile:  { zoneId: "5991072", insClass: "eas6a97888e10", maxWidth: 300, height: 50 },
 };
 
 const FILL_TIMEOUT_MS   = 3000;
@@ -20,11 +20,13 @@ function loadExoClickScript() {
 }
 
 function pushServe() {
-  (
-    (window as unknown as Record<string, unknown>).AdProvider as
-      | { push: (o: unknown) => void }
-      | undefined
-  )?.push({ serve: {} });
+  // Mirror ExoClick's own embed pattern exactly:
+  //   (AdProvider = window.AdProvider || []).push({"serve": {}})
+  // This ensures the array is created if the script hasn't loaded yet,
+  // so the serve call is queued and replayed once ad-provider.js initialises.
+  const w = window as unknown as Record<string, { push: (o: unknown) => void } | unknown[]>;
+  w.AdProvider = (w.AdProvider as unknown[] | undefined) || [];
+  (w.AdProvider as { push: (o: unknown) => void }).push({ serve: {} });
 }
 
 function AdUnit({
@@ -54,10 +56,12 @@ function AdUnit({
     // Fresh <ins> for each attempt
     container.innerHTML = `<ins class="${insClass}" data-zoneid="${zoneId}"></ins>`;
 
-    const serve = window.setTimeout(pushServe, 200);
+    // Push serve immediately after inserting the <ins> — mirrors ExoClick's
+    // own embed pattern where the push script is inline right after the tag.
+    pushServe();
 
     const check = window.setTimeout(() => {
-      window.clearTimeout(serve);
+      window.clearTimeout(check);
       const ins = container.querySelector("ins");
       if (ins && ins.childElementCount > 0) {
         setState("filled");
@@ -69,7 +73,6 @@ function AdUnit({
     }, FILL_TIMEOUT_MS);
 
     return () => {
-      window.clearTimeout(serve);
       window.clearTimeout(check);
     };
   }, [zoneId, insClass]);
@@ -92,25 +95,24 @@ function AdUnit({
     <>
       {/* The slot wrapper — shown when loading or filled, gone when empty */}
       <div
-        className="w-full shrink-0 bg-[var(--glass-bg)]"
+        className="relative w-full shrink-0 bg-[var(--glass-bg)]"
         style={{
           height: barVisible ? height : 0,
           overflow: "hidden",
           transition: "height 150ms ease",
         }}
       >
-        {/* Shimmer: only on first-ever load, hidden once filled */}
+        {/* Shimmer: absolutely overlays the ad container on first-ever load */}
         {state === "loading" && attemptRef.current === 0 && (
-          <div className="mx-auto h-full" style={{ maxWidth }}>
-            <div
-              aria-hidden
-              className="mx-2 h-full animate-pulse rounded bg-navy-100 dark:bg-navy-800/60"
-            />
-          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 mx-auto animate-pulse rounded bg-navy-100 dark:bg-navy-800/60"
+            style={{ maxWidth }}
+          />
         )}
 
-        {/* Ad container: single div, always in DOM, opacity controls visibility.
-            ExoClick injects an iframe here — we never replace this element. */}
+        {/* Ad container: always in DOM at full size so ExoClick can measure it.
+            Opacity hides it during shimmer; becomes visible once filled. */}
         <div
           ref={adRef}
           aria-label="Advertisement"
@@ -118,9 +120,7 @@ function AdUnit({
           style={{
             maxWidth,
             height,
-            // Invisible during shimmer phase, fully visible when filled
             opacity: state === "filled" ? 1 : 0,
-            position: state === "loading" ? "absolute" : "relative",
           }}
         />
       </div>

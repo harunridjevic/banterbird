@@ -268,15 +268,7 @@ export default function RootLayout({
             gtag('config', 'G-YWHJZBKFLM');
           `}
         </Script>
-        {/* Google AdSense — loaded afterInteractive to avoid SSR hydration conflicts.
-            Runs alongside ExoClick with no conflicts (separate script domains,
-            separate <ins> class names: "adsbygoogle" vs "adsbynetwork"). */}
-        <Script
-          id="adsense"
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2521687003085794"
-          strategy="afterInteractive"
-          crossOrigin="anonymous"
-        />
+      
       </body>
     </html>
   );
