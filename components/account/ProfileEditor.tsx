@@ -6,9 +6,12 @@ import { Camera, Lock, LogOut, Mail, X } from "lucide-react";
 import { InlineSpinner } from "@/components/ui/Loading";
 import { FormField } from "./FormField";
 import type { Profile } from "@/lib/account/types";
+import { isProActive } from "@/lib/account/types";
 import { useAccount } from "@/lib/account/context";
 import { UsernameField } from "./UsernameField";
 import { useUsernameCheck } from "@/lib/hooks/use-username-check";
+import { ProBadge } from "./ProBadge";
+import { ProSubscribePanel } from "./ProSubscribePanel";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -232,7 +235,10 @@ export function ProfileEditor({
           </div>
           <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleAvatarChange} />
           <div className="min-w-0">
-            <p className="truncate font-semibold text-navy-950 dark:text-navy-50">{profile.username ?? "No username set"}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-semibold text-navy-950 dark:text-navy-50">{profile.username ?? "No username set"}</p>
+              {isProActive(profile) && <ProBadge size="md" />}
+            </div>
             <p className="text-xs text-navy-500 dark:text-navy-400">
               {avatarFile ? "New photo ready to save" : avatarPreview ? "Tap to change" : "Tap to add a photo"}
             </p>
@@ -253,6 +259,12 @@ export function ProfileEditor({
             )}
           </div>
         </div>
+
+        {/* PRO subscription */}
+        <ProSubscribePanel
+          isPro={isProActive(profile)}
+          proUntil={profile.pro_until}
+        />
 
         {/* Username */}
         <UsernameField

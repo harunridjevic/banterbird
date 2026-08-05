@@ -9,6 +9,8 @@ import { OnlineCountPill } from "@/components/presence/OnlineCountPill";
 import { useAccount } from "@/lib/account/context";
 import { useSupabase } from "@/app/providers";
 import { FriendsDrawer } from "@/components/friends/FriendsDrawer";
+import { ProBadge } from "@/components/account/ProBadge";
+import { isProActive } from "@/lib/account/types";
 
 export function Navbar() {
   const { setTheme, resolvedTheme } = useTheme();
@@ -28,6 +30,7 @@ export function Navbar() {
   const username = isNamed ? (state.profile.username ?? null) : null;
   const initial = username?.[0]?.toUpperCase() ?? null;
   const userId = isNamed ? state.profile.id : null;
+  const showPro = isNamed && isProActive(state.profile);
 
   const clearNotif = useCallback(() => setNotifCount(0), []);
   const syncNotif = useCallback((realCount: number) => setNotifCount(realCount), []);
@@ -153,6 +156,7 @@ export function Navbar() {
             <span className="hidden text-sm font-semibold sm:block">
               {isNamed ? (username ?? "Account") : "Sign in"}
             </span>
+            {showPro && <ProBadge className="hidden sm:inline-flex" />}
           </button>
         </div>
       </div>

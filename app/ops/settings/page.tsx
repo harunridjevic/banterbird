@@ -82,6 +82,7 @@ export default function OpsBotSettingsPage() {
         ageGate: { ...appSettings.ageGate, ...partial.ageGate },
         blockedWords: { ...appSettings.blockedWords, ...partial.blockedWords },
         llmGuards: { ...appSettings.llmGuards, ...partial.llmGuards },
+        billing: { ...appSettings.billing, ...partial.billing },
       };
       setAppSettings(next);
       setAppSettingsSaving(true);
@@ -197,6 +198,45 @@ export default function OpsBotSettingsPage() {
         <div className="mt-10 space-y-8">
           {appSettings ? (
             <>
+              <Section title="PRO billing">
+                <NumberField
+                  label="PRO price (USD / month)"
+                  value={appSettings.billing?.proPriceUsd ?? 9}
+                  min={1}
+                  max={999}
+                  step={0.5}
+                  onChange={(proPriceUsd) =>
+                    void patchAppSettings({
+                      billing: {
+                        ...(appSettings.billing ?? {}),
+                        proPriceUsd,
+                      },
+                    })
+                  }
+                />
+                <NumberField
+                  label="PRO period (days)"
+                  value={appSettings.billing?.proPeriodDays ?? 30}
+                  min={1}
+                  max={365}
+                  onChange={(proPeriodDays) =>
+                    void patchAppSettings({
+                      billing: {
+                        ...(appSettings.billing ?? {}),
+                        proPeriodDays,
+                      },
+                    })
+                  }
+                  className="mt-4"
+                />
+                <p className="mt-2 text-xs text-navy-400">
+                  Price change takes effect on the next checkout — existing subscribers are unaffected.
+                </p>
+                {appSettingsSaving ? (
+                  <p className="mt-2 text-xs text-violet-300">Saving…</p>
+                ) : null}
+              </Section>
+
               <Section title="Age confirmation (all users)">
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
                   <input

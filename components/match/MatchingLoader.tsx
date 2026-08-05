@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { ExoClickOutstream } from "@/components/ads/ExoClickOutstream";
+import { useAccount } from "@/lib/account/context";
 
 const OUTSTREAM_ZONE_ID = "5991074";
 const MIN_DISPLAY_MS = 2000;
@@ -11,6 +12,7 @@ const MIN_DISPLAY_MS = 2000;
 type Props = { onCancel: () => void };
 
 export function MatchingLoader({ onCancel }: Props) {
+  const { isPro } = useAccount();
   const [canCancel, setCanCancel] = useState(false);
   const mountedAt = useRef(Date.now());
 
@@ -64,10 +66,12 @@ export function MatchingLoader({ onCancel }: Props) {
           </motion.button>
         </div>
 
-        {/* Right panel — outstream video ad, same flex-1 width as left */}
-        <div className="flex w-full items-center justify-center md:flex-1">
-          <ExoClickOutstream zoneId={OUTSTREAM_ZONE_ID} className="w-full px-2" />
-        </div>
+        {/* Right panel — outstream video ad (hidden for PRO) */}
+        {!isPro && (
+          <div className="flex w-full items-center justify-center md:flex-1">
+            <ExoClickOutstream zoneId={OUTSTREAM_ZONE_ID} className="w-full px-2" />
+          </div>
+        )}
 
       </div>
 

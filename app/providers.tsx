@@ -18,6 +18,7 @@ import { BotSettingsProvider } from "@/lib/ops/bot-settings-provider";
 import { AccountProvider } from "@/lib/account/context";
 import { AccountModal } from "@/components/account/AccountModal";
 import { AuthErrorHandler } from "@/components/auth/AuthErrorHandler";
+import { BillingReturnHandler } from "@/components/account/BillingReturnHandler";
 
 type SupabaseCtx = {
   client: SupabaseClient;
@@ -59,6 +60,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
             <AccountProvider supabase={client}>
               <ClientErrorReporter />
               <AuthErrorHandler />
+              <BillingReturnHandler />
               <AccountModal />
               {children}
             </AccountProvider>

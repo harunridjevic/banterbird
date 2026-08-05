@@ -14,6 +14,10 @@ export async function GET() {
       rateLimiting: {
         enabled: settings.rateLimiting.enabled,
       },
+      billing: {
+        proPriceUsd: settings.billing.proPriceUsd,
+        proPeriodDays: settings.billing.proPeriodDays,
+      },
       botSettings: {
         matchMode: botSettings.matchMode,
         hideGenderFilters: botSettings.hideGenderFilters,

@@ -74,7 +74,7 @@ const FAQS = [
   },
   {
     q: "Is BanterBird free?",
-    a: "Yes, completely free. There is no premium tier, no ads in chat, and no paid features.",
+    a: "Yes — core chat is free. Optional BanterBird PRO ($9/month) is available for signed-in accounts and unlocks extra perks over time (including fewer ads).",
   },
   {
     q: "How does the matching work?",

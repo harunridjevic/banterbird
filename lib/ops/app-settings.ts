@@ -1,4 +1,10 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { PRO_PRICE_USD, PRO_PERIOD_DAYS } from "@/lib/billing/constants";
+
+export type BillingSettings = {
+  proPriceUsd: number;
+  proPeriodDays: number;
+};
 
 export type RateLimitSettings = {
   enabled: boolean;
@@ -32,6 +38,7 @@ export type AppSettings = {
   ageGate: AgeGateSettings;
   blockedWords: BlockedWordsSettings;
   llmGuards: LlmGuardSettings;
+  billing: BillingSettings;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -55,6 +62,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     autoBlockCostUsdDay: 5,
     softHourlyCap: 100,
     softDailyCap: 250,
+  },
+  billing: {
+    proPriceUsd: PRO_PRICE_USD,
+    proPeriodDays: PRO_PERIOD_DAYS,
   },
 };
 
@@ -114,17 +125,27 @@ export function llmGuardSensitivityMultiplier(sensitivity: LlmGuardSensitivity):
   }
 }
 
+export function normalizeBillingSettings(raw: Partial<BillingSettings>): BillingSettings {
+  const d = DEFAULT_APP_SETTINGS.billing;
+  return {
+    proPriceUsd: clamp(Number(raw.proPriceUsd ?? d.proPriceUsd), 1, 999),
+    proPeriodDays: clamp(Math.round(raw.proPeriodDays ?? d.proPeriodDays), 1, 365),
+  };
+}
+
 export function normalizeAppSettings(partial: {
   rateLimiting?: Partial<RateLimitSettings>;
   ageGate?: Partial<AgeGateSettings>;
   blockedWords?: Partial<BlockedWordsSettings>;
   llmGuards?: Partial<LlmGuardSettings>;
+  billing?: Partial<BillingSettings>;
 }): AppSettings {
   return {
     rateLimiting: normalizeRateLimitSettings(partial.rateLimiting ?? {}),
     ageGate: normalizeAgeGateSettings(partial.ageGate ?? {}),
     blockedWords: normalizeBlockedWordsSettings(partial.blockedWords ?? {}),
     llmGuards: normalizeLlmGuardSettings(partial.llmGuards ?? {}),
+    billing: normalizeBillingSettings(partial.billing ?? {}),
   };
 }
 
@@ -140,6 +161,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
       ageGate: (map.age_gate ?? {}) as Partial<AgeGateSettings>,
       blockedWords: (map.blocked_words ?? {}) as Partial<BlockedWordsSettings>,
       llmGuards: (map.llm_guards ?? {}) as Partial<LlmGuardSettings>,
+      billing: (map.billing ?? {}) as Partial<BillingSettings>,
     });
   } catch {
     return DEFAULT_APP_SETTINGS;
@@ -156,6 +178,7 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
     { key: "age_gate", value: normalized.ageGate, updated_at: now },
     { key: "blocked_words", value: normalized.blockedWords, updated_at: now },
     { key: "llm_guards", value: normalized.llmGuards, updated_at: now },
+    { key: "billing", value: normalized.billing, updated_at: now },
   ]);
 
   return normalized;

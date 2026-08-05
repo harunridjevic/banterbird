@@ -220,7 +220,7 @@ export default function RootLayout({
             name: "Is BanterBird free to use?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes, BanterBird is completely free to use with no hidden fees or subscriptions.",
+              text: "Yes, BanterBird is free to use. Optional BanterBird PRO is available for $9/month for signed-in accounts.",
             },
           },
           {
