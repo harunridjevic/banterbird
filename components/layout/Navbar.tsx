@@ -73,8 +73,8 @@ export function Navbar() {
       style={{ zIndex: 50 }}
     >
       <div className="relative mx-auto flex max-w-6xl items-center h-14 px-3 sm:h-16 sm:px-6">
-        {/* Left: Logo + PRO badge */}
-        <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+        {/* Left: Logo + PRO badge — pinned to left edge */}
+        <div className="relative z-10 mr-auto flex shrink-0 items-center gap-1.5">
           <Logo
             showWordmark
             priority
@@ -91,7 +91,7 @@ export function Navbar() {
         </div>
 
         {/* Right: buttons */}
-        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="relative z-10 flex shrink-0 items-center gap-1.5 sm:gap-2">
 
           {/* Theme toggle */}
           {mounted && (
@@ -159,7 +159,6 @@ export function Navbar() {
             <span className="hidden text-sm font-semibold sm:block">
               {isNamed ? (username ?? "Account") : "Sign in"}
             </span>
-            {showPro && <ProBadge className="hidden sm:inline-flex" />}
           </button>
         </div>
       </div>
