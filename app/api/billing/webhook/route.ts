@@ -1,155 +1,213 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import {
-  computeNewProUntil,
-  isSuccessfulPaymentStatus,
-  verifyIpnSignature,
-} from "@/lib/billing/nowpayments";
-import { PRO_ORDER_PREFIX } from "@/lib/billing/constants";
+import { verifyPaddleSignature } from "@/lib/billing/paddle";
+import { PRO_PERIOD_DAYS } from "@/lib/billing/constants";
 
-type IpnBody = {
-  payment_id?: string | number;
-  invoice_id?: string | number | null;
-  payment_status?: string;
-  order_id?: string;
-  price_amount?: string | number;
-  price_currency?: string;
-  [key: string]: unknown;
+// ---------------------------------------------------------------------------
+// Paddle webhook event shapes (minimal — only fields we use)
+// ---------------------------------------------------------------------------
+type PaddleSubscriptionData = {
+  id: string; // sub_...
+  status: string; // active | canceled | past_due | paused | trialing
+  customer_id: string; // ctm_...
+  current_billing_period?: {
+    starts_at?: string;
+    ends_at?: string;
+  };
+  custom_data?: { user_id?: string } | null;
+  items?: Array<{ price?: { product_id?: string } }>;
 };
+
+type PaddleTransactionData = {
+  id: string; // txn_...
+  status: string; // completed | ...
+  customer_id?: string;
+  subscription_id?: string | null;
+  custom_data?: { user_id?: string } | null;
+};
+
+type PaddleEvent = {
+  event_type: string;
+  data: PaddleSubscriptionData | PaddleTransactionData;
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function addDays(from: Date, days: number): Date {
+  const d = new Date(from.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function computeProUntil(
+  existingUntil: string | null | undefined,
+  periodEnd: string | null | undefined,
+): Date {
+  // Prefer Paddle's billing period end if available
+  if (periodEnd) return new Date(periodEnd);
+  // Otherwise extend from the later of now or current pro_until
+  const now = new Date();
+  const base =
+    existingUntil && new Date(existingUntil).getTime() > now.getTime()
+      ? new Date(existingUntil)
+      : now;
+  return addDays(base, PRO_PERIOD_DAYS);
+}
 
 /**
  * POST /api/billing/webhook
- * NOWPayments IPN. Verifies HMAC, activates PRO on finished payments.
+ * Paddle webhook handler. Verifies HMAC-SHA256 signature and processes
+ * subscription lifecycle events to maintain PRO status in the DB.
+ *
+ * Subscribe these events in the Paddle dashboard:
+ *   subscription.activated
+ *   subscription.updated
+ *   subscription.canceled
+ *   transaction.completed
  */
 export async function POST(req: Request) {
+  // Must read raw body before any parsing for signature verification
+  const rawBody = await req.text();
+  const signatureHeader = req.headers.get("paddle-signature");
+
+  if (!verifyPaddleSignature(rawBody, signatureHeader)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
+  let event: PaddleEvent;
   try {
-    const signature = req.headers.get("x-nowpayments-sig");
-    const body = (await req.json()) as IpnBody;
+    event = JSON.parse(rawBody) as PaddleEvent;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
-    if (!verifyIpnSignature(body as Record<string, unknown>, signature)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    }
+  const svc = createServiceRoleClient();
+  const { event_type, data } = event;
 
-    const orderId = typeof body.order_id === "string" ? body.order_id : null;
-    if (!orderId || !orderId.startsWith(`${PRO_ORDER_PREFIX}_`)) {
-      // Not our order — acknowledge so NOWPayments stops retrying
+  // ------------------------------------------------------------------
+  // subscription.activated — first payment succeeded, subscription live
+  // subscription.updated   — renewal, plan change, payment method update
+  // ------------------------------------------------------------------
+  if (event_type === "subscription.activated" || event_type === "subscription.updated") {
+    const sub = data as PaddleSubscriptionData;
+    const userId = sub.custom_data?.user_id;
+    if (!userId) {
+      // custom_data missing — can't link to a user, acknowledge and move on
       return NextResponse.json({ ok: true, ignored: true });
     }
 
-    const status = (body.payment_status ?? "").toLowerCase();
-    const paymentId =
-      body.payment_id !== undefined && body.payment_id !== null
-        ? String(body.payment_id)
-        : null;
-
-    const svc = createServiceRoleClient();
-
-    const { data: sub, error: subErr } = await svc
-      .from("pro_subscriptions")
-      .select("id,user_id,status,provider_payment_id")
-      .eq("order_id", orderId)
-      .maybeSingle();
-
-    if (subErr || !sub) {
-      return NextResponse.json({ error: "Unknown order" }, { status: 404 });
-    }
-
-    // Idempotency: already activated for this payment
-    if (
-      sub.status === "active" &&
-      paymentId &&
-      sub.provider_payment_id === paymentId
-    ) {
-      return NextResponse.json({ ok: true, duplicate: true });
-    }
-
-    if (status === "failed" || status === "expired" || status === "refunded") {
-      if (sub.status === "pending") {
-        await svc
-          .from("pro_subscriptions")
-          .update({
-            status: status === "refunded" ? "cancelled" : "failed",
-            provider_payment_id: paymentId,
-            raw_ipn: body,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", sub.id);
-      }
-      return NextResponse.json({ ok: true });
-    }
-
-    if (!isSuccessfulPaymentStatus(status)) {
-      // confirming / sending / etc. — store payment id, wait for finished
-      await svc
-        .from("pro_subscriptions")
-        .update({
-          provider_payment_id: paymentId ?? undefined,
-          provider_invoice_id:
-            body.invoice_id != null ? String(body.invoice_id) : undefined,
-          raw_ipn: body,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", sub.id);
-      return NextResponse.json({ ok: true, pending: true });
-    }
+    const isActive = sub.status === "active" || sub.status === "trialing";
+    const periodEnd = sub.current_billing_period?.ends_at ?? null;
 
     const { data: profile } = await svc
       .from("profiles")
       .select("pro_until")
-      .eq("id", sub.user_id)
+      .eq("id", userId)
       .maybeSingle();
 
-    const periodStart = new Date();
-    const periodEnd = computeNewProUntil(profile?.pro_until);
+    const proUntil = computeProUntil(profile?.pro_until, periodEnd);
+    const now = new Date().toISOString();
 
-    const { error: updSubErr } = await svc
+    // Upsert subscription row keyed by paddle_subscription_id
+    const { error: subErr } = await svc.from("pro_subscriptions").upsert(
+      {
+        user_id: userId,
+        status: isActive ? "active" : sub.status === "canceled" ? "cancelled" : "failed",
+        provider: "paddle",
+        paddle_subscription_id: sub.id,
+        paddle_customer_id: sub.customer_id,
+        order_id: `paddle_sub_${sub.id}`,
+        amount_usd: 9,
+        current_period_start: sub.current_billing_period?.starts_at ?? now,
+        current_period_end: proUntil.toISOString(),
+        updated_at: now,
+      },
+      { onConflict: "order_id" },
+    );
+
+    if (subErr) {
+      return NextResponse.json({ error: subErr.message }, { status: 500 });
+    }
+
+    if (isActive) {
+      await svc
+        .from("profiles")
+        .update({
+          is_pro: true,
+          pro_until: proUntil.toISOString(),
+          updated_at: now,
+        })
+        .eq("id", userId);
+
+      try {
+        await svc.auth.admin.updateUserById(userId, {
+          app_metadata: { is_pro: true, pro_until: proUntil.toISOString() },
+        });
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
+  // ------------------------------------------------------------------
+  // subscription.canceled — immediately or at period end
+  // ------------------------------------------------------------------
+  if (event_type === "subscription.canceled") {
+    const sub = data as PaddleSubscriptionData;
+    const userId = sub.custom_data?.user_id;
+    if (!userId) return NextResponse.json({ ok: true, ignored: true });
+
+    const now = new Date().toISOString();
+
+    // Mark subscription cancelled; keep pro_until intact so they have access
+    // until the period they already paid for ends (Paddle cancels at period end).
+    await svc
+      .from("pro_subscriptions")
+      .update({ status: "cancelled", updated_at: now })
+      .eq("paddle_subscription_id", sub.id);
+
+    // If period already ended, also revoke PRO immediately
+    const periodEnd = sub.current_billing_period?.ends_at;
+    if (periodEnd && new Date(periodEnd).getTime() < Date.now()) {
+      await svc
+        .from("profiles")
+        .update({ is_pro: false, updated_at: now })
+        .eq("id", userId);
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
+  // ------------------------------------------------------------------
+  // transaction.completed — a payment went through (initial or renewal).
+  // Links the pending checkout row to the subscription, stores txn ID.
+  // ------------------------------------------------------------------
+  if (event_type === "transaction.completed") {
+    const txn = data as PaddleTransactionData;
+    const userId = txn.custom_data?.user_id;
+    if (!userId || !txn.subscription_id) {
+      return NextResponse.json({ ok: true, ignored: true });
+    }
+
+    const now = new Date().toISOString();
+
+    // Update the pending row that was created at checkout time
+    await svc
       .from("pro_subscriptions")
       .update({
-        status: "active",
-        provider_payment_id: paymentId,
-        provider_invoice_id:
-          body.invoice_id != null ? String(body.invoice_id) : undefined,
-        current_period_start: periodStart.toISOString(),
-        current_period_end: periodEnd.toISOString(),
-        raw_ipn: body,
-        updated_at: new Date().toISOString(),
+        paddle_subscription_id: txn.subscription_id,
+        paddle_customer_id: txn.customer_id ?? undefined,
+        paddle_transaction_id: txn.id,
+        updated_at: now,
       })
-      .eq("id", sub.id);
+      .eq("order_id", `paddle_txn_${txn.id}`);
 
-    if (updSubErr) {
-      return NextResponse.json({ error: updSubErr.message }, { status: 500 });
-    }
-
-    const { error: updProfileErr } = await svc
-      .from("profiles")
-      .update({
-        is_pro: true,
-        pro_until: periodEnd.toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sub.user_id);
-
-    if (updProfileErr) {
-      return NextResponse.json({ error: updProfileErr.message }, { status: 500 });
-    }
-
-    // Reflect PRO in app_metadata (not user_metadata) for future server checks
-    try {
-      await svc.auth.admin.updateUserById(sub.user_id, {
-        app_metadata: {
-          is_pro: true,
-          pro_until: periodEnd.toISOString(),
-        },
-      });
-    } catch {
-      // Non-fatal — profiles row is source of truth for the app UI
-    }
-
-    return NextResponse.json({ ok: true, activated: true });
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Webhook error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ ok: true });
   }
+
+  // Unhandled event type — acknowledge so Paddle doesn't retry
+  return NextResponse.json({ ok: true, ignored: true });
 }

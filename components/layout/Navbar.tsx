@@ -73,12 +73,15 @@ export function Navbar() {
       style={{ zIndex: 50 }}
     >
       <div className="relative mx-auto flex max-w-6xl items-center h-14 px-3 sm:h-16 sm:px-6">
-        {/* Left: Logo */}
-        <Logo
-          showWordmark
-          priority
-          className="relative z-10 shrink-0 scale-90 sm:scale-100"
-        />
+        {/* Left: Logo + PRO badge */}
+        <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+          <Logo
+            showWordmark
+            priority
+            className="shrink-0 scale-90 sm:scale-100"
+          />
+          {showPro && <ProBadge size="sm" />}
+        </div>
 
         {/* Centre: Online pill */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

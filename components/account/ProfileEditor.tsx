@@ -375,6 +375,15 @@ export function ProfileEditor({
             <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
               Your account, profile, friends and all messages will be deleted. This cannot be undone.
             </p>
+            {isProActive(profile) && (
+              <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
+                Your PRO subscription will be cancelled and auto-renewal turned off. Your current period is
+                non-refundable — for refund requests email{" "}
+                <a href="mailto:support@banterbird.app" className="underline underline-offset-2">
+                  support@banterbird.app
+                </a>.
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 type="button"
