@@ -74,7 +74,7 @@ export function Navbar() {
     >
       <div className="relative mx-auto flex max-w-6xl items-center h-14 px-3 sm:h-16 sm:px-6">
         {/* Left: Logo + PRO badge — pinned to left edge */}
-        <div className="relative z-10 mr-auto flex shrink-0 items-center gap-1.5">
+        <div className="relative z-10 flex shrink-0 items-center gap-1.5">
           <Logo
             showWordmark
             priority
@@ -83,7 +83,7 @@ export function Navbar() {
           {showPro && <ProBadge size="sm" />}
         </div>
 
-        {/* Centre: Online pill */}
+        {/* Centre: Online pill — absolutely centered but pointer-events safe */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="pointer-events-auto">
             <OnlineCountPill />
@@ -91,7 +91,7 @@ export function Navbar() {
         </div>
 
         {/* Right: buttons */}
-        <div className="relative z-10 flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
 
           {/* Theme toggle */}
           {mounted && (
