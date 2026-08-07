@@ -74,7 +74,7 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <AgeGateWrapper>
-      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-4 pb-8 pt-36 sm:px-6 sm:pt-40">
+      <div className="flex h-full w-full items-center justify-center px-4 pb-[14%] pt-8 sm:px-6 sm:pb-[6%]">
         <div className="flex w-full max-w-4xl flex-col items-center">
           <h1 className="sr-only">BanterBird - free anonymous chat online</h1>
           <MatchLobby />

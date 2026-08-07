@@ -42,6 +42,8 @@ export async function POST() {
       sub.paddle_subscription_id,
     );
 
+    console.log("[UpdatePayment] Portal URL:", portalUrl);
+
     return NextResponse.json({ ok: true, portalUrl });
   } catch (e) {
     return NextResponse.json(

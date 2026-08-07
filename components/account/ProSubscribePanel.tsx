@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Crown, CreditCard, Loader2, X } from "lucide-react";
-import { ProBadge } from "./ProBadge";
 import { PRO_PRICE_USD } from "@/lib/billing/constants";
 import { useAccount } from "@/lib/account/context";
 
@@ -150,10 +149,11 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
     setError(null);
     try {
       const res = await fetch("/api/billing/cancel", { method: "POST" });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as { ok?: boolean; proUntil?: string | null; error?: string };
       if (!res.ok) { setError(data.error ?? "Could not cancel renewal."); return; }
       setCancelSuccess(true);
       setConfirmCancel(false);
+      // Refresh account context so is_pro / pro_until stays in sync
       await refresh();
     } catch {
       setError("Network error. Try again.");
@@ -186,10 +186,7 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
             <Crown className="h-4 w-4" strokeWidth={2.25} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-bold text-navy-950 dark:text-navy-50">BanterBird PRO</p>
-              <ProBadge size="sm" />
-            </div>
+            <p className="text-sm font-bold text-navy-950 dark:text-navy-50">BanterBird PRO</p>
             {cancelSuccess ? (
               <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
                 Renewal cancelled. You have PRO access until {untilLabel ?? "the end of your billing period"}.

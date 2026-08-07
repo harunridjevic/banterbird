@@ -192,7 +192,6 @@ export async function getPaddleCustomerPortalUrl(
   const data = (await paddleRequest(
     "POST",
     `/customers/${customerId}/auth-token`,
-    {},
   )) as { customer_auth_token?: string };
 
   const token = data.customer_auth_token;
@@ -211,8 +210,17 @@ export async function getPaddleCustomerPortalUrl(
 export async function cancelPaddleSubscription(
   subscriptionId: string,
 ): Promise<void> {
+  // First, clear any pending scheduled changes that would block cancellation
+  try {
+    await paddleRequest("PATCH", `/subscriptions/${subscriptionId}`, {
+      scheduled_change: null,
+    });
+  } catch {
+    // Non-fatal — may not have scheduled changes
+  }
+
   await paddleRequest("POST", `/subscriptions/${subscriptionId}/cancel`, {
-    effective_from: "next_billing_period",
+    effective_from: "immediately",
   });
 }
 

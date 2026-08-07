@@ -6,8 +6,9 @@ import { cancelPaddleSubscription } from "@/lib/billing/paddle";
 
 /**
  * POST /api/billing/cancel
- * Cancels the user's active Paddle subscription at the end of the current
- * billing period. PRO access continues until pro_until; no future charges.
+ * Cancels the user's Paddle subscription immediately on Paddle's side.
+ * PRO access in the app continues until pro_until (already paid period).
+ * No future charges will occur.
  */
 export async function POST() {
   try {
@@ -22,7 +23,7 @@ export async function POST() {
 
     const { data: sub } = await svc
       .from("pro_subscriptions")
-      .select("id, paddle_subscription_id, status")
+      .select("id, paddle_subscription_id, status, current_period_end")
       .eq("user_id", user.id)
       .eq("provider", "paddle")
       .eq("status", "active")
@@ -35,15 +36,31 @@ export async function POST() {
       );
     }
 
+    // Cancel on Paddle immediately — clears any pending scheduled changes first
     await cancelPaddleSubscription(sub.paddle_subscription_id);
 
-    // Mark as cancelled locally — webhook will confirm, but update optimistically
+    const now = new Date().toISOString();
+
+    // Mark subscription as cancelled in our DB
     await svc
       .from("pro_subscriptions")
-      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .update({ status: "cancelled", updated_at: now })
       .eq("id", sub.id);
 
-    return NextResponse.json({ ok: true });
+    // Keep is_pro = true and pro_until intact — user keeps access until the
+    // period they already paid for expires. sync_expired_pro will flip is_pro
+    // to false automatically when pro_until passes.
+    // Just return the pro_until so the UI can show "active until X".
+    const { data: profile } = await svc
+      .from("profiles")
+      .select("pro_until")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    return NextResponse.json({
+      ok: true,
+      proUntil: profile?.pro_until ?? sub.current_period_end ?? null,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Cancel failed" },
