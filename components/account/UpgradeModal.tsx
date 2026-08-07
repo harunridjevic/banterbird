@@ -54,6 +54,7 @@ export function UpgradeModal({ open, onClose }: Props) {
   const { refresh, openModal } = useAccount();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginPrompt, setLoginPrompt] = useState(false);
   const [priceUsd, setPriceUsd] = useState(PRO_PRICE_USD);
   const paddleLoaded = useRef(false);
 
@@ -70,7 +71,10 @@ export function UpgradeModal({ open, onClose }: Props) {
 
   // Close on Escape
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setLoginPrompt(false);
+      return;
+    }
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -110,9 +114,9 @@ export function UpgradeModal({ open, onClose }: Props) {
 
       if (!res.ok || !data.transactionId || !data.clientToken) {
         if (res.status === 401) {
-          // Not signed in — close upgrade modal and open account modal
-          onClose();
-          openModal();
+          // Not signed in — show in-modal prompt before redirecting to login
+          setLoginPrompt(true);
+          setLoading(false);
           return;
         }
         setError(data.error ?? "Could not start checkout.");
@@ -232,27 +236,54 @@ export function UpgradeModal({ open, onClose }: Props) {
 
             {/* CTA */}
             <div className="px-6 pb-6 pt-4">
-              {error && (
-                <p className="mb-3 text-xs text-rose-600 dark:text-rose-400">{error}</p>
+              {loginPrompt ? (
+                <div className="mb-4 rounded-2xl border border-amber-400/40 bg-amber-50/80 px-4 py-3 dark:bg-amber-950/20">
+                  <p className="text-sm font-semibold text-navy-900 dark:text-navy-50">
+                    You need to be logged in to upgrade
+                  </p>
+                  <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
+                    Create a free account or sign in first, then come back to unlock PRO.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); openModal(); }}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 py-3 text-sm font-bold text-navy-950 shadow-lg transition hover:bg-amber-300"
+                  >
+                    Sign in / Create account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLoginPrompt(false)}
+                    className="mt-2 w-full text-center text-xs text-navy-400 underline-offset-2 hover:underline dark:text-navy-500"
+                  >
+                    Go back
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {error && (
+                    <p className="mb-3 text-xs text-rose-600 dark:text-rose-400">{error}</p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void startCheckout()}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 py-3.5 text-sm font-bold text-navy-950 shadow-lg transition hover:bg-amber-300 disabled:opacity-60"
+                  >
+                    {loading ? (
+                      <span className="animate-pulse">Opening checkout…</span>
+                    ) : (
+                      <>
+                        <Crown className="h-4 w-4" strokeWidth={2.5} />
+                        Get PRO — ${priceUsd}/mo
+                      </>
+                    )}
+                  </button>
+                  <p className="mt-2 text-center text-[11px] text-navy-400 dark:text-navy-500">
+                    Cancel anytime · Secure payment via Paddle
+                  </p>
+                </>
               )}
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void startCheckout()}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 py-3.5 text-sm font-bold text-navy-950 shadow-lg transition hover:bg-amber-300 disabled:opacity-60"
-              >
-                {loading ? (
-                  <span className="animate-pulse">Opening checkout…</span>
-                ) : (
-                  <>
-                    <Crown className="h-4 w-4" strokeWidth={2.5} />
-                    Get PRO — ${priceUsd}/mo
-                  </>
-                )}
-              </button>
-              <p className="mt-2 text-center text-[11px] text-navy-400 dark:text-navy-500">
-                Cancel anytime · Secure payment via Paddle
-              </p>
             </div>
           </motion.div>
         </>
