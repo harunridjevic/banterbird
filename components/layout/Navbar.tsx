@@ -85,7 +85,7 @@ export function Navbar() {
             className="shrink-0 scale-90 sm:scale-100"
           />
           {/* Badge/button sits directly on the logo, shifted 100px from the left */}
-          <div className="absolute left-[100px] flex items-center">
+          <div className="absolute left-[50px] flex items-center">
             {showPro && <ProBadge size="sm" />}
             {mounted && showRemoveAds && (
               <button
