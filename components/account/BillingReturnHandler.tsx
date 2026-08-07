@@ -38,27 +38,22 @@ export function BillingReturnHandler() {
       attempts++;
       if (attempts > 60) { clearInterval(tryAttach); return; }
       if (!window.Paddle) return;
-
       clearInterval(tryAttach);
 
-      // Wrap Initialize to inject our global eventCallback
       const original = window.Paddle.Initialize.bind(window.Paddle);
       window.Paddle.Initialize = (opts) => {
         original({
           ...opts,
           eventCallback: (event: { name: string; data?: unknown }) => {
-            // Call the component's own callback first
             opts.eventCallback?.(event);
-
             if (event.name === "checkout.completed") {
               // Payment confirmed — poll until webhook activates PRO
               pollUntilPro(true);
             }
-
             if (event.name === "checkout.closed") {
-              // Overlay closed — do a single quiet refresh in case
-              // the webhook already fired while checkout was open
-              void refresh();
+              // Overlay closed after payment — poll in case webhook
+              // already fired while the overlay was still open
+              pollUntilPro(true);
             }
           },
         });
