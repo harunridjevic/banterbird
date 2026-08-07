@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { usePathname } from "next/navigation";
 import { isProActive, type AccountState, type Profile } from "./types";
 
 const PROFILE_COLUMNS =
@@ -48,6 +49,10 @@ export function AccountProvider({
 }) {
   const [state, setState] = useState<AccountState>({ status: "loading" });
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Close the modal whenever the user navigates to a different page.
+  const pathname = usePathname();
+  useEffect(() => { setModalOpen(false); }, [pathname]);
 
   const refresh = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();

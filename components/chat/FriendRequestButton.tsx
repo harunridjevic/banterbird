@@ -46,7 +46,7 @@ export function FriendRequestButton({
 
     if (isSent || status === "loading") return;
 
-    if (isAiRoom && !peerId) {
+    if (isAiRoom) {
       setStatus("sent");
       if (!hideBotUi) {
         // Inject system messages: sent immediately, rejected after random delay
@@ -57,6 +57,8 @@ export function FriendRequestButton({
           "Not really looking to connect outside of chat",
           "I prefer to keep things anonymous on BanterBird",
           "Nothing personal, I just don't add people from chat",
+          "I never really use the friends thing on here lol",
+          "I'm kind of weird about adding people I just met in chat",
         ];
         const excuse = excuses[Math.floor(Math.random() * excuses.length)];
         window.dispatchEvent(new CustomEvent("banterbird:bot-friend-request-sent"));

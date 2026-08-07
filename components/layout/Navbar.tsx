@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Moon, Sun, UserCircle, Users, Sparkles } from "lucide-react";
 import { useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 import { OnlineCountPill } from "@/components/presence/OnlineCountPill";
 import { useAccount } from "@/lib/account/context";
@@ -19,6 +20,7 @@ export function Navbar() {
   const { client } = useSupabase();
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
+  const pathname = usePathname();
 
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -34,6 +36,12 @@ export function Navbar() {
   const showPro = isNamed && isProActive(state.profile);
   const showRemoveAds = state.status !== "loading" && !showPro;
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  // Close all popups when the user navigates to a different page.
+  useEffect(() => {
+    setFriendsOpen(false);
+    setUpgradeOpen(false);
+  }, [pathname]);
 
   const clearNotif = useCallback(() => setNotifCount(0), []);
   const syncNotif = useCallback((realCount: number) => setNotifCount(realCount), []);
@@ -62,7 +70,8 @@ export function Navbar() {
         schema: "public",
         table: "friend_requests",
         filter: `to_id=eq.${userId}`,
-      }, () => setNotifCount((n) => n + 1))
+      // Re-fetch the real count so the badge never drifts above the true value.
+      }, () => void fetchCount())
       .subscribe();
 
     return () => { void client.removeChannel(channel); };
@@ -85,7 +94,7 @@ export function Navbar() {
             className="shrink-0 scale-90 sm:scale-100"
           />
           {/* Badge/button sits directly on the logo, shifted right */}
-          <div className="absolute left-[60px] sm:left-[75px] flex items-center">
+          <div className="absolute left-[62px] sm:left-[75px] flex items-center">
             {showPro && <ProBadge size="sm" />}
             {mounted && showRemoveAds && (
               <button
