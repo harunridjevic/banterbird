@@ -84,17 +84,18 @@ export function Navbar() {
             priority
             className="shrink-0 scale-90 sm:scale-100"
           />
-          {/* Badge/button sits directly on the logo, shifted 100px from the left */}
-          <div className="absolute left-[50px] flex items-center">
+          {/* Badge/button sits directly on the logo, shifted right */}
+          <div className="absolute left-[60px] sm:left-[75px] flex items-center">
             {showPro && <ProBadge size="sm" />}
             {mounted && showRemoveAds && (
               <button
                 type="button"
                 onClick={() => setUpgradeOpen(true)}
-                className="hidden items-center gap-1.5 rounded-xl border border-amber-400/60 bg-amber-400/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-400/20 dark:border-amber-400/30 dark:text-amber-400 dark:hover:bg-amber-400/10 sm:flex"
+                className="flex items-center gap-1 rounded-lg border border-amber-400/60 bg-amber-400/10 px-1.5 py-1 text-[10px] font-semibold text-amber-700 transition hover:bg-amber-400/20 dark:border-amber-400/30 dark:text-amber-400 dark:hover:bg-amber-400/10 sm:gap-1.5 sm:rounded-xl sm:px-2.5 sm:py-1.5 sm:text-xs"
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                Remove Ads
+                <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span className="sm:hidden text-center leading-tight">Remove<br />Ads</span>
+                <span className="hidden sm:inline">Remove Ads</span>
               </button>
             )}
           </div>
