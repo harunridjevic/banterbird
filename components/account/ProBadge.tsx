@@ -1,28 +1,34 @@
 "use client";
 
+import { Crown } from "lucide-react";
+
 type Props = {
   className?: string;
   size?: "sm" | "md";
 };
 
-/** Compact PRO badge for navbar / profile. */
+/** PRO badge — styled to match the "Remove Ads" button. */
 export function ProBadge({ className = "", size = "sm" }: Props) {
   const sizeClass =
     size === "md"
-      ? "px-2 py-0.5 text-[11px]"
-      : "px-1.5 py-px text-[10px]";
+      ? "px-3 py-2 text-xs gap-2"
+      : "px-2.5 py-1.5 text-xs gap-1.5";
+
+  const iconSize =
+    size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
 
   return (
     <span
       className={[
-        "inline-flex items-center justify-center rounded-full border font-bold uppercase tracking-wide shadow-sm",
-        "border-amber-400/80 bg-amber-400/90 text-navy-950",
-        "dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-300",
+        "inline-flex items-center font-semibold rounded-xl border transition",
+        "border-amber-400/60 bg-amber-400/10 text-amber-700",
+        "dark:border-amber-400/30 dark:text-amber-400 dark:bg-transparent",
         sizeClass,
         className,
       ].join(" ")}
       title="BanterBird PRO"
     >
+      <Crown className={iconSize} />
       PRO
     </span>
   );

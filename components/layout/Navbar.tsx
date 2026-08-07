@@ -77,14 +77,24 @@ export function Navbar() {
       style={{ zIndex: 50 }}
     >
       <div className="relative mx-auto flex max-w-6xl items-center h-14 px-3 sm:h-16 sm:px-6">
-        {/* Left: Logo + PRO badge — pinned to left edge */}
-        <div className="relative z-10 flex shrink-0 items-center">
+        {/* Left: Logo + PRO badge / Remove Ads — pinned to left edge */}
+        <div className="relative z-10 flex shrink-0 items-center gap-2">
           <Logo
             showWordmark
             priority
             className="shrink-0 scale-90 sm:scale-100"
           />
-          {showPro && <span className="-ml-20 self-center sm:-ml-24" style={{ marginTop: "-7px" }}><ProBadge size="sm" /></span>}
+          {showPro && <ProBadge size="sm" />}
+          {mounted && showRemoveAds && (
+            <button
+              type="button"
+              onClick={() => setUpgradeOpen(true)}
+              className="hidden items-center gap-1.5 rounded-xl border border-amber-400/60 bg-amber-400/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-400/20 dark:border-amber-400/30 dark:text-amber-400 dark:hover:bg-amber-400/10 sm:flex"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Remove Ads
+            </button>
+          )}
         </div>
 
         {/* Centre: Online pill — absolutely centered but pointer-events safe */}
@@ -96,18 +106,6 @@ export function Navbar() {
 
         {/* Right: buttons */}
         <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-
-          {/* Remove Ads button — shown to free and anonymous users */}
-          {mounted && showRemoveAds && (
-            <button
-              type="button"
-              onClick={() => setUpgradeOpen(true)}
-              className="hidden items-center gap-1.5 rounded-xl border border-amber-400/60 bg-amber-400/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-400/20 dark:border-amber-400/30 dark:text-amber-400 dark:hover:bg-amber-400/10 sm:flex"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Remove Ads
-            </button>
-          )}
 
           {/* Theme toggle */}
           {mounted && (
