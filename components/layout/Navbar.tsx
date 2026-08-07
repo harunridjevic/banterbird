@@ -74,13 +74,17 @@ export function Navbar() {
     >
       <div className="relative mx-auto flex max-w-6xl items-center h-14 px-3 sm:h-16 sm:px-6">
         {/* Left: Logo + PRO badge — pinned to left edge */}
-        <div className="relative z-10 flex shrink-0 items-center">
+        <div className="relative z-10 flex shrink-0 items-center self-stretch">
           <Logo
             showWordmark
             priority
             className="shrink-0 scale-90 sm:scale-100"
           />
-          {showPro && <span className="-ml-20 sm:-ml-24"><ProBadge size="sm" /></span>}
+          {showPro && (
+            <span className="-ml-20 flex items-center self-stretch sm:-ml-24">
+              <ProBadge size="sm" />
+            </span>
+          )}
         </div>
 
         {/* Centre: Online pill — absolutely centered but pointer-events safe */}
