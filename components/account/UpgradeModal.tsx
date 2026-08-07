@@ -9,8 +9,8 @@ import { useAccount } from "@/lib/account/context";
 declare global {
   interface Window {
     Paddle?: {
-      Environment: { set: (env: "sandbox" | "production") => void };
-      Initialize: (opts: { token: string; eventCallback?: (e: { name: string }) => void }) => void;
+      Environment: { set: (env: "production" | "sandbox") => void };
+      Initialize: (opts: { token: string; eventCallback?: (event: { name: string; data?: unknown }) => void }) => void;
       Checkout: {
         open: (opts: {
           transactionId: string;
@@ -131,7 +131,7 @@ export function UpgradeModal({ open, onClose }: Props) {
       if (data.sandbox) window.Paddle.Environment.set("sandbox");
       window.Paddle.Initialize({
         token: data.clientToken,
-        eventCallback: (event) => {
+        eventCallback: (event: { name: string; data?: unknown }) => {
           if (event.name === "checkout.completed") {
             void (async () => {
               for (let i = 0; i < 6; i++) {
