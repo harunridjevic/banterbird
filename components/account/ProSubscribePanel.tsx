@@ -5,7 +5,6 @@ import { Crown, CreditCard, Loader2, X } from "lucide-react";
 import { PRO_PRICE_USD } from "@/lib/billing/constants";
 import { useAccount } from "@/lib/account/context";
 
-// Paddle.js types (minimal)
 declare global {
   interface Window {
     Paddle?: {
@@ -175,20 +174,6 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
       setCardLoading(false);
     }
   };
-    setError(null);
-    try {
-      const res = await fetch("/api/billing/cancel", { method: "POST" });
-      const data = (await res.json()) as { ok?: boolean; proUntil?: string | null; error?: string };
-      if (!res.ok) { setError(data.error ?? "Could not cancel renewal."); return; }
-      setCancelSuccess(true);
-      setConfirmCancel(false);
-      await refresh();
-    } catch {
-      setError("Network error. Try again.");
-    } finally {
-      setCancelLoading(false);
-    }
-  };
 
   // PRO active state
   if (isPro) {
@@ -202,7 +187,8 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
             <p className="text-sm font-bold text-navy-950 dark:text-navy-50">BanterBird PRO</p>
             {cancelSuccess ? (
               <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                Renewal cancelled. You have PRO access until {untilLabel ?? "the end of your billing period"}.
+                Renewal cancelled. You have PRO access until{" "}
+                {untilLabel ?? "the end of your billing period"}.
               </p>
             ) : (
               <p className="mt-1 text-xs text-navy-600 dark:text-navy-300">
@@ -216,7 +202,7 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
           <p className="mt-3 text-xs text-rose-600 dark:text-rose-400" role="alert">{error}</p>
         )}
 
-        {/* Change card — Paddle customer portal */}
+        {/* Change card */}
         {!cancelSuccess && (
           <button
             type="button"
@@ -224,7 +210,9 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
             onClick={() => void handleChangeCard()}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-navy-200/70 px-3 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50 disabled:opacity-60 dark:border-white/10 dark:text-navy-300 dark:hover:bg-navy-800/50"
           >
-            {cardLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+            {cardLoading
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <CreditCard className="h-4 w-4" />}
             Change payment card
           </button>
         )}
@@ -235,9 +223,12 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
             <div className="mt-3 rounded-xl border border-rose-400/30 bg-rose-50/60 p-3 dark:border-rose-500/20 dark:bg-rose-950/20">
               <p className="text-xs font-semibold text-rose-700 dark:text-rose-400">Cancel renewal?</p>
               <p className="mt-1 text-xs text-rose-600/80 dark:text-rose-400/70">
-                Your PRO access continues until {untilLabel ?? "the end of your billing period"}. No future charges.
+                Your PRO access continues until{" "}
+                {untilLabel ?? "the end of your billing period"}. No future charges.
                 Current period is non-refundable — for refund requests email{" "}
-                <a href="mailto:support@banterbird.app" className="underline">support@banterbird.app</a>.
+                <a href="mailto:support@banterbird.app" className="underline">
+                  support@banterbird.app
+                </a>.
               </p>
               <div className="mt-2.5 flex gap-2">
                 <button
@@ -246,7 +237,9 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
                   onClick={() => void handleCancelRenewal()}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-600 py-2 text-xs font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
                 >
-                  {cancelLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Yes, cancel renewal"}
+                  {cancelLoading
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : "Yes, cancel renewal"}
                 </button>
                 <button
                   type="button"
@@ -293,11 +286,9 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
         onClick={() => void startCheckout()}
         className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-navy-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:opacity-60 dark:bg-amber-400 dark:text-navy-950 dark:hover:bg-amber-300"
       >
-        {loading ? (
-          <><Loader2 className="h-4 w-4 animate-spin" />Opening checkout…</>
-        ) : (
-          `Subscribe — $${priceUsd}/mo`
-        )}
+        {loading
+          ? <><Loader2 className="h-4 w-4 animate-spin" />Opening checkout…</>
+          : `Subscribe — $${priceUsd}/mo`}
       </button>
 
       {error && (
