@@ -2,6 +2,7 @@ export type FriendProfile = {
   id: string;
   username: string | null;
   avatar_url: string | null;
+  is_pro?: boolean;
 };
 
 export type FriendEntry = {

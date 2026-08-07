@@ -25,6 +25,7 @@ export async function PUT(req: Request) {
     blockedWords?: Record<string, unknown>;
     llmGuards?: Record<string, unknown>;
     billing?: Record<string, unknown>;
+    ads?: Record<string, unknown>;
   };
   const saved = await saveAppSettings(normalizeAppSettings(body));
   return NextResponse.json(saved);

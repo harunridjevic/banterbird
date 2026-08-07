@@ -1,14 +1,28 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAccount } from "@/lib/account/context";
 import { ExoClickBannerSlot } from "@/components/ads/ExoClickBannerSlot";
 
-/** Site banner ads — hidden for active PRO subscribers and while auth is loading. */
+/** Site banner ads — hidden for PRO subscribers, while auth is loading,
+ *  and when disabled via ops settings. */
 export function AdBannerGate() {
   const { isPro, state } = useAccount();
-  // Don't render until we know the auth state — prevents a flash of ads
-  // for logged-in PRO users during the initial session load.
+  const [showBanner, setShowBanner] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/settings/public");
+        if (!res.ok) return;
+        const data = (await res.json()) as { ads?: { showBannerAds?: boolean } };
+        if (data.ads?.showBannerAds === false) setShowBanner(false);
+      } catch { /* keep default */ }
+    })();
+  }, []);
+
   if (state.status === "loading") return null;
   if (isPro) return null;
+  if (!showBanner) return null;
   return <ExoClickBannerSlot />;
 }

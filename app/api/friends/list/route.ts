@@ -20,19 +20,28 @@ export async function GET() {
     const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
 
     // Step 2: fetch their profiles separately (avoids FK alias issues)
-    let friendProfiles: { id: string; username: string | null; avatar_url: string | null }[] = [];
+    let friendProfiles: { id: string; username: string | null; avatar_url: string | null; is_pro: boolean; pro_until: string | null }[] = [];
     if (friendIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id,username,avatar_url")
+        .select("id,username,avatar_url,is_pro,pro_until")
         .in("id", friendIds);
       friendProfiles = profiles ?? [];
     }
 
-    const friends = friendIds.map((fid) => ({
-      friend_id: fid,
-      profiles: friendProfiles.find((p) => p.id === fid) ?? { id: fid, username: null, avatar_url: null },
-    }));
+    const now = Date.now();
+    const friends = friendIds.map((fid) => {
+      const p = friendProfiles.find((p) => p.id === fid) ?? { id: fid, username: null, avatar_url: null, is_pro: false, pro_until: null };
+      return {
+        friend_id: fid,
+        profiles: {
+          id: p.id,
+          username: p.username,
+          avatar_url: p.avatar_url,
+          is_pro: Boolean(p.is_pro) && !!p.pro_until && new Date(p.pro_until).getTime() > now,
+        },
+      };
+    });
 
     // ── Incoming friend requests ──────────────────────────────────
     // Step 1: get pending requests to me

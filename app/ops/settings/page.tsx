@@ -83,6 +83,7 @@ export default function OpsBotSettingsPage() {
         blockedWords: { ...appSettings.blockedWords, ...partial.blockedWords },
         llmGuards: { ...appSettings.llmGuards, ...partial.llmGuards },
         billing: { ...appSettings.billing, ...partial.billing },
+        ads: { ...appSettings.ads, ...partial.ads },
       };
       setAppSettings(next);
       setAppSettingsSaving(true);
@@ -201,8 +202,7 @@ export default function OpsBotSettingsPage() {
               <Section title="PRO billing">
                 <NumberField
                   label="PRO price (USD / month)"
-                  value={appSettings.billing?.proPriceUsd ?? 9}
-                  min={1}
+                  value={appSettings.billing?.proPriceUsd ?? 9}                  min={1}
                   max={999}
                   step={0.5}
                   onChange={(proPriceUsd) =>
@@ -232,6 +232,48 @@ export default function OpsBotSettingsPage() {
                 <p className="mt-2 text-xs text-navy-400">
                   Price change takes effect on the next checkout — existing subscribers are unaffected.
                 </p>
+                {appSettingsSaving ? (
+                  <p className="mt-2 text-xs text-violet-300">Saving…</p>
+                ) : null}
+              </Section>
+
+              <Section title="Ads">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.ads?.showBannerAds ?? true}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        ads: { ...(appSettings.ads ?? {}), showBannerAds: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Show banner ad</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      ExoClick banner shown to free users below the navbar. Hidden for PRO.
+                    </span>
+                  </span>
+                </label>
+                <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.ads?.showOutstreamAds ?? true}
+                    onChange={(e) =>
+                      void patchAppSettings({
+                        ads: { ...(appSettings.ads ?? {}), showOutstreamAds: e.target.checked },
+                      })
+                    }
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-navy-100">Show video (outstream) ad</span>
+                    <span className="mt-1 block text-xs text-navy-400">
+                      ExoClick outstream video shown during matching. Hidden for PRO.
+                    </span>
+                  </span>
+                </label>
                 {appSettingsSaving ? (
                   <p className="mt-2 text-xs text-violet-300">Saving…</p>
                 ) : null}

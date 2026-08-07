@@ -10,6 +10,7 @@ import { DmConversation } from "./DmConversation";
 import type { FriendEntry, FriendProfile, IncomingRequest } from "./types";
 import { useFriendPresence } from "@/lib/hooks/use-friend-presence";
 import { unblockUserForSession } from "@/lib/moderation/session-block";
+import { ProBadge } from "@/components/account/ProBadge";
 
 type View = "list" | "dm";
 type UnreadMap = Record<string, number>;
@@ -326,8 +327,9 @@ export function FriendsPanel({
                         )}
                       </div>
                       <div className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-base font-medium text-navy-900 dark:text-navy-100">
+                        <span className="flex items-center gap-1.5 truncate text-base font-medium text-navy-900 dark:text-navy-100">
                           {f.profiles.username ?? "Unknown"}
+                          {f.profiles.is_pro && <ProBadge size="sm" />}
                         </span>
                         <span className={`text-xs ${onlineFriends.has(f.friend_id) ? "text-emerald-600 dark:text-emerald-400" : "text-navy-400 dark:text-navy-500"}`}>
                           {onlineFriends.has(f.friend_id) ? "Online" : "Offline"}

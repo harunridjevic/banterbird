@@ -14,6 +14,7 @@ type Props = { onCancel: () => void };
 export function MatchingLoader({ onCancel }: Props) {
   const { isPro } = useAccount();
   const [canCancel, setCanCancel] = useState(false);
+  const [showOutstream, setShowOutstream] = useState(true);
   const mountedAt = useRef(Date.now());
 
   useEffect(() => {
@@ -21,6 +22,17 @@ export function MatchingLoader({ onCancel }: Props) {
     const remaining = Math.max(0, MIN_DISPLAY_MS - elapsed);
     const t = window.setTimeout(() => setCanCancel(true), remaining);
     return () => window.clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/settings/public");
+        if (!res.ok) return;
+        const data = (await res.json()) as { ads?: { showOutstreamAds?: boolean } };
+        if (data.ads?.showOutstreamAds === false) setShowOutstream(false);
+      } catch { /* keep default */ }
+    })();
   }, []);
 
   return (
@@ -67,7 +79,7 @@ export function MatchingLoader({ onCancel }: Props) {
         </div>
 
         {/* Right panel — outstream video ad (hidden for PRO) */}
-        {!isPro && (
+        {!isPro && showOutstream && (
           <div className="flex w-full items-center justify-center md:flex-1">
             <ExoClickOutstream zoneId={OUTSTREAM_ZONE_ID} className="w-full px-2" />
           </div>

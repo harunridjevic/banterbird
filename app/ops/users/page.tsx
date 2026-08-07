@@ -311,10 +311,11 @@ export default function OpsUsersPage() {
         {/* Table — desktop */}
         <div className="mt-5 hidden overflow-hidden rounded-2xl border border-white/10 sm:block">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_1fr_110px_90px_150px] gap-4 border-b border-white/10 bg-white/5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-navy-400">
+          <div className="grid grid-cols-[1fr_1fr_110px_90px_90px_150px] gap-4 border-b border-white/10 bg-white/5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-navy-400">
             <span>User</span>
             <span>Email</span>
             <span>Provider</span>
+            <span>Plan</span>
             <span>Joined</span>
             <span>Last sign in</span>
           </div>
@@ -328,7 +329,7 @@ export default function OpsUsersPage() {
               {users.map((u) => (
                 <li
                   key={u.id}
-                  className="grid grid-cols-[1fr_1fr_110px_90px_150px] items-center gap-4 px-4 py-3 text-sm hover:bg-white/[0.03]"
+                  className="grid grid-cols-[1fr_1fr_110px_90px_90px_150px] items-center gap-4 px-4 py-3 text-sm hover:bg-white/[0.03]"
                 >
                   {/* User */}
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -355,6 +356,15 @@ export default function OpsUsersPage() {
 
                   {/* Provider */}
                   <ProviderBadge provider={u.provider} isAnonymous={u.is_anonymous} />
+
+                  {/* Plan */}
+                  {u.is_pro ? (
+                    <span className="rounded-md bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-300">
+                      PRO
+                    </span>
+                  ) : (
+                    <span className="text-xs text-navy-500">Free</span>
+                  )}
 
                   {/* Joined */}
                   <span className="whitespace-nowrap text-xs text-navy-400">
@@ -407,6 +417,9 @@ export default function OpsUsersPage() {
                     <span>Joined {fmtShort(u.created_at)}</span>
                     <span>Last seen {fmtShort(u.last_sign_in_at)}</span>
                     <span className="font-mono">{u.id.slice(0, 8)}…</span>
+                    {u.is_pro && (
+                      <span className="font-semibold text-amber-400">PRO</span>
+                    )}
                   </div>
                 </li>
               ))}

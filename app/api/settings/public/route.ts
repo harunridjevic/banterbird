@@ -18,6 +18,10 @@ export async function GET() {
         proPriceUsd: settings.billing.proPriceUsd,
         proPeriodDays: settings.billing.proPeriodDays,
       },
+      ads: {
+        showBannerAds: settings.ads.showBannerAds,
+        showOutstreamAds: settings.ads.showOutstreamAds,
+      },
       botSettings: {
         matchMode: botSettings.matchMode,
         hideGenderFilters: botSettings.hideGenderFilters,

@@ -48,7 +48,24 @@ export function FriendRequestButton({
 
     if (isAiRoom && !peerId) {
       setStatus("sent");
-      if (!hideBotUi) setTooltip("Bots don't accept requests, but it's noted.");
+      if (!hideBotUi) {
+        // Inject system messages: sent immediately, rejected after random delay
+        const delay = 8000 + Math.random() * 12000; // 8–20s
+        const excuses = [
+          "Sorry, I don't really add people on here tbh",
+          "I keep my friends list pretty private lol",
+          "Not really looking to connect outside of chat",
+          "I prefer to keep things anonymous on BanterBird",
+          "Nothing personal, I just don't add people from chat",
+        ];
+        const excuse = excuses[Math.floor(Math.random() * excuses.length)];
+        window.dispatchEvent(new CustomEvent("banterbird:bot-friend-request-sent"));
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("banterbird:bot-friend-request-rejected", {
+            detail: { excuse },
+          }));
+        }, delay);
+      }
       return;
     }
 

@@ -1,6 +1,11 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { PRO_PRICE_USD, PRO_PERIOD_DAYS } from "@/lib/billing/constants";
 
+export type AdsSettings = {
+  showBannerAds: boolean;
+  showOutstreamAds: boolean;
+};
+
 export type BillingSettings = {
   proPriceUsd: number;
   proPeriodDays: number;
@@ -39,6 +44,7 @@ export type AppSettings = {
   blockedWords: BlockedWordsSettings;
   llmGuards: LlmGuardSettings;
   billing: BillingSettings;
+  ads: AdsSettings;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -66,6 +72,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   billing: {
     proPriceUsd: PRO_PRICE_USD,
     proPeriodDays: PRO_PERIOD_DAYS,
+  },
+  ads: {
+    showBannerAds: true,
+    showOutstreamAds: true,
   },
 };
 
@@ -125,6 +135,14 @@ export function llmGuardSensitivityMultiplier(sensitivity: LlmGuardSensitivity):
   }
 }
 
+export function normalizeAdsSettings(raw: Partial<AdsSettings>): AdsSettings {
+  const d = DEFAULT_APP_SETTINGS.ads;
+  return {
+    showBannerAds: raw.showBannerAds ?? d.showBannerAds,
+    showOutstreamAds: raw.showOutstreamAds ?? d.showOutstreamAds,
+  };
+}
+
 export function normalizeBillingSettings(raw: Partial<BillingSettings>): BillingSettings {
   const d = DEFAULT_APP_SETTINGS.billing;
   return {
@@ -139,6 +157,7 @@ export function normalizeAppSettings(partial: {
   blockedWords?: Partial<BlockedWordsSettings>;
   llmGuards?: Partial<LlmGuardSettings>;
   billing?: Partial<BillingSettings>;
+  ads?: Partial<AdsSettings>;
 }): AppSettings {
   return {
     rateLimiting: normalizeRateLimitSettings(partial.rateLimiting ?? {}),
@@ -146,6 +165,7 @@ export function normalizeAppSettings(partial: {
     blockedWords: normalizeBlockedWordsSettings(partial.blockedWords ?? {}),
     llmGuards: normalizeLlmGuardSettings(partial.llmGuards ?? {}),
     billing: normalizeBillingSettings(partial.billing ?? {}),
+    ads: normalizeAdsSettings(partial.ads ?? {}),
   };
 }
 
@@ -162,6 +182,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
       blockedWords: (map.blocked_words ?? {}) as Partial<BlockedWordsSettings>,
       llmGuards: (map.llm_guards ?? {}) as Partial<LlmGuardSettings>,
       billing: (map.billing ?? {}) as Partial<BillingSettings>,
+      ads: (map.ads ?? {}) as Partial<AdsSettings>,
     });
   } catch {
     return DEFAULT_APP_SETTINGS;
@@ -179,6 +200,7 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
     { key: "blocked_words", value: normalized.blockedWords, updated_at: now },
     { key: "llm_guards", value: normalized.llmGuards, updated_at: now },
     { key: "billing", value: normalized.billing, updated_at: now },
+    { key: "ads", value: normalized.ads, updated_at: now },
   ]);
 
   return normalized;

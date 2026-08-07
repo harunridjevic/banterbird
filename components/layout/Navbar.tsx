@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { Moon, Sun, UserCircle, Users } from "lucide-react";
+import { Moon, Sun, UserCircle, Users, Sparkles } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { OnlineCountPill } from "@/components/presence/OnlineCountPill";
@@ -10,6 +10,7 @@ import { useAccount } from "@/lib/account/context";
 import { useSupabase } from "@/app/providers";
 import { FriendsDrawer } from "@/components/friends/FriendsDrawer";
 import { ProBadge } from "@/components/account/ProBadge";
+import { UpgradeModal } from "@/components/account/UpgradeModal";
 import { isProActive } from "@/lib/account/types";
 
 export function Navbar() {
@@ -31,6 +32,8 @@ export function Navbar() {
   const initial = username?.[0]?.toUpperCase() ?? null;
   const userId = isNamed ? state.profile.id : null;
   const showPro = isNamed && isProActive(state.profile);
+  const showRemoveAds = state.status !== "loading" && !showPro;
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const clearNotif = useCallback(() => setNotifCount(0), []);
   const syncNotif = useCallback((realCount: number) => setNotifCount(realCount), []);
@@ -68,6 +71,7 @@ export function Navbar() {
   const handleOpenFriends = () => { setFriendsOpen(true); };
 
   return (
+    <>
     <header
       className="shrink-0 border-b border-navy-200/60 bg-[var(--glass-bg)] backdrop-blur-xl dark:border-white/10"
       style={{ zIndex: 50 }}
@@ -92,6 +96,18 @@ export function Navbar() {
 
         {/* Right: buttons */}
         <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+
+          {/* Remove Ads button — shown to free and anonymous users */}
+          {mounted && showRemoveAds && (
+            <button
+              type="button"
+              onClick={() => setUpgradeOpen(true)}
+              className="hidden items-center gap-1.5 rounded-xl border border-amber-400/60 bg-amber-400/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-400/20 dark:border-amber-400/30 dark:text-amber-400 dark:hover:bg-amber-400/10 sm:flex"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Remove Ads
+            </button>
+          )}
 
           {/* Theme toggle */}
           {mounted && (
@@ -163,5 +179,7 @@ export function Navbar() {
         </div>
       </div>
     </header>
+    <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+  </>
   );
 }

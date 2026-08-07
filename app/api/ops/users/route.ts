@@ -12,6 +12,8 @@ export type OpsUserRow = {
   created_at: string;
   last_sign_in_at: string | null;
   is_anonymous: boolean;
+  is_pro: boolean;
+  pro_until: string | null;
 };
 
 export async function GET(req: Request) {
@@ -56,13 +58,13 @@ export async function GET(req: Request) {
 
   const userIds = registeredUsers.map((u) => u.id);
 
-  // Fetch profiles
+  // Fetch profiles (including PRO status)
   const { data: profiles } = userIds.length > 0
-    ? await svc.from("profiles").select("id,username,avatar_url").in("id", userIds)
+    ? await svc.from("profiles").select("id,username,avatar_url,is_pro,pro_until").in("id", userIds)
     : { data: [] };
 
   const profileMap = new Map(
-    (profiles ?? []).map((p: { id: string; username: string | null; avatar_url: string | null }) => [p.id, p])
+    (profiles ?? []).map((p: { id: string; username: string | null; avatar_url: string | null; is_pro: boolean; pro_until: string | null }) => [p.id, p])
   );
 
   let rows: OpsUserRow[] = registeredUsers.map((u) => {
@@ -86,6 +88,8 @@ export async function GET(req: Request) {
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at ?? null,
       is_anonymous: false,
+      is_pro: Boolean(profile?.is_pro) && !!profile?.pro_until && new Date(profile.pro_until).getTime() > Date.now(),
+      pro_until: profile?.pro_until ?? null,
     };
   });
 

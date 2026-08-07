@@ -1028,6 +1028,29 @@ export function ChatRoom({ roomId }: Props) {
     return () => { void client.removeChannel(channel); };
   }, [peerId, selfId, isAiRoom, roomId, client, peerUsername, sendSystemMessage, state.status]);
 
+  // ── Bot friend request system messages ─────────────────────
+  // FriendRequestButton fires custom events when the user adds a bot.
+  // We listen here and inject system messages so they appear in chat.
+  useEffect(() => {
+    if (!isAiRoom) return;
+
+    const onSent = () => {
+      void sendSystemMessage("You sent a friend request");
+    };
+
+    const onRejected = (e: Event) => {
+      const excuse = (e as CustomEvent<{ excuse: string }>).detail?.excuse ?? "Sorry, I don't add people from chat";
+      void sendSystemMessage(`Friend request declined — ${excuse}`);
+    };
+
+    window.addEventListener("banterbird:bot-friend-request-sent", onSent);
+    window.addEventListener("banterbird:bot-friend-request-rejected", onRejected);
+    return () => {
+      window.removeEventListener("banterbird:bot-friend-request-sent", onSent);
+      window.removeEventListener("banterbird:bot-friend-request-rejected", onRejected);
+    };
+  }, [isAiRoom, sendSystemMessage]);
+
   // ── Image send handler ──────────────────────────────────────
   const sendImage = useCallback(async (file: File) => {
     if (!selfId) return;
