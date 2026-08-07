@@ -1,6 +1,5 @@
 "use client";
 
-import Script from "next/script";
 import { useState, useEffect } from "react";
 
 const ZONES = {
@@ -19,6 +18,24 @@ export function ExoClickBannerSlot() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  useEffect(() => {
+    if (isMobile === null) return;
+
+    // Load provider script once
+    if (!document.getElementById("exoclick-provider")) {
+      const s = document.createElement("script");
+      s.id = "exoclick-provider";
+      s.async = true;
+      s.src = "https://a.magsrv.com/ad-provider.js";
+      document.body.appendChild(s);
+    }
+
+    // Always push a fresh serve call so the ad loads even after re-mount
+    (window as unknown as { AdProvider?: unknown[] }).AdProvider =
+      (window as unknown as { AdProvider?: unknown[] }).AdProvider ?? [];
+    (window as unknown as { AdProvider: unknown[] }).AdProvider.push({ serve: {} });
+  }, [isMobile]);
+
   if (isMobile === null) return null;
 
   const zone = isMobile ? ZONES.mobile : ZONES.desktop;
@@ -28,8 +45,6 @@ export function ExoClickBannerSlot() {
       className="flex w-full shrink-0 items-center justify-center"
       style={{
         minHeight: zone.height,
-        // Checkerboard pattern — clearly marks this as an ad zone.
-        // Two overlapping linear-gradients form the classic check.
         backgroundImage: `
           linear-gradient(45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
           linear-gradient(-45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
@@ -40,17 +55,7 @@ export function ExoClickBannerSlot() {
         backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0px",
       }}
     >
-      {/* ExoClick embed — exactly as provided by the dashboard */}
       <ins className={zone.insClass} data-zoneid={zone.zoneId} />
-      <Script
-        id={`exoclick-serve-${zone.zoneId}`}
-        strategy="afterInteractive"
-      >{`(AdProvider = window.AdProvider || []).push({"serve": {}});`}</Script>
-      <Script
-        id="exoclick-provider"
-        src="https://a.magsrv.com/ad-provider.js"
-        strategy="afterInteractive"
-      />
     </div>
   );
 }
