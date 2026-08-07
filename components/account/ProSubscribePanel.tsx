@@ -57,6 +57,7 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
   const { refresh } = useAccount();
   const [loading, setLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cardLoading, setCardLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelSuccess, setCancelSuccess] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -160,6 +161,35 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
     }
   };
 
+  const handleChangeCard = async () => {
+    setCardLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/update-payment", { method: "POST" });
+      const data = (await res.json()) as { ok?: boolean; portalUrl?: string; error?: string };
+      if (!res.ok || !data.portalUrl) { setError(data.error ?? "Could not open payment portal."); return; }
+      window.open(data.portalUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setCardLoading(false);
+    }
+  };
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/cancel", { method: "POST" });
+      const data = (await res.json()) as { ok?: boolean; proUntil?: string | null; error?: string };
+      if (!res.ok) { setError(data.error ?? "Could not cancel renewal."); return; }
+      setCancelSuccess(true);
+      setConfirmCancel(false);
+      await refresh();
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   // PRO active state
   if (isPro) {
     return (
@@ -186,15 +216,17 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
           <p className="mt-3 text-xs text-rose-600 dark:text-rose-400" role="alert">{error}</p>
         )}
 
-        {/* Change card — direct to support */}
+        {/* Change card — Paddle customer portal */}
         {!cancelSuccess && (
-          <a
-            href="mailto:support@banterbird.app?subject=Update%20payment%20card"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-navy-200/70 px-3 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50 dark:border-white/10 dark:text-navy-300 dark:hover:bg-navy-800/50"
+          <button
+            type="button"
+            disabled={cardLoading}
+            onClick={() => void handleChangeCard()}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-navy-200/70 px-3 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50 disabled:opacity-60 dark:border-white/10 dark:text-navy-300 dark:hover:bg-navy-800/50"
           >
-            <CreditCard className="h-4 w-4" />
+            {cardLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
             Change payment card
-          </a>
+          </button>
         )}
 
         {/* Cancel renewal */}

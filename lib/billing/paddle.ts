@@ -204,6 +204,19 @@ export async function getPaddleCustomerPortalUrl(
   return `${base}/subscriptions/${subscriptionId}?token=${token}`;
 }
 
+/** Fetch customer ID from Paddle if we don't have it stored locally. */
+export async function getCustomerIdFromSubscription(
+  subscriptionId: string,
+): Promise<string> {
+  const data = (await paddleRequest(
+    "GET",
+    `/subscriptions/${subscriptionId}`,
+  )) as { customer_id?: string };
+
+  if (!data.customer_id) throw new Error("Could not fetch customer ID from Paddle");
+  return data.customer_id;
+}
+
 // ---------------------------------------------------------------------------
 // Cancel a subscription (called when user deletes account, etc.)
 // ---------------------------------------------------------------------------
