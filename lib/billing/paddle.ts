@@ -183,25 +183,30 @@ export async function createPaddleTransaction(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Customer portal link — lets the user manage/cancel their subscription
+// Customer portal session — deep link directly to update payment method page.
+// The returned URL is pre-authenticated so the customer doesn't need to sign in.
 // ---------------------------------------------------------------------------
-export async function getPaddleCustomerPortalUrl(
+export async function getUpdatePaymentUrl(
   customerId: string,
   subscriptionId: string,
 ): Promise<string> {
   const data = (await paddleRequest(
     "POST",
-    `/customers/${customerId}/auth-token`,
-  )) as { customer_auth_token?: string };
+    `/customers/${customerId}/portal-sessions`,
+    { subscription_ids: [subscriptionId] },
+  )) as {
+    urls?: {
+      subscriptions?: Array<{
+        id: string;
+        update_subscription_payment_method?: string;
+      }>;
+    };
+  };
 
-  const token = data.customer_auth_token;
-  if (!token) throw new Error("Could not get customer portal token");
-
-  const base = isSandbox()
-    ? "https://sandbox-buyer-portal.paddle.com"
-    : "https://buyer-portal.paddle.com";
-
-  return `${base}/subscriptions/${subscriptionId}?token=${token}`;
+  const sub = data.urls?.subscriptions?.find((s) => s.id === subscriptionId);
+  const url = sub?.update_subscription_payment_method;
+  if (!url) throw new Error("Could not generate payment update link");
+  return url;
 }
 
 /** Fetch customer ID from Paddle if we don't have it stored locally. */
@@ -237,4 +242,4 @@ export async function cancelPaddleSubscription(
   });
 }
 
-export { PRO_PRODUCT_NAME, getClientToken, getPriceId };
+export { PRO_PRODUCT_NAME, getClientToken, getPriceId, getUpdatePaymentUrl, getCustomerIdFromSubscription };

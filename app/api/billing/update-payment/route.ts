@@ -2,15 +2,13 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import {
-  getPaddleCustomerPortalUrl,
-  getCustomerIdFromSubscription,
-} from "@/lib/billing/paddle";
+import { getUpdatePaymentUrl, getCustomerIdFromSubscription } from "@/lib/billing/paddle";
 
 /**
  * POST /api/billing/update-payment
- * Returns a Paddle customer portal URL so the user can update their
- * saved payment method for recurring billing.
+ * Returns a pre-authenticated Paddle customer portal URL that takes the
+ * user directly to the "update payment method" page for their subscription.
+ * No Paddle sign-in required on the customer side.
  */
 export async function POST() {
   try {
@@ -40,8 +38,8 @@ export async function POST() {
       );
     }
 
-    // If customer ID is missing (webhook didn't fire yet on localhost),
-    // fetch it directly from Paddle and store it for next time.
+    // If customer ID is missing (webhook didn't fire on localhost),
+    // fetch it directly from Paddle and store for next time.
     let customerId = sub.paddle_customer_id;
     if (!customerId) {
       customerId = await getCustomerIdFromSubscription(sub.paddle_subscription_id);
@@ -51,10 +49,9 @@ export async function POST() {
         .eq("id", sub.id);
     }
 
-    const portalUrl = await getPaddleCustomerPortalUrl(
-      customerId,
-      sub.paddle_subscription_id,
-    );
+    // Generate a deep link directly to the update payment method page.
+    // The URL is pre-authenticated — customer lands straight there, no sign-in needed.
+    const portalUrl = await getUpdatePaymentUrl(customerId, sub.paddle_subscription_id);
 
     return NextResponse.json({ ok: true, portalUrl });
   } catch (e) {
