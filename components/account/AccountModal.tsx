@@ -90,7 +90,7 @@ export function AccountModal() {
 
             {/* Body */}
             {isNamed ? (
-              <div className="min-h-0 flex-1 flex flex-col px-5 py-4">
+              <div className="min-h-0 flex-1 flex flex-col pl-5 pr-0 py-4">
                 <ProfileEditor profile={state.profile} supabase={client} onClose={closeModal} />
               </div>
             ) : (
@@ -143,7 +143,7 @@ export function AccountModal() {
 
               {/* Body */}
               {isNamed ? (
-                <div className="min-h-0 flex-1 flex flex-col px-5 py-5 sm:px-6">
+                <div className="min-h-0 flex-1 flex flex-col pl-5 pr-0 py-5 sm:pl-6">
                   <ProfileEditor profile={state.profile} supabase={client} onClose={closeModal} />
                 </div>
               ) : (

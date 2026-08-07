@@ -209,7 +209,7 @@ export function ProfileEditor({
   return (
     <div className="flex h-full flex-col">
       {/* Scrollable content — thin scrollbar that doesn't overlap buttons */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4 pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.navy.200/0.6)_transparent] dark:[scrollbar-color:theme(colors.white/0.1)_transparent]">
+      <div className="flex-1 overflow-y-auto space-y-4 pb-4 pr-5 sm:pr-6 [scrollbar-width:thin] [scrollbar-color:theme(colors.navy.200/0.6)_transparent] dark:[scrollbar-color:theme(colors.white/0.1)_transparent]">
         <div className="space-y-4">
         {/* Avatar */}
         <div className="flex items-center gap-4">
@@ -347,7 +347,7 @@ export function ProfileEditor({
       </div>
 
       {/* Sticky bottom action bar */}
-      <div className="shrink-0 space-y-2 border-t border-navy-200/60 px-0 pt-4 bg-white/[0.97] dark:bg-navy-950/[0.97] dark:border-white/10"
+      <div className="shrink-0 space-y-2 border-t border-navy-200/60 px-0 pr-5 sm:pr-6 pt-4 bg-white/[0.97] dark:bg-navy-950/[0.97] dark:border-white/10"
            style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
         <button
           type="button"

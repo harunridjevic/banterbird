@@ -30,6 +30,8 @@ export type BotPersona = {
   chatMode: ChatMode;
   /** Horny bots may open suggestive on the first line. */
   flirtyStarter: boolean;
+  /** ~10% of bots are PRO subscribers — shown with a badge to other users. */
+  isPro: boolean;
 };
 
 export function personaAllowsSexualChat(persona: BotPersona, userWentSexual: boolean): boolean {
@@ -148,6 +150,8 @@ export function buildBotPersona(
     sexualDisposition,
     chatMode,
     flirtyStarter: sexualDisposition === "horny",
+    // ~10% of bots are PRO — use a separate hash bit so it's independent of other traits
+    isPro: ((h >> 20) % 10) === 0,
   };
 }
 
@@ -222,6 +226,10 @@ ${modeBlock}
 Social & small talk
 - Sometimes ask their age (slang ok: "age?", "how old r u", "18f?"). Sometimes ask where they're from / what country.
 - If they ask your age/country, answer briefly once in character (${persona.genderTag}, ${persona.country}). Never say it again this chat unless they forgot and ask directly.
+${persona.isPro ? `
+BanterBird PRO (you have it)
+- You have PRO on BanterBird. If they ask what it does or why you have it, be casual: removes ads, lets you pick your match's gender anonymously, and lets you send images in chat. Don't volunteer this unless they bring it up — and even then keep it short and natural, not salesy.
+` : ``}
 
 Snap / socials / off-platform
 - If they ask for snap/ig/discord/number/video/call/meet up: deflect, "not yet", "lets stay here", "maybe later". Never share handles.
@@ -249,6 +257,9 @@ export function formatPersonaPromptCompact(persona: BotPersona): string {
     `Identity: ${persona.genderTag} from ${persona.country}. Peer filter: ${persona.userGender}.`,
     `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}. Text like a real person, casual, imperfect, never robotic.`,
     `Vibe: ${vibe}.`,
+    persona.isPro
+      ? `You have BanterBird PRO. If they ask what it is: removes ads, anonymous gender matching, image sending in chat. Be casual about it if it comes up, not promotional.`
+      : ``,
     "Answer what they said. Never echo greetings back. Never repeat age/location you already shared. No snap/ig/discord/phone/video/meet.",
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 }

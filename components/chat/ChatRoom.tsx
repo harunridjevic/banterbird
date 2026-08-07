@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Bot, Flag, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
+import { ProBadge } from "@/components/account/ProBadge";
 import { executeBotTurn, type BotApiBody } from "@/components/chat/bot-turn";
 import {
   armGhostSchedule,
@@ -83,6 +84,7 @@ export function ChatRoom({ roomId }: Props) {
   const skipEndingRef = useRef(false);
   const abortBotTurnRef = useRef(false);
   const flushReplyQueueRef = useRef<() => void>(() => {});
+  const deliverBotExcuseRef = useRef<(excuse: string) => void>(() => {});
   const ghostCtxRef = useRef<(botMessageId?: string | null) => GhostScheduleContext>(() => ({
     schedule: ghostSchedule.current,
     getMessages: () => messagesRef.current,
@@ -356,9 +358,13 @@ export function ChatRoom({ roomId }: Props) {
           const row = payload.new as MessageRow;
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) return prev;
-            // Remove optimistic message with same content if it exists
+            // Replace optimistic (temp-) or local-injected (local-sys-) messages
+            // that have the same content, so we don't show duplicates.
             const optimisticIndex = prev.findIndex(
-              (m) => m.id.startsWith("temp-") && m.content === row.content && m.user_id === row.user_id,
+              (m) =>
+                (m.id.startsWith("temp-") || m.id.startsWith("local-sys-")) &&
+                m.content === row.content &&
+                m.user_id === row.user_id,
             );
             if (optimisticIndex >= 0) {
               const clientKey = prev[optimisticIndex]!.clientKey ?? prev[optimisticIndex]!.id;
@@ -762,6 +768,46 @@ export function ChatRoom({ roomId }: Props) {
     };
   }, [flushReplyQueue]);
 
+  // Deliver the bot's excuse for declining a friend request through the normal
+  // typing pipeline — same read delay + typing indicator as any other bot reply.
+  // Waits for any in-flight bot turn to finish before taking the lock.
+  useEffect(() => {
+    deliverBotExcuseRef.current = (excuse: string) => {
+      void (async () => {
+        // Poll until the bot pipeline is free (max ~10s)
+        const deadline = Date.now() + 10_000;
+        while ((aiBusyRef.current || flushLockRef.current) && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 120));
+        }
+        if (abortBotTurnRef.current) return; // room was left
+        flushLockRef.current = true;
+        aiBusyRef.current = true;
+        try {
+          await executeBotTurn({
+            body: {
+              action: "reply",
+              messages: [excuse],
+              timing: botTimingRef.current,
+            },
+            client,
+            roomId,
+            setPeerTyping,
+            onError: setError,
+            shouldAbort: shouldAbortBotTurn,
+          });
+        } finally {
+          flushLockRef.current = false;
+          aiBusyRef.current = false;
+          setPeerTyping(false);
+          // Resume any queued replies that arrived while we held the lock
+          if (replyQueueRef.current.length > 0) {
+            queueMicrotask(() => flushReplyQueueRef.current());
+          }
+        }
+      })();
+    };
+  }, [client, roomId, shouldAbortBotTurn]);
+
   useEffect(() => {
     if (!ready || !isAiRoom || loading) return;
     if (openerDoneRef.current || openerTimerRef.current !== null) return;
@@ -1030,17 +1076,39 @@ export function ChatRoom({ roomId }: Props) {
 
   // ── Bot friend request system messages ─────────────────────
   // FriendRequestButton fires custom events when the user adds a bot.
-  // We listen here and inject system messages so they appear in chat.
+  // We show messages immediately via local state (works for anon users too),
+  // and also persist them to the DB for signed-in users so they survive refresh.
   useEffect(() => {
     if (!isAiRoom) return;
 
-    const onSent = () => {
-      void sendSystemMessage("You sent a friend request");
+    const injectLocal = (text: string) => {
+      const msg: MessageRow = {
+        id: `local-sys-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        room_id: roomId,
+        user_id: null,
+        content: `[system]${text}`,
+        created_at: new Date().toISOString(),
+        is_from_ai: false,
+      };
+      setMessages((prev) => [...prev, msg]);
     };
+
+    const persistAndShow = (text: string) => {
+      // Show immediately (works for everyone including anon users)
+      injectLocal(text);
+      // Also persist to DB — for signed-in users this survives refresh.
+      // The realtime subscription will deliver the DB row back; deduplicate
+      // by content so the local copy is replaced rather than doubled.
+      void sendSystemMessage(text);
+    };
+
+    const onSent = () => persistAndShow("You sent a friend request");
 
     const onRejected = (e: Event) => {
       const excuse = (e as CustomEvent<{ excuse: string }>).detail?.excuse ?? "Sorry, I don't add people from chat";
-      void sendSystemMessage(`Friend request declined — ${excuse}`);
+      persistAndShow("Friend request declined");
+      // Excuse delivered through the normal bot typing pipeline — read delay + indicator
+      deliverBotExcuseRef.current(excuse);
     };
 
     window.addEventListener("banterbird:bot-friend-request-sent", onSent);
@@ -1049,7 +1117,7 @@ export function ChatRoom({ roomId }: Props) {
       window.removeEventListener("banterbird:bot-friend-request-sent", onSent);
       window.removeEventListener("banterbird:bot-friend-request-rejected", onRejected);
     };
-  }, [isAiRoom, sendSystemMessage]);
+  }, [isAiRoom, roomId, sendSystemMessage]);
 
   // ── Image send handler ──────────────────────────────────────
   const sendImage = useCallback(async (file: File) => {
@@ -1062,6 +1130,7 @@ export function ChatRoom({ roomId }: Props) {
   const displayAsHuman = isAiRoom && hideBotUi;
   const showPeerGender = !hideGenderFilters;
   const peerLabel = peerUsername ?? "Stranger";
+  const botIsPro = isAiRoom && (botPersonaRef.current?.isPro ?? false);
 
   if (loading || !selfId) {
     return <PageLoader label="Opening your chat…" />;
@@ -1109,6 +1178,9 @@ export function ChatRoom({ roomId }: Props) {
                 <span className="sm:hidden">Bot</span>
                 <span className="hidden sm:inline">Practice bot</span>
               </span>
+            ) : null}
+            {isAiRoom && botIsPro ? (
+              <ProBadge size="sm" />
             ) : null}
             <span
               className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap sm:px-2 sm:text-[11px] ${
@@ -1232,7 +1304,7 @@ export function ChatRoom({ roomId }: Props) {
         />
       ) : null}
 
-      <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {messages.length === 0 && !peerTyping ? (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
             {loading ? <PageLoader label="Opening your chat..." /> : <motion.div
@@ -1252,6 +1324,7 @@ export function ChatRoom({ roomId }: Props) {
             selfId={selfId}
             peerTyping={peerTyping}
             peerIsBot={isAiRoom && !hideBotUi}
+            peerIsPro={botIsPro}
             peerLabel={peerLabel}
           />
         )}

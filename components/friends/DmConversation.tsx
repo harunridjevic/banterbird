@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ImagePlus, Send, Trash2, X } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ProBadge } from "@/components/account/ProBadge";
 import { InlineSpinner } from "@/components/ui/Loading";
 import { Avatar } from "./Avatar";
 import type { DmMessage, FriendProfile } from "./types";
@@ -303,8 +304,9 @@ export function DmConversation({
           <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
         <Avatar url={friend.avatar_url} username={friend.username} size="sm" />
-        <span className="flex-1 truncate text-sm font-semibold text-navy-950 sm:text-base dark:text-navy-50">
-          {friend.username ?? "Unknown"}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-semibold text-navy-950 sm:text-base dark:text-navy-50">
+          <span className="truncate">{friend.username ?? "Unknown"}</span>
+          {friend.is_pro && <ProBadge size="sm" />}
         </span>
         {/* Auto-delete badge — only shown when keyboard is up and the notice bar is hidden */}
         {keyboardOpen && (

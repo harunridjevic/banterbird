@@ -16,7 +16,7 @@ import { isProActive } from "@/lib/account/types";
 
 export function Navbar() {
   const { setTheme, resolvedTheme } = useTheme();
-  const { state, openModal } = useAccount();
+  const { state, openModal, closeModal } = useAccount();
   const { client } = useSupabase();
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
@@ -77,7 +77,11 @@ export function Navbar() {
     return () => { void client.removeChannel(channel); };
   }, [isNamed, userId, client]);
 
-  const handleOpenFriends = () => { setFriendsOpen(true); };
+  const handleOpenFriends = () => {
+    closeModal();
+    setUpgradeOpen(false);
+    setFriendsOpen(true);
+  };
 
   return (
     <>
@@ -91,11 +95,11 @@ export function Navbar() {
           <Logo
             showWordmark
             priority
-            className="shrink-0 scale-90 sm:scale-100"
+            className="shrink-0 scale-90 sm:scale-100 -ml-[5px] sm:ml-0"
           />
           {/* Badge/button sits directly on the logo, shifted right */}
-          <div className="absolute left-[62px] sm:left-[75px] flex items-center">
-            {showPro && <ProBadge size="sm" />}
+          <div className="absolute left-[62px] sm:left-[75px] flex items-center sm:top-[14px]">
+            {showPro && <ProBadge size="sm"/>}
             {mounted && showRemoveAds && (
               <button
                 type="button"

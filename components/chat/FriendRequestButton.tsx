@@ -38,36 +38,38 @@ export function FriendRequestButton({
   const isSent = status === "sent" || status === "already_friends";
 
   const handleClick = async () => {
-    // Anonymous — show nudge instead
-    if (isAnonymous) {
-      setShowNudge(true);
-      return;
-    }
-
     if (isSent || status === "loading") return;
 
     if (isAiRoom) {
+      // Anonymous users see the sign-in nudge, but we still write system messages
+      // so the chat reflects what happened (same as a named user's experience).
+      if (isAnonymous) setShowNudge(true);
       setStatus("sent");
-      if (!hideBotUi) {
-        // Inject system messages: sent immediately, rejected after random delay
-        const delay = 8000 + Math.random() * 12000; // 8–20s
-        const excuses = [
-          "Sorry, I don't really add people on here tbh",
-          "I keep my friends list pretty private lol",
-          "Not really looking to connect outside of chat",
-          "I prefer to keep things anonymous on BanterBird",
-          "Nothing personal, I just don't add people from chat",
-          "I never really use the friends thing on here lol",
-          "I'm kind of weird about adding people I just met in chat",
-        ];
-        const excuse = excuses[Math.floor(Math.random() * excuses.length)];
-        window.dispatchEvent(new CustomEvent("banterbird:bot-friend-request-sent"));
-        window.setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("banterbird:bot-friend-request-rejected", {
-            detail: { excuse },
-          }));
-        }, delay);
-      }
+      // Always dispatch events — ChatRoom injects them into local message state.
+      // hideBotUi only hides the "Bot" label; it shouldn't suppress friend-request messages.
+      const delay = 4000 + Math.random() * 2000; // 4–6s
+      const excuses = [
+        "Sorry, I don't really add people on here tbh",
+        "I keep my friends list pretty private lol",
+        "Not really looking to connect outside of chat",
+        "I prefer to keep things anonymous on BanterBird",
+        "Nothing personal, I just don't add people from chat",
+        "I never really use the friends thing on here lol",
+        "I'm kind of weird about adding people I just met in chat",
+      ];
+      const excuse = excuses[Math.floor(Math.random() * excuses.length)];
+      window.dispatchEvent(new CustomEvent("banterbird:bot-friend-request-sent"));
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("banterbird:bot-friend-request-rejected", {
+          detail: { excuse },
+        }));
+      }, delay);
+      return;
+    }
+
+    // Anonymous — show nudge for real friend requests
+    if (isAnonymous) {
+      setShowNudge(true);
       return;
     }
 
@@ -88,7 +90,6 @@ export function FriendRequestButton({
     }
 
     setStatus("sent");
-    if (isAiRoom && !hideBotUi) setTooltip("Bots don't accept requests.");
   };
 
   return (
