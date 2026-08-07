@@ -242,4 +242,4 @@ export async function cancelPaddleSubscription(
   });
 }
 
-export { PRO_PRODUCT_NAME, getClientToken, getPriceId, getUpdatePaymentUrl, getCustomerIdFromSubscription };
+export { PRO_PRODUCT_NAME, getClientToken, getPriceId };

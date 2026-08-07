@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Crown, Loader2, X } from "lucide-react";
+import { Crown, CreditCard, Loader2, X } from "lucide-react";
 import { PRO_PRICE_USD } from "@/lib/billing/constants";
 import { useAccount } from "@/lib/account/context";
 
@@ -56,6 +56,7 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
   const { refresh } = useAccount();
   const [loading, setLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cardLoading, setCardLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelSuccess, setCancelSuccess] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -199,6 +200,21 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
 
         {error && (
           <p className="mt-3 text-xs text-rose-600 dark:text-rose-400" role="alert">{error}</p>
+        )}
+
+        {/* Change card */}
+        {!cancelSuccess && (
+          <button
+            type="button"
+            disabled={cardLoading}
+            onClick={() => void handleChangeCard()}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-navy-200/70 px-3 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50 disabled:opacity-60 dark:border-white/10 dark:text-navy-300 dark:hover:bg-navy-800/50"
+          >
+            {cardLoading
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <CreditCard className="h-4 w-4" />}
+            Change payment card
+          </button>
         )}
 
         {/* Cancel renewal */}
