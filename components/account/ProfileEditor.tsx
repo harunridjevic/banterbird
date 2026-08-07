@@ -208,8 +208,8 @@ export function ProfileEditor({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+      {/* Scrollable content — thin scrollbar that doesn't overlap buttons */}
+      <div className="flex-1 overflow-y-auto space-y-4 pb-4 pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.navy.200/0.6)_transparent] dark:[scrollbar-color:theme(colors.white/0.1)_transparent]">
         <div className="space-y-4">
         {/* Avatar */}
         <div className="flex items-center gap-4">

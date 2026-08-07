@@ -202,8 +202,8 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
           <p className="mt-3 text-xs text-rose-600 dark:text-rose-400" role="alert">{error}</p>
         )}
 
-        {/* Change card */}
-        {!cancelSuccess && (
+        {/* Change card — re-enable when Paddle portal is working correctly */}
+        {/* {!cancelSuccess && (
           <button
             type="button"
             disabled={cardLoading}
@@ -215,7 +215,7 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
               : <CreditCard className="h-4 w-4" />}
             Change payment card
           </button>
-        )}
+        )} */}
 
         {/* Cancel renewal */}
         {!cancelSuccess && (
