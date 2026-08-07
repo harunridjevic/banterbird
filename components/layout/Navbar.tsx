@@ -80,7 +80,7 @@ export function Navbar() {
             priority
             className="shrink-0 scale-90 sm:scale-100"
           />
-          {showPro && <span className="-ml-20 self-center sm:-ml-24"><ProBadge size="sm" /></span>}
+          {showPro && <span className="-ml-20 sm:-ml-24" style={{ marginTop: "-10px" }}><ProBadge size="sm" /></span>}
         </div>
 
         {/* Centre: Online pill — absolutely centered but pointer-events safe */}
