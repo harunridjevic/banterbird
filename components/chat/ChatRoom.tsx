@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Bot, Flag, Mars, MessageCircle, SkipForward, Venus } from "lucide-react";
 import { useSupabase } from "@/app/providers";
-import { ProBadge } from "@/components/account/ProBadge";
 import { executeBotTurn, type BotApiBody } from "@/components/chat/bot-turn";
 import {
   armGhostSchedule,
@@ -325,7 +324,10 @@ export function ChatRoom({ roomId }: Props) {
       setLoading(false);
       return;
     }
-    setMessages((msgs ?? []) as MessageRow[]);
+    setMessages((msgs ?? []).map((m) => ({
+      ...m,
+      is_from_ai: Boolean(m.is_from_ai) || m.user_id == null,
+    })) as MessageRow[]);
     setLoading(false);
   }, [client, ready, roomId, router]);
 
@@ -616,10 +618,12 @@ export function ChatRoom({ roomId }: Props) {
   }, [messages.length, peerTyping, bumpActivity]);
 
   const transcriptFromSnapshot = useCallback((snapshot: MessageRow[]) => {
-    return snapshot.map((m) => ({
-      role: (isBotMessage(m) ? "assistant" : "user") as "user" | "assistant",
-      content: m.content,
-    }));
+    return snapshot
+      .filter((m) => !m.content.startsWith("[system]"))
+      .map((m) => ({
+        role: (isBotMessage(m) ? "assistant" : "user") as "user" | "assistant",
+        content: m.content,
+      }));
   }, []);
 
   const finishBotSkipAndLeave = useCallback(async () => {
@@ -1179,9 +1183,7 @@ export function ChatRoom({ roomId }: Props) {
                 <span className="hidden sm:inline">Practice bot</span>
               </span>
             ) : null}
-            {isAiRoom && botIsPro ? (
-              <ProBadge size="sm" />
-            ) : null}
+
             <span
               className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap sm:px-2 sm:text-[11px] ${
                 peerPresence === "online"

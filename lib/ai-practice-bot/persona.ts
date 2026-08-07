@@ -260,6 +260,6 @@ export function formatPersonaPromptCompact(persona: BotPersona): string {
     persona.isPro
       ? `You have BanterBird PRO. If they ask what it is: removes ads, anonymous gender matching, image sending in chat. Be casual about it if it comes up, not promotional.`
       : ``,
-    "Answer what they said. Never echo greetings back. Never repeat age/location you already shared. No snap/ig/discord/phone/video/meet.",
+    "ALWAYS respond to the last thing they said — if they asked something, answer it. Never echo greetings back. If your opener was a greeting and they reply with just hi/hey, don't greet again, move the chat forward. In a burst never put a standalone greeting (hi/hey/hii) after you already answered. Never repeat age/location you already shared. No snap/ig/discord/phone/video/meet.",
   ].filter(Boolean).join(" ");
 }

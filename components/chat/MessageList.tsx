@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { MessageRow } from "@/lib/types/chat";
 import { isImageMessage, extractImageUrl } from "@/lib/chat/image-upload";
 import { ImageMessage } from "./ImageMessage";
-import { ProBadge } from "@/components/account/ProBadge";
 
 type Props = {
   messages: MessageRow[];
@@ -93,9 +92,13 @@ export function MessageList({
               /* ── Image bubble ── */
               <div className="flex max-w-[85%] flex-col gap-1 sm:max-w-[70%]">
                 {!mine && (
-                  <span className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-navy-700 dark:text-navy-400">
+                  <span className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-navy-700 dark:text-navy-400">
                     <span>{peerIsBot && m.is_from_ai ? `${peerLabel} · AI` : peerLabel}</span>
-                    {peerIsBot && peerIsPro && m.is_from_ai && <ProBadge size="sm" />}
+                    {peerIsBot && peerIsPro && m.is_from_ai && (
+                      <span className="rounded border border-amber-400/60 bg-amber-400/10 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-400/30 dark:bg-transparent dark:text-amber-400">
+                        Pro user
+                      </span>
+                    )}
                   </span>
                 )}
                 <ImageMessage
@@ -118,9 +121,13 @@ export function MessageList({
                 }`}
               >
                 {!mine && (
-                  <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-navy-700 dark:text-navy-400">
+                  <span className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-navy-700 dark:text-navy-400">
                     <span>{peerIsBot && m.is_from_ai ? `${peerLabel} · AI` : peerLabel}</span>
-                    {peerIsBot && peerIsPro && m.is_from_ai && <ProBadge size="sm" />}
+                    {peerIsBot && peerIsPro && m.is_from_ai && (
+                      <span className="rounded border border-amber-400/60 bg-amber-400/10 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-400/30 dark:bg-transparent dark:text-amber-400">
+                        Pro user
+                      </span>
+                    )}
                   </span>
                 )}
                 <p className="whitespace-pre-wrap break-words">{m.content}</p>
