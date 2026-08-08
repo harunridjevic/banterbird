@@ -6,7 +6,9 @@ import type { NeverBlockZone } from "@/app/api/neverblock/route";
 
 const ZONE_ID   = "5991074";
 const INS_CLASS = "eas6a97888e37";
-const FALLBACK_ZONE_IDS = ["5991070", "5991072"];
+// No banner fallback zones — the top banner slot already covers those.
+// If the outstream video zone has no fill, render nothing rather than
+// duplicating the banner that's already shown at the top of the page.
 const NO_FILL_RETRY_MS  = 45_000;
 
 type Props = { zoneId?: string; className?: string };
@@ -19,7 +21,7 @@ export function ExoClickOutstream({ zoneId = ZONE_ID, className }: Props) {
   const everHadHeightRef = useRef(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchNeverBlock = useCallback(async (id: string, fallbackIndex = 0) => {
+  const fetchNeverBlock = useCallback(async (id: string) => {
     if (retryTimerRef.current !== null) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
@@ -33,15 +35,10 @@ export function ExoClickOutstream({ zoneId = ZONE_ID, className }: Props) {
         setNbAd(zone);
         return;
       }
-      // No fill — try next fallback zone
-      const next = FALLBACK_ZONE_IDS[fallbackIndex];
-      if (next) {
-        void fetchNeverBlock(next, fallbackIndex + 1);
-      } else {
-        retryTimerRef.current = setTimeout(() => void fetchNeverBlock(zoneId, 0), NO_FILL_RETRY_MS);
-      }
-    } catch {
+      // No fill on the outstream zone — retry later, don't fall back to banner zones
       retryTimerRef.current = setTimeout(() => void fetchNeverBlock(zoneId, 0), NO_FILL_RETRY_MS);
+    } catch {
+      retryTimerRef.current = setTimeout(() => void fetchNeverBlock(zoneId), NO_FILL_RETRY_MS);
     }
   }, [zoneId]);
 

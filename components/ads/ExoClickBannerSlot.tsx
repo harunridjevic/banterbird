@@ -15,6 +15,8 @@ export function ExoClickBannerSlot() {
   const [ad, setAd] = useState<NeverBlockZone | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [adLoaded, setAdLoaded] = useState(false);
+
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
     setIsMobile(mq.matches);
@@ -47,6 +49,7 @@ export function ExoClickBannerSlot() {
     if (isMobile === null) return;
     const zoneId = isMobile ? ZONES.mobile.zoneId : ZONES.desktop.zoneId;
     setAd(null);
+    setAdLoaded(false);
     void fetchAd(zoneId);
     return () => {
       if (retryTimerRef.current !== null) clearTimeout(retryTimerRef.current);
@@ -61,7 +64,7 @@ export function ExoClickBannerSlot() {
       className="flex w-full shrink-0 items-center justify-center"
       style={{
         minHeight: zone.height,
-        backgroundImage: ad ? undefined : `
+        backgroundImage: adLoaded ? undefined : `
           linear-gradient(45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
           linear-gradient(-45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
           linear-gradient(45deg, transparent 75%, rgba(120,130,155,0.13) 75%),
@@ -84,6 +87,7 @@ export function ExoClickBannerSlot() {
             alt="Advertisement"
             width={zone.width}
             height={zone.height}
+            onLoad={() => setAdLoaded(true)}
             style={{ display: "block", maxWidth: "100%", height: "auto" }}
           />
         </a>
