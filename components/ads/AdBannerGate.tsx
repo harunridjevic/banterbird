@@ -8,7 +8,7 @@ import { ExoClickBannerSlot } from "@/components/ads/ExoClickBannerSlot";
  *  and when disabled via ops settings. */
 export function AdBannerGate() {
   const { isPro, state } = useAccount();
-  const [showBanner, setShowBanner] = useState(true);
+  const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -16,8 +16,8 @@ export function AdBannerGate() {
         const res = await fetch("/api/settings/public");
         if (!res.ok) return;
         const data = (await res.json()) as { ads?: { showBannerAds?: boolean } };
-        if (data.ads?.showBannerAds === false) setShowBanner(false);
-      } catch { /* keep default */ }
+        setShowBanner(data.ads?.showBannerAds !== false);
+      } catch { /* keep hidden on error */ }
     })();
   }, []);
 

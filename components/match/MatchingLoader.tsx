@@ -14,7 +14,7 @@ type Props = { onCancel: () => void };
 export function MatchingLoader({ onCancel }: Props) {
   const { isPro } = useAccount();
   const [canCancel, setCanCancel] = useState(false);
-  const [showOutstream, setShowOutstream] = useState(true);
+  const [showOutstream, setShowOutstream] = useState(false);
   const mountedAt = useRef(Date.now());
 
   useEffect(() => {
@@ -30,8 +30,8 @@ export function MatchingLoader({ onCancel }: Props) {
         const res = await fetch("/api/settings/public");
         if (!res.ok) return;
         const data = (await res.json()) as { ads?: { showOutstreamAds?: boolean } };
-        if (data.ads?.showOutstreamAds === false) setShowOutstream(false);
-      } catch { /* keep default */ }
+        setShowOutstream(data.ads?.showOutstreamAds !== false);
+      } catch { /* keep hidden on error */ }
     })();
   }, []);
 
