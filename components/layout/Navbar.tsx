@@ -112,7 +112,7 @@ export function Navbar() {
                 {isMobile ? (
                   <span className="text-center leading-tight">Remove<br />Ads</span>
                 ) : (
-                  <span>Remove Ads</span>
+                  <span className="whitespace-nowrap">Remove Ads</span>
                 )}
               </button>
             )}
