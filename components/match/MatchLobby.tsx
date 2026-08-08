@@ -429,16 +429,10 @@ export function MatchLobby() {
     releaseMatchClaim();
     if (hideGenderFilters) {
       matchGendersRef.current = anonymousMatchGenders();
-    } else {
-      // Consume a gender skip if matching with a gendered filter
-      const effectiveWants = wantsGender;
-      if (effectiveWants && effectiveWants !== "any" && !dailyUsage.isPro) {
-        dailyUsage.consumeGenderSkip();
-      }
     }
     setMatchAttempt((n) => n + 1);
     setMatchRequested(true);
-  }, [hideGenderFilters, releaseMatchClaim, wantsGender, dailyUsage]);
+  }, [hideGenderFilters, releaseMatchClaim]);
 
   useEffect(() => {
     if (!ready || !shouldMatch || !effectiveIncludeAi) return;
@@ -708,6 +702,12 @@ export function MatchLobby() {
                         if (limitHit) {
                           setShowUpgradeModal(true);
                           return;
+                        }
+                        // If switching TO a gender-filtered option, charge one skip now
+                        if (isGenderFiltered && option.value !== wantsGender && !dailyUsage.isPro) {
+                          dailyUsage.consumeGenderSkip();
+                          // Also persist server-side (fire-and-forget)
+                          void fetch("/api/usage/record-gender-skip", { method: "POST" });
                         }
                         setWantsGender(option.value);
                       }}

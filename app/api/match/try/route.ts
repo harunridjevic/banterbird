@@ -8,7 +8,6 @@ import { detectVpn } from "@/lib/moderation/vpn-detect";
 import { normalizeBlockedUserIds } from "@/lib/moderation/blocked-user-ids";
 import {
   checkGenderSkipAllowed,
-  recordGenderSkip,
   FREE_DAILY_GENDER_SKIP_LIMIT,
 } from "@/lib/moderation/daily-usage";
 
@@ -67,6 +66,9 @@ export async function POST(req: Request) {
     );
 
     // ── Daily gender-match limit (10/day for male/female; any = unlimited) ──
+    // NOTE: We only CHECK here — we do NOT increment.
+    // The increment happens client-side when the user selects a gender filter,
+    // so polling (every 2.2s) never causes double-counting.
     const wantsGender = body.wantsGender ?? "any";
     const isGenderFiltered = wantsGender !== "any";
 
@@ -83,8 +85,7 @@ export async function POST(req: Request) {
           { status: 429 },
         );
       }
-      // Record this match attempt (fire-and-forget)
-      void recordGenderSkip(ip, deviceId, user.id);
+      // Do NOT call recordGenderSkip here — the client increments on filter selection.
     }
 
     const clientBlocked = normalizeBlockedUserIds(body.blockedUserIds);

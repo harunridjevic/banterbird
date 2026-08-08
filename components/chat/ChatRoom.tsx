@@ -1316,20 +1316,29 @@ export function ChatRoom({ roomId }: Props) {
                     skipConfirmTimer.current = null;
                   }
                   setSkipConfirm(false);
-                  // Check if gender skips are exhausted (only show popup on FIRST skip with 0 remaining)
+
+                  const storedWantsGender = localStorage.getItem("banterbird:wantsGender");
                   const wantsGenderFiltered =
                     !hideGenderFilters &&
-                    localStorage.getItem("banterbird:wantsGender") !== "any" &&
-                    localStorage.getItem("banterbird:wantsGender") !== null;
-                  if (
-                    wantsGenderFiltered &&
-                    !dailyUsage.isPro &&
-                    dailyUsage.genderSkipsRemaining === 0 &&
-                    !genderExhaustedShownRef.current
-                  ) {
-                    genderExhaustedShownRef.current = true;
-                    setShowGenderExhaustedModal(true);
+                    storedWantsGender !== "any" &&
+                    storedWantsGender !== null;
+
+                  if (wantsGenderFiltered && !dailyUsage.isPro) {
+                    // Consume one skip optimistically and persist server-side
+                    dailyUsage.consumeGenderSkip();
+                    void fetch("/api/usage/record-gender-skip", { method: "POST" });
+
+                    // Show exhausted modal on the FIRST skip that lands at 0 remaining
+                    if (
+                      dailyUsage.genderSkipsRemaining !== null &&
+                      dailyUsage.genderSkipsRemaining <= 1 &&
+                      !genderExhaustedShownRef.current
+                    ) {
+                      genderExhaustedShownRef.current = true;
+                      setShowGenderExhaustedModal(true);
+                    }
                   }
+
                   void leaveManually(false, true);
                 }
               }}
