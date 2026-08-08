@@ -3,6 +3,8 @@ import Link from "next/link";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
 import { loadAppSettings } from "@/lib/ops/app-settings";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:

@@ -222,7 +222,7 @@ export function UpgradeModal({ open, onClose }: Props) {
                 </div>
               </div>
               <p className="mt-3 text-sm text-navy-500 dark:text-navy-400">
-                BanterBird is free because of ads. Upgrade to PRO to remove them and unlock unlimited image sending, unlimited gender matching, and an exclusive badge — for just ${priceUsd}/month.
+                BanterBird is free because of ads. Upgrade to PRO to remove them and unlock unlimited image sending, unlimited gender matching, and an exclusive badge - for just ${priceUsd}/month.
               </p>
             </div>
 

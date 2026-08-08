@@ -13,6 +13,8 @@ const NO_FILL_RETRY_MS = 45_000;
 export function ExoClickBannerSlot() {
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [nbAd, setNbAd] = useState<NeverBlockZone | null>(null);
+  // Tracks whether we've already kicked off the direct script serve call
+  const directServedRef = useRef(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -47,8 +49,26 @@ export function ExoClickBannerSlot() {
     if (isMobile === null) return;
     const zoneId = isMobile ? ZONES.mobile.zoneId : ZONES.desktop.zoneId;
     setNbAd(null);
+    directServedRef.current = false;
 
-    // Load direct script immediately — no delay, ads show instantly as before
+    // Fetch NeverBlock first — only fall back to direct script if it doesn't fill
+    void fetchNeverBlock(zoneId);
+
+    return () => {
+      if (retryTimerRef.current !== null) clearTimeout(retryTimerRef.current);
+    };
+  }, [isMobile, fetchNeverBlock]);
+
+  // Load the direct ExoClick script only when NeverBlock hasn't filled
+  // and we haven't already served it this mount cycle
+  useEffect(() => {
+    if (nbAd !== null) return; // NeverBlock filled — don't load direct script
+    if (isMobile === null) return;
+    if (directServedRef.current) return;
+    directServedRef.current = true;
+
+    const zone = isMobile ? ZONES.mobile : ZONES.desktop;
+
     if (!document.getElementById("exoclick-provider")) {
       const s = document.createElement("script");
       s.id = "exoclick-provider";
@@ -60,13 +80,8 @@ export function ExoClickBannerSlot() {
       (window as unknown as { AdProvider?: unknown[] }).AdProvider ?? [];
     (window as unknown as { AdProvider: unknown[] }).AdProvider.push({ serve: {} });
 
-    // Simultaneously fetch NeverBlock — swaps in silently if it fills
-    void fetchNeverBlock(zoneId);
-
-    return () => {
-      if (retryTimerRef.current !== null) clearTimeout(retryTimerRef.current);
-    };
-  }, [isMobile, fetchNeverBlock]);
+    void zone; // used implicitly via the <ins> tag in the render
+  }, [nbAd, isMobile]);
 
   const zone = isMobile === null ? null : isMobile ? ZONES.mobile : ZONES.desktop;
   if (!zone) return null;
@@ -87,7 +102,7 @@ export function ExoClickBannerSlot() {
       }}
     >
       {nbAd?.data.url && nbAd.data.image ? (
-        // NeverBlock filled — show bypass ad (invisible to ad blockers)
+        // NeverBlock filled — bypass ad, direct script never loaded
         <a
           href={String(nbAd.data.url)}
           target="_blank"
@@ -104,7 +119,7 @@ export function ExoClickBannerSlot() {
           />
         </a>
       ) : (
-        // Direct fallback — loads instantly, shown until NeverBlock fills
+        // Direct fallback — only rendered when NeverBlock hasn't filled
         <ins className={zone.insClass} data-zoneid={zone.zoneId} />
       )}
     </div>

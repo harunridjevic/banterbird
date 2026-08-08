@@ -3,6 +3,8 @@ import Link from "next/link";
 import { LogoMark } from "@/components/brand/Logo";
 import { loadAppSettings } from "@/lib/ops/app-settings";
 
+export const dynamic = "force-dynamic";
+
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 
 export const metadata: Metadata = {
