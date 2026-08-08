@@ -116,6 +116,10 @@ export function ChatRoom({ roomId }: Props) {
   // Track whether the gender-exhausted popup has already shown this session
   const genderExhaustedShownRef = useRef(false);
 
+  // Persist "shown today" across page reloads — key includes UTC date so it
+  // resets automatically at midnight without any cleanup logic.
+  const genderExhaustedStorageKey = `banterbird:genderExhaustedShown:${new Date().toISOString().slice(0, 10)}`;
+
   // Daily usage context
   const dailyUsage = useDailyUsage();
 
@@ -584,6 +588,8 @@ export function ChatRoom({ roomId }: Props) {
       }).catch(() => undefined);
     }
     roomEndedRef.current = true;
+    // Signal MatchLobby to start matching immediately (skips the idle frame flash)
+    sessionStorage.setItem("banterbird:skipRematch", "1");
     router.replace("/");
   }, [client, roomId, router]);
 
@@ -1324,18 +1330,28 @@ export function ChatRoom({ roomId }: Props) {
                     storedWantsGender !== null;
 
                   if (wantsGenderFiltered && !dailyUsage.isPro) {
+                    // Read remaining BEFORE decrementing — state update is async
+                    const remainingBefore = dailyUsage.genderSkipsRemaining ?? 0;
+                    const alreadyShownToday = localStorage.getItem(genderExhaustedStorageKey) === "1";
+
+                    // Only show the modal when this skip lands at exactly 0,
+                    // and only once per day (localStorage) + once per session (ref)
+                    const willHitZero = remainingBefore <= 1;
+                    const shouldShowModal =
+                      willHitZero &&
+                      !alreadyShownToday &&
+                      !genderExhaustedShownRef.current;
+
                     // Consume one skip optimistically and persist server-side
                     dailyUsage.consumeGenderSkip();
                     void fetch("/api/usage/record-gender-skip", { method: "POST" });
 
-                    // Show exhausted modal on the FIRST skip that lands at 0 remaining
-                    if (
-                      dailyUsage.genderSkipsRemaining !== null &&
-                      dailyUsage.genderSkipsRemaining <= 1 &&
-                      !genderExhaustedShownRef.current
-                    ) {
+                    if (shouldShowModal) {
                       genderExhaustedShownRef.current = true;
+                      localStorage.setItem(genderExhaustedStorageKey, "1");
                       setShowGenderExhaustedModal(true);
+                      // Do NOT call leaveManually — the modal buttons handle navigation
+                      return;
                     }
                   }
 
@@ -1375,8 +1391,17 @@ export function ChatRoom({ roomId }: Props) {
       {/* Gender exhausted modal */}
       <GenderExhaustedModal
         open={showGenderExhaustedModal}
-        onClose={() => setShowGenderExhaustedModal(false)}
-        onUpgrade={() => { setShowGenderExhaustedModal(false); setShowUpgradeModal(true); }}
+        onContinue={() => {
+          setShowGenderExhaustedModal(false);
+          // Leave and go to next match — clearFilters=true so "regardless" is used
+          void leaveManually(true, true);
+        }}
+        onUpgrade={() => {
+          setShowGenderExhaustedModal(false);
+          setShowUpgradeModal(true);
+          // Still need to skip this room — leave with filters cleared
+          void leaveManually(true, true);
+        }}
       />
 
       {showReport ? (

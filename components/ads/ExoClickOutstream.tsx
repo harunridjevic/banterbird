@@ -10,45 +10,47 @@ type Props = { zoneId?: string; className?: string };
 
 export function ExoClickOutstream({ zoneId = ZONE_ID, className }: Props) {
   const uid = useId();
-  const insRef = useRef<HTMLElement | null>(null);
-  // "visible" = ad is present; "closed" = ExoClick removed/emptied the ins element
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [closed, setClosed] = useState(false);
+  // Track whether the ad has ever had a non-zero height (i.e. actually loaded)
+  const everHadHeightRef = useRef(false);
 
   useEffect(() => {
-    const ins = insRef.current;
-    if (!ins) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper || typeof ResizeObserver === "undefined") return;
 
-    // Watch for ExoClick emptying or removing the ins element's children,
-    // which is what happens when the user clicks the X on the video ad.
-    const observer = new MutationObserver(() => {
-      if (ins.childElementCount === 0 && ins.children.length === 0) {
-        // Small debounce — ExoClick may momentarily clear then re-inject
-        const t = window.setTimeout(() => {
-          if (ins.childElementCount === 0) setClosed(true);
-        }, 300);
-        return () => window.clearTimeout(t);
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = entry.contentRect.height;
+        if (h > 10) {
+          // Ad is visible / loaded
+          everHadHeightRef.current = true;
+        } else if (everHadHeightRef.current && h === 0) {
+          // Ad was visible, now collapsed — user clicked X
+          setClosed(true);
+          ro.disconnect();
+        }
       }
     });
 
-    observer.observe(ins, { childList: true, subtree: false });
-    return () => observer.disconnect();
+    ro.observe(wrapper);
+    return () => ro.disconnect();
   }, []);
 
   return (
     <div className={className ?? "mx-auto w-full max-w-sm px-4"}>
-      {/* Label hides when the ad is closed */}
       {!closed && (
         <p className="mb-1.5 text-center text-[10px] font-medium uppercase tracking-widest text-navy-400 dark:text-navy-500">
           Sponsored
         </p>
       )}
-      {/* ExoClick embed — exactly as provided by the dashboard.
-          The ins element stays in the DOM so the ref remains valid. */}
-      <ins
-        ref={(el) => { insRef.current = el; }}
-        className={INS_CLASS}
-        data-zoneid={zoneId}
-      />
+      {/* Wrap the ins so ResizeObserver tracks the ad's rendered height */}
+      <div ref={wrapperRef}>
+        <ins
+          className={INS_CLASS}
+          data-zoneid={zoneId}
+        />
+      </div>
       <Script
         id={`exoclick-serve-${zoneId}-${uid}`}
         strategy="afterInteractive"

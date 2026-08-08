@@ -15,6 +15,7 @@ import {
   extractImageUrl,
 } from "@/lib/chat/image-upload";
 import { ImageMessage } from "@/components/chat/ImageMessage";
+import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 
 // ── Typing bubble (3-dot bounce) ────────────────────────────────────────────
 function TypingBubble() {
@@ -72,6 +73,7 @@ export function DmConversation({
 
   // Hide headers when mobile keyboard is open (visualViewport shrinks)
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const roomIdRef = useRef<string | null>(null);
@@ -321,8 +323,9 @@ export function DmConversation({
         <div className="flex shrink-0 items-center gap-2 border-b border-navy-200/60 bg-rose-500/5 px-3 py-2 sm:px-4 sm:py-2.5 dark:border-white/10">
           <Trash2 className="h-3.5 w-3.5 shrink-0 text-rose-500" />
           <p className="text-xs text-rose-600 dark:text-rose-400">
-            <span className="sm:hidden">Messages auto-delete after 30 days.</span>
-            <span className="hidden sm:inline">Messages are deleted after both parties have read them, or after 30 days.</span>
+            {isMobile
+              ? "Messages auto-delete after 30 days."
+              : "Messages are deleted after both parties have read them, or after 30 days."}
           </p>
         </div>
       )}

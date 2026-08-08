@@ -47,8 +47,16 @@ export function MatchLobby() {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("banterbird:wantsGender") as WantsGender | null;
   });
-  const [isMatching, setIsMatching] = useState(false);
-  const [matchRequested, setMatchRequested] = useState(false);
+  // Read the skip-rematch flag once on mount — set by ChatRoom before router.replace("/")
+  // so we start in matching state immediately, skipping the idle "Find your vibe" flash.
+  const [skipRematch] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const flag = sessionStorage.getItem("banterbird:skipRematch") === "1";
+    if (flag) sessionStorage.removeItem("banterbird:skipRematch");
+    return flag;
+  });
+  const [isMatching, setIsMatching] = useState(() => skipRematch);
+  const [matchRequested, setMatchRequested] = useState(() => skipRematch);
   const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
   const [rpcError, setRpcError] = useState<string | null>(null);
   const [includeAiMatch, setIncludeAiMatch] = useState(true);
@@ -117,10 +125,15 @@ export function MatchLobby() {
         return false;
       }
       void client.rpc("leave_match_queue");
+      // Charge one gender skip now that a real match was made with a gender filter
+      if (activeWantsGender && activeWantsGender !== "any" && !dailyUsage.isPro) {
+        dailyUsage.consumeGenderSkip();
+        void fetch("/api/usage/record-gender-skip", { method: "POST" });
+      }
       router.replace(`/chat/${roomId}`);
       return true;
     },
-    [client, router, releaseMatchClaim],
+    [client, router, releaseMatchClaim, activeWantsGender, dailyUsage],
   );
 
   useEffect(() => {
@@ -702,12 +715,6 @@ export function MatchLobby() {
                         if (limitHit) {
                           setShowUpgradeModal(true);
                           return;
-                        }
-                        // If switching TO a gender-filtered option, charge one skip now
-                        if (isGenderFiltered && option.value !== wantsGender && !dailyUsage.isPro) {
-                          dailyUsage.consumeGenderSkip();
-                          // Also persist server-side (fire-and-forget)
-                          void fetch("/api/usage/record-gender-skip", { method: "POST" });
                         }
                         setWantsGender(option.value);
                       }}

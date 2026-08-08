@@ -13,6 +13,7 @@ import { FriendsDrawer } from "@/components/friends/FriendsDrawer";
 import { ProBadge } from "@/components/account/ProBadge";
 import { UpgradeModal } from "@/components/account/UpgradeModal";
 import { isProActive } from "@/lib/account/types";
+import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 
 export function Navbar() {
   const { setTheme, resolvedTheme } = useTheme();
@@ -36,6 +37,7 @@ export function Navbar() {
   const showPro = isNamed && isProActive(state.profile);
   const showRemoveAds = state.status !== "loading" && !showPro;
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   // Close all popups when the user navigates to a different page.
   useEffect(() => {
@@ -107,7 +109,11 @@ export function Navbar() {
                 className="flex items-center gap-1 rounded-lg border border-amber-400/60 bg-amber-400/10 px-1.5 py-1 text-[10px] font-semibold text-amber-700 transition hover:bg-amber-400/20 dark:border-amber-400/30 dark:text-amber-400 dark:hover:bg-amber-400/10 sm:gap-1.5 sm:rounded-xl sm:px-2.5 sm:py-1.5 sm:text-xs"
               >
                 <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                <span className="whitespace-nowrap">Remove Ads</span>
+                {isMobile ? (
+                  <span className="text-center leading-tight">Remove<br />Ads</span>
+                ) : (
+                  <span>Remove Ads</span>
+                )}
               </button>
             )}
           </div>
