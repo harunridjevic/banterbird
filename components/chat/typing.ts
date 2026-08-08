@@ -30,8 +30,8 @@ export function readDelayOpenerMs(timing: TimingScale = {}) {
  * Typing bubble duration from message length.
  * Tuned for casual phone typing - never flash-short even for "fast" personas.
  */
-const TYPING_BASE_MS = 1200;
-const TYPING_MS_PER_CHAR = 48;
+const TYPING_BASE_MS = 1800;
+const TYPING_MS_PER_CHAR = 64;
 
 export function typingDurationForReply(reply: string, timing: TimingScale = {}) {
   // Floor at 1× so replySpeed 0.55 personas still type at a believable pace.
@@ -43,10 +43,10 @@ export function typingDurationForReply(reply: string, timing: TimingScale = {}) 
   const scaled = (TYPING_BASE_MS + len * TYPING_MS_PER_CHAR) * s * jitter;
   // Hard floors: even the shortest messages must linger long enough to feel human.
   const min =
-    len <= 4  ? 1800 :
-    len <= 12 ? 2400 :
-    len <= 28 ? 3200 :
-    len <= 60 ? 4200 : 5500;
+    len <= 4  ? 2600 :
+    len <= 12 ? 3400 :
+    len <= 28 ? 4400 :
+    len <= 60 ? 5500 : 7000;
   return clamp(Math.round(scaled), min, 28_000);
 }
 

@@ -121,15 +121,15 @@ export function formatBotSelfMemoryBlock(
 
   if (parts.length === 0) {
     return [
-      `Your identity: ${persona.genderTag} from ${persona.country}.`,
-      "Share age or location only when they ask, once each per chat, never volunteer the same fact twice.",
+      `YOUR OWN identity (about YOU, not the other person): ${persona.genderTag} from ${persona.country}.`,
+      "Share YOUR age or location only when THEY ask you, once each per chat, never volunteer the same fact twice.",
     ].join(" ");
   }
 
   return [
-    `Already told them this chat, DO NOT repeat: ${parts.join(", ")}.`,
+    `YOUR OWN info you already told them this chat (about YOU), DO NOT repeat: ${parts.join(", ")}.`,
     'If they ask again, tease ("lol i already said") instead of re-stating the same number.',
-    "You may share NEW facts you have not mentioned yet, but never re-introduce age/location you already gave.",
+    "You may share NEW facts about yourself you have not mentioned yet, but never re-introduce your own age/location you already gave.",
   ].join(" ");
 }
 
@@ -214,10 +214,10 @@ export function formatUserMemoryBlock(mem: UserMemory, persona?: BotPersona): st
   }
 
   if (parts.length === 0) {
-    return "Known about them so far: nothing solid yet, ask age/location if curious.";
+    return "About THE OTHER PERSON (not you) — nothing known yet. Ask their age/location if curious.";
   }
 
-  return `Known about them (they already told you, DO NOT forget):\n- ${parts.join("\n- ")}`;
+  return `About THE OTHER PERSON (not you — these are THEIR facts, not yours):\n- ${parts.join("\n- ")}`;
 }
 
 export function isDryConversation(history: ChatTurn[]): boolean {

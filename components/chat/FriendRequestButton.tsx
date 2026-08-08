@@ -49,11 +49,11 @@ export function FriendRequestButton({
       // hideBotUi only hides the "Bot" label; it shouldn't suppress friend-request messages.
       const delay = 4000 + Math.random() * 2000; // 4–6s
       const excuses = [
-        "Sorry, I don't really add people on here tbh",
+        "sorry, I don't really add people on here tbh",
         "I keep my friends list pretty private lol",
-        "Not really looking to connect outside of chat",
+        "not really looking to connect outside of chat",
         "I prefer to keep things anonymous on BanterBird",
-        "Nothing personal, I just don't add people from chat",
+        "nothing personal, I just don't add people from chat",
         "I never really use the friends thing on here lol",
         "I'm kind of weird about adding people I just met in chat",
       ];

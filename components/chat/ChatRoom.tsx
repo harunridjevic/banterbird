@@ -590,6 +590,8 @@ export function ChatRoom({ roomId }: Props) {
     roomEndedRef.current = true;
     // Signal MatchLobby to start matching immediately (skips the idle frame flash)
     sessionStorage.setItem("banterbird:skipRematch", "1");
+    // Signal MatchLobby to skip its entry animation (avoids a visible fade-in flash)
+    sessionStorage.setItem("banterbird:returningFromChat", "1");
     router.replace("/");
   }, [client, roomId, router]);
 

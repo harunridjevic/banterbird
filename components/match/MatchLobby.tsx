@@ -55,6 +55,16 @@ export function MatchLobby() {
     if (flag) sessionStorage.removeItem("banterbird:skipRematch");
     return flag;
   });
+  // True when returning from a chat room — skips the PageLoader so there's no loading flash.
+  const [returningFromChat] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem("banterbird:returningFromChat") === "1";
+  });
+
+  // Clear the flag after first render so subsequent fresh visits show the loader normally.
+  useEffect(() => {
+    sessionStorage.removeItem("banterbird:returningFromChat");
+  }, []);
   const [isMatching, setIsMatching] = useState(() => skipRematch);
   const [matchRequested, setMatchRequested] = useState(() => skipRematch);
   const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
@@ -523,7 +533,11 @@ export function MatchLobby() {
   ]);
 
   if (!ready || !globalSettingsLoaded) {
-    return <PageLoader label={!ready ? "Preparing your session…" : "Loading match settings…"} />;
+    // When returning from a chat the session is already live — skip the loader
+    // so there's no flash before "Find your vibe" appears.
+    if (!returningFromChat) {
+      return <PageLoader label={!ready ? "Preparing your session…" : "Loading match settings…"} />;
+    }
   }
 
   if (authError) {
