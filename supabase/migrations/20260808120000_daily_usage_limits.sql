@@ -34,6 +34,7 @@ alter table public.daily_usage enable row level security;
 
 -- ── Helper: build the identity key ────────────────────────────────────────────
 -- We concatenate ip and device_id so a VPN hop alone isn't enough to bypass.
+-- Uses built-in hashtext() — no pgcrypto extension required.
 create or replace function public.build_identity_key(
   p_ip text,
   p_device_id text
@@ -44,14 +45,14 @@ immutable
 security definer
 set search_path = public
 as $$
-  select encode(
-    digest(
-      coalesce(nullif(trim(p_ip), ''), 'unknown')
-        || ':'
-        || coalesce(nullif(trim(p_device_id), ''), 'unknown'),
-      'sha256'
-    ),
-    'hex'
+  select to_hex(
+    abs(
+      hashtext(
+        coalesce(nullif(trim(p_ip), ''), 'unknown')
+          || ':'
+          || coalesce(nullif(trim(p_device_id), ''), 'unknown')
+      )
+    )::bigint
   );
 $$;
 
