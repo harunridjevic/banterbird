@@ -10,12 +10,21 @@ const ZONES = {
 
 const NO_FILL_RETRY_MS = 45_000;
 
+const CHECKER = {
+  backgroundImage: `
+    linear-gradient(45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(120,130,155,0.13) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(120,130,155,0.13) 75%)
+  `,
+  backgroundSize: "12px 12px",
+  backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0px",
+} as const;
+
 export function ExoClickBannerSlot() {
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [ad, setAd] = useState<NeverBlockZone | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [adLoaded, setAdLoaded] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -49,7 +58,6 @@ export function ExoClickBannerSlot() {
     if (isMobile === null) return;
     const zoneId = isMobile ? ZONES.mobile.zoneId : ZONES.desktop.zoneId;
     setAd(null);
-    setAdLoaded(false);
     void fetchAd(zoneId);
     return () => {
       if (retryTimerRef.current !== null) clearTimeout(retryTimerRef.current);
@@ -60,26 +68,20 @@ export function ExoClickBannerSlot() {
   if (!zone) return null;
 
   return (
+    // Outer container always shows the checkerboard and holds the fixed height.
+    // The ad image is absolutely positioned on top so it covers the checker
+    // only after it has fully loaded — no flash of empty space.
     <div
-      className="flex w-full shrink-0 items-center justify-center"
-      style={{
-        minHeight: zone.height,
-        backgroundImage: adLoaded ? undefined : `
-          linear-gradient(45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
-          linear-gradient(-45deg, rgba(120,130,155,0.13) 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, rgba(120,130,155,0.13) 75%),
-          linear-gradient(-45deg, transparent 75%, rgba(120,130,155,0.13) 75%)
-        `,
-        backgroundSize: "12px 12px",
-        backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0px",
-      }}
+      className="relative flex w-full shrink-0 items-center justify-center overflow-hidden"
+      style={{ height: zone.height, ...CHECKER }}
     >
       {ad?.data.url && ad.data.image && (
         <a
           href={String(ad.data.url)}
           target="_blank"
           rel="noopener noreferrer nofollow"
-          style={{ display: "block", lineHeight: 0 }}
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ lineHeight: 0 }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -87,7 +89,6 @@ export function ExoClickBannerSlot() {
             alt="Advertisement"
             width={zone.width}
             height={zone.height}
-            onLoad={() => setAdLoaded(true)}
             style={{ display: "block", maxWidth: "100%", height: "auto" }}
           />
         </a>
