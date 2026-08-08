@@ -37,8 +37,6 @@ export const metadata: Metadata = {
     "chat with random people",
     "anonymous social chat",
     "no signup chat",
-    "AI chat practice",
-    "anonymous AI chat",
   ],
   alternates: {
     canonical: `${baseUrl}`,

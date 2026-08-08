@@ -50,8 +50,7 @@ export default function PrivacyPage() {
       </p>
       <h2>Third parties</h2>
       <p>
-        We use Supabase for authentication and database hosting, and AI providers (e.g. Groq) for
-        practice bot conversations. See our{" "}
+        We use Supabase for authentication and database hosting. See our{" "}
         <Link href="/legal/cookies" className="text-violet-600 underline-offset-2 hover:underline">
           Cookie Policy
         </Link>

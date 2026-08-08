@@ -10,14 +10,14 @@ export const metadata: Metadata = {
   openGraph: {
     url: "https://banterbird.app/legal/community",
     title: "Community Guidelines · BanterBird",
-    description: "BanterBird Community Guidelines — be kind, stay safe, no harassment, no illegal content.",
+    description: "BanterBird Community Guidelines: be kind, stay safe, no harassment, no illegal content.",
     siteName: "BanterBird",
     images: [{ url: "/logo_search.png", width: 1200, height: 630, alt: "BanterBird" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Community Guidelines · BanterBird",
-    description: "BanterBird Community Guidelines — be kind, stay safe, no harassment, no illegal content.",
+    description: "BanterBird Community Guidelines: be kind, stay safe, no harassment, no illegal content.",
     images: ["/logo_search.png"],
   },
 };

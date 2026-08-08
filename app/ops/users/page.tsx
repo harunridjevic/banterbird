@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, Trash2, Users, X } from "lucide-react";
+import { Search, Trash2, Users, X, Infinity } from "lucide-react";
 import { OpsLoadingPanel, PAGE_SIZE } from "@/components/ops/OpsLoadingPanel";
 import { OpsBackLink } from "@/components/ops/OpsBackLink";
 import type { OpsUserRow } from "@/app/api/ops/users/route";
@@ -36,6 +36,41 @@ function fmtShort(iso: string | null) {
   return new Date(iso).toLocaleDateString(undefined, {
     month: "short", day: "numeric", year: "numeric",
   });
+}
+
+function UnlimitedProToggle({ user, onToggle }: { user: OpsUserRow; onToggle: (id: string, grant: boolean) => void }) {
+  const [busy, setBusy] = useState(false);
+
+  const handleClick = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/ops/grant-pro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, grant: !user.is_unlimited_pro }),
+      });
+      if (res.ok) onToggle(user.id, !user.is_unlimited_pro);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void handleClick()}
+      title={user.is_unlimited_pro ? "Revoke unlimited PRO" : "Grant unlimited PRO"}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 ${
+        user.is_unlimited_pro
+          ? "border border-amber-400/40 bg-amber-400/20 text-amber-300 hover:bg-amber-400/30"
+          : "border border-white/10 bg-white/5 text-navy-500 hover:bg-white/10 hover:text-navy-200"
+      }`}
+    >
+      <Infinity className="h-3 w-3" />
+      {user.is_unlimited_pro ? "Unlimited" : "Grant"}
+    </button>
+  );
 }
 
 export default function OpsUsersPage() {
@@ -93,6 +128,16 @@ export default function OpsUsersPage() {
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleToggleUnlimitedPro = useCallback((userId: string, grant: boolean) => {
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? { ...u, is_unlimited_pro: grant, is_pro: grant, pro_until: grant ? "2099-12-31T00:00:00.000Z" : null }
+          : u,
+      ),
+    );
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -311,12 +356,13 @@ export default function OpsUsersPage() {
         {/* Table — desktop */}
         <div className="mt-5 hidden overflow-hidden rounded-2xl border border-white/10 sm:block">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_1fr_110px_90px_90px_150px] gap-4 border-b border-white/10 bg-white/5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-navy-400">
+          <div className="grid grid-cols-[1fr_1fr_110px_90px_90px_110px_150px] gap-4 border-b border-white/10 bg-white/5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-navy-400">
             <span>User</span>
             <span>Email</span>
             <span>Provider</span>
             <span>Plan</span>
             <span>Joined</span>
+            <span>Unlimited</span>
             <span>Last sign in</span>
           </div>
 
@@ -329,7 +375,7 @@ export default function OpsUsersPage() {
               {users.map((u) => (
                 <li
                   key={u.id}
-                  className="grid grid-cols-[1fr_1fr_110px_90px_90px_150px] items-center gap-4 px-4 py-3 text-sm hover:bg-white/[0.03]"
+                  className="grid grid-cols-[1fr_1fr_110px_90px_90px_110px_150px] items-center gap-4 px-4 py-3 text-sm hover:bg-white/[0.03]"
                 >
                   {/* User */}
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -370,6 +416,9 @@ export default function OpsUsersPage() {
                   <span className="whitespace-nowrap text-xs text-navy-400">
                     {fmtShort(u.created_at)}
                   </span>
+
+                  {/* Unlimited PRO toggle */}
+                  <UnlimitedProToggle user={u} onToggle={handleToggleUnlimitedPro} />
 
                   {/* Last sign in */}
                   <span className="whitespace-nowrap text-xs text-navy-400">
@@ -420,6 +469,9 @@ export default function OpsUsersPage() {
                     {u.is_pro && (
                       <span className="font-semibold text-amber-400">PRO</span>
                     )}
+                  </div>
+                  <div className="mt-2">
+                    <UnlimitedProToggle user={u} onToggle={handleToggleUnlimitedPro} />
                   </div>
                 </li>
               ))}

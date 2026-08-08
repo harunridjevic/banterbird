@@ -93,7 +93,7 @@ export function Navbar() {
     >
       <div className="relative mx-auto flex max-w-6xl items-center h-14 px-3 sm:h-16 sm:px-6">
         {/* Left: Logo with PRO badge / Remove Ads overlaid at logo+100px */}
-        <div className="relative z-10 flex shrink-0 items-center">
+        <div className="relative z-10 flex flex-1 shrink-0 items-center">
           <Logo
             showWordmark
             priority
@@ -127,7 +127,7 @@ export function Navbar() {
         </div>
 
         {/* Right: buttons */}
-        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="relative z-10 flex flex-1 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
 
           {/* Theme toggle */}
           {mounted && (

@@ -66,7 +66,7 @@ const FEATURES = [
 const FAQS = [
   {
     q: "What is BanterBird?",
-    a: "BanterBird is a free, anonymous 1-on-1 text chat platform. You open the site, pick your preferences, and within seconds you are connected with a real person somewhere in the world.",
+    a: "BanterBird is a free, anonymous 1-on-1 text chat platform. You open the site, pick your preferences, and within seconds you are connected with someone somewhere in the world.",
   },
   {
     q: "Do I need to create an account?",
@@ -74,7 +74,7 @@ const FAQS = [
   },
   {
     q: "Is BanterBird free?",
-    a: "Yes — core chat is free. Optional BanterBird PRO ($9/month) is available for signed-in accounts and unlocks extra perks over time (including fewer ads).",
+    a: "Yes. Core chat is completely free. Optional BanterBird PRO is available for signed-in accounts and unlocks extra perks like unlimited gender matching and image sharing in chat.",
   },
   {
     q: "How does the matching work?",
@@ -113,8 +113,8 @@ export default function AboutPage() {
             About BanterBird
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-navy-700 dark:text-navy-300">
-            BanterBird is a free anonymous chat platform. Open a chat, get matched with a real
-            person in seconds, and have a genuine conversation. No sign-up, no profile, no trace.
+            BanterBird is a free anonymous chat platform. Open a chat, get matched with someone in
+            seconds, and have a genuine conversation. No sign-up, no profile, no trace.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -139,14 +139,14 @@ export default function AboutPage() {
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
               BanterBird is a real-time anonymous chat web app at{" "}
               <strong className="text-navy-900 dark:text-navy-100">banterbird.app</strong>. It
-              connects two strangers in a private 1-on-1 text conversation — a modern, cleaner take
+              connects two strangers in a private 1-on-1 text conversation: a modern, cleaner take
               on random chat, with smarter matching and a focus on genuine interaction.
             </p>
             <p className="mt-4 leading-relaxed text-navy-700 dark:text-navy-300">
               The platform is built for people who want to talk to someone new without the friction
               of creating yet another account, or the exposure of sharing a social profile. Whether
               you want to practise a language, get an outside perspective, vent to a stranger, or
-              just have a good conversation — BanterBird is designed for that.
+              just have a good conversation, BanterBird is designed for that.
             </p>
           </div>
         </section>
@@ -191,7 +191,7 @@ export default function AboutPage() {
           <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">Privacy by design</h2>
           <div className="glass-panel rounded-3xl border border-navy-200/70 p-6 dark:border-white/10">
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
-              Anonymity is not an afterthought on BanterBird — it is the foundation. No personal
+              Anonymity is not an afterthought on BanterBird, it is the foundation. No personal
               information is collected to start a chat. Sessions use temporary anonymous credentials
               that expire. Chat content is not retained once the session ends.
             </p>

@@ -11,14 +11,14 @@ export const metadata: Metadata = {
   openGraph: {
     url: "https://banterbird.app/legal/terms",
     title: "Terms of Service · BanterBird",
-    description: "BanterBird Terms of Service — eligibility, acceptable use, moderation, and your rights on our anonymous chat platform.",
+    description: "BanterBird Terms of Service: eligibility, acceptable use, moderation, and your rights on our anonymous chat platform.",
     siteName: "BanterBird",
     images: [{ url: "/logo_search.png", width: 1200, height: 630, alt: "BanterBird" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Terms of Service · BanterBird",
-    description: "BanterBird Terms of Service — eligibility, acceptable use, moderation, and your rights on our anonymous chat platform.",
+    description: "BanterBird Terms of Service: eligibility, acceptable use, moderation, and your rights on our anonymous chat platform.",
     images: ["/logo_search.png"],
   },
 };

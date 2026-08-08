@@ -43,8 +43,6 @@ export const metadata: Metadata = {
     "chat with random people",
     "anonymous social chat",
     "no signup chat",
-    "AI chat practice",
-    "anonymous AI chat",
   ],
   authors: [{ name: "BanterBird" }],
   creator: "BanterBird",
@@ -193,7 +191,6 @@ export default function RootLayout({
           "Instant messaging",
           "Interest-based matching",
           "Mobile-friendly",
-          "AI practice chat",
         ],
       },
       {

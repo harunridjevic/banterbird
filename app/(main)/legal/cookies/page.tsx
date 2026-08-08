@@ -31,9 +31,6 @@ export default function CookiesPage() {
         <li>
           <strong>Authentication</strong>: Supabase session cookies keep you signed in anonymously.
         </li>
-        <li>
-          <strong>Ops access</strong>: Internal dashboard session cookies (staff only).
-        </li>
       </ul>
       <h2>Local storage</h2>
       <p>We also use browser local storage for:</p>
