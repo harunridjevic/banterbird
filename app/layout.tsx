@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { AppProviders } from "./providers";
+import { loadAppSettings } from "@/lib/ops/app-settings";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -126,12 +127,14 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
+  const settings = await loadAppSettings();
+  const price = settings.billing.proPriceUsd;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -217,7 +220,7 @@ export default function RootLayout({
             name: "Is BanterBird free to use?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes, BanterBird is free to use. Optional BanterBird PRO is available for $9/month for signed-in accounts.",
+              text: `Yes, BanterBird is free to use. Optional BanterBird PRO is available for $${price}/month for signed-in accounts.`,
             },
           },
           {

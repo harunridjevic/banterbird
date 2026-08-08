@@ -48,5 +48,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.3,
     },
+    {
+      url: `${baseUrl}/legal/refund`,
+      lastModified: "2026-08-08",
+      changeFrequency: "monthly",
+      priority: 0.3,
+    },
   ];
 }

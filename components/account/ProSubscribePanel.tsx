@@ -79,13 +79,19 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
     return new Promise((resolve) => {
       if (paddleLoaded.current && window.Paddle) { resolve(); return; }
       const existing = document.getElementById("paddle-js");
-      if (existing) { resolve(); return; }
+      if (existing) {
+        // Script already in DOM — just resolve, caller will Initialize
+        paddleLoaded.current = true;
+        resolve();
+        return;
+      }
       const script = document.createElement("script");
       script.id = "paddle-js";
       script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
       script.onload = () => {
+        // Set environment only — do NOT Initialize here.
+        // Caller sets up eventCallback then calls Initialize once.
         if (sandbox) window.Paddle?.Environment.set("sandbox");
-        window.Paddle?.Initialize({ token });
         paddleLoaded.current = true;
         resolve();
       };

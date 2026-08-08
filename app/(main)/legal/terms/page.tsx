@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
+import { loadAppSettings } from "@/lib/ops/app-settings";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -23,7 +24,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const settings = await loadAppSettings();
+  const price = settings.billing.proPriceUsd;
+
   return (
     <LegalPageShell title="Terms of Service" updated="July 3, 2026">
       <p>
@@ -56,6 +60,37 @@ export default function TermsPage() {
         </Link>
         .
       </p>
+      <h2>BanterBird PRO — paid subscriptions</h2>
+      <p>
+        BanterBird offers an optional paid subscription called BanterBird PRO. By subscribing you
+        agree to the following:
+      </p>
+      <ul>
+        <li>
+          Subscriptions are billed on a recurring monthly basis at the price shown at checkout
+          ($<span>{price}</span>/month). Pricing may vary by country due to local tax and currency.
+        </li>
+        <li>
+          Payments are processed by Paddle.com, our Merchant of Record. Paddle handles payment
+          processing, invoicing, and tax compliance on our behalf.
+        </li>
+        <li>
+          You may cancel your subscription at any time from your account settings. Cancellation
+          stops future billing and your PRO access continues until the end of the period already
+          paid for. No partial refunds are issued for unused time within a billing period.
+        </li>
+        <li>
+          Refunds are handled in accordance with our{" "}
+          <Link href="/legal/refund" className="text-violet-600 underline-offset-2 hover:underline">
+            Refund Policy
+          </Link>
+          .
+        </li>
+        <li>
+          We reserve the right to suspend or terminate PRO access for violations of these Terms,
+          without refund.
+        </li>
+      </ul>
       <h2>Disclaimer</h2>
       <p>
         BanterBird is provided &quot;as is&quot; without warranties. We are not liable for user-generated

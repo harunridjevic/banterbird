@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LogoMark } from "@/components/brand/Logo";
+import { loadAppSettings } from "@/lib/ops/app-settings";
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 
@@ -94,7 +95,9 @@ const FAQS = [
   },
 ] as const;
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const settings = await loadAppSettings();
+  const price = settings.billing.proPriceUsd;
   return (
     <>
       <script
@@ -199,6 +202,47 @@ export default function AboutPage() {
               If you choose to create an optional account, only what you provide is stored: a
               username, optionally a profile picture, and your match preferences. You can delete your
               account at any time.
+            </p>
+          </div>
+        </section>
+
+        {/* PRO */}
+        <section className="mb-14">
+          <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">BanterBird PRO</h2>
+          <div className="glass-panel rounded-3xl border border-amber-300/60 bg-gradient-to-br from-amber-50/60 to-white/60 p-6 dark:border-amber-500/20 dark:from-amber-950/20 dark:to-navy-900/40">
+            <p className="leading-relaxed text-navy-700 dark:text-navy-300">
+              BanterBird is free. An optional PRO subscription is available for signed-in accounts
+              at <strong className="text-navy-900 dark:text-navy-100">${price}/month</strong>, billed
+              monthly. Cancel any time — no contracts, no hidden fees.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-navy-700 dark:text-navy-300">
+              {[
+                "No ads — browse and chat completely ad-free",
+                "Unlimited gender-based matching (free users get 10 per day)",
+                "Unlimited image sending in chat (free users get 1 per day)",
+                "Exclusive PRO badge on your profile",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2.5">
+                  <span className="mt-0.5 shrink-0 text-amber-500" aria-hidden>★</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-xs text-navy-500 dark:text-navy-400">
+              Payments are processed securely by{" "}
+              <a
+                href="https://paddle.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-navy-700 dark:hover:text-navy-200"
+              >
+                Paddle
+              </a>
+              , our Merchant of Record. See our{" "}
+              <Link href="/legal/refund" className="underline underline-offset-2 hover:text-navy-700 dark:hover:text-navy-200">
+                Refund Policy
+              </Link>{" "}
+              for details.
             </p>
           </div>
         </section>

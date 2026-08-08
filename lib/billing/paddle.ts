@@ -136,9 +136,10 @@ export function verifyPaddleSignature(
   const h1 = parts["h1"];
   if (!ts || !h1) return false;
 
-  // Replay attack guard — reject events older than 5 minutes
+  // Replay attack guard — reject events older than 1 hour
+  // (Paddle retries for up to 72h, so 5min was too tight)
   const age = Date.now() - parseInt(ts) * 1000;
-  if (isNaN(age) || age > 5 * 60 * 1000) return false;
+  if (isNaN(age) || age > 60 * 60 * 1000) return false;
 
   const signedPayload = `${ts}:${rawBody}`;
   const expected = createHmac("sha256", secret)

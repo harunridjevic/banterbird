@@ -5,6 +5,7 @@ const LEGAL_LINKS = [
   { href: "/about", label: "About", title: "About BanterBird" },
   { href: "/legal/terms", label: "Terms", title: "Terms of Service" },
   { href: "/legal/privacy", label: "Privacy", title: "Privacy Policy" },
+  { href: "/legal/refund", label: "Refunds", title: "Refund Policy" },
   { href: "/legal/community", label: "Guidelines", title: "Community Guidelines" },
   { href: "/legal/cookies", label: "Cookies", title: "Cookie Policy" },
   { href: "/contact", label: "Contact", title: "Contact Us" },
