@@ -67,7 +67,7 @@ export function MatchLobby() {
   }, []);
   const [isMatching, setIsMatching] = useState(() => skipRematch);
   const [matchRequested, setMatchRequested] = useState(() => skipRematch);
-  const [hint, setHint] = useState("Pick who you are and who you want to talk to.");
+  const [hint, setHint] = useState("Pick who you are and who you want to chat with.");
   const [rpcError, setRpcError] = useState<string | null>(null);
   const [includeAiMatch, setIncludeAiMatch] = useState(true);
   const globalBotSettings = useGlobalBotSettings();
@@ -202,7 +202,7 @@ export function MatchLobby() {
       setHint(
         hideGenderFilters
           ? "Tap start to match with the next person online."
-          : "Pick who you are and who you want to talk to.",
+          : "Pick who you are and who you want to chat with.",
       );
       return;
     }
@@ -602,7 +602,7 @@ export function MatchLobby() {
         className="glass-panel w-full rounded-3xl border border-navy-200/70 p-5 shadow-xl sm:rounded-[2rem] sm:p-7 dark:border-white/10"
       >
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-navy-950 sm:text-2xl dark:text-navy-50">Find your vibe</h1>
+          <h1 className="text-xl font-semibold text-navy-950 sm:text-2xl dark:text-navy-50">Meet someone new</h1>
           <p className="mt-2 text-sm text-navy-700 sm:text-base dark:text-navy-300">{hint}</p>
         </div>
 

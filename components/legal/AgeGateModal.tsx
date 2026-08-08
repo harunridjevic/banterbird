@@ -19,10 +19,10 @@ export function AgeGateModal({ minimumAge, onConfirm }: Props) {
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-md rounded-3xl border border-navy-200/60 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-navy-900"
       >
-        <h2 className="text-xl font-bold text-navy-950 dark:text-navy-50">Age confirmation</h2>
+        <h2 className="text-xl font-bold text-navy-950 dark:text-navy-50">Age requirement</h2>
         <p className="mt-3 text-sm leading-relaxed text-navy-700 dark:text-navy-300">
-          BanterBird is for adults. By continuing, you confirm you are at least{" "}
-          <strong>{minimumAge}</strong> years old and agree to our{" "}
+          BanterBird is for users aged <strong>{minimumAge} and older</strong>. By continuing, you
+          confirm you meet this requirement and agree to our{" "}
           <a href="/legal/terms" className="text-violet-600 underline-offset-2 hover:underline dark:text-violet-400">
             Terms of Service
           </a>
@@ -30,7 +30,7 @@ export function AgeGateModal({ minimumAge, onConfirm }: Props) {
         </p>
         {declined ? (
           <p className="mt-4 text-sm text-rose-600 dark:text-rose-400">
-            You must be {minimumAge}+ to use BanterBird.
+            BanterBird is only available to users {minimumAge} and older.
           </p>
         ) : null}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">

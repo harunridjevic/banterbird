@@ -25,27 +25,43 @@ export const metadata: Metadata = {
 export default function CommunityPage() {
   return (
     <LegalPageShell title="Community Guidelines" updated="July 3, 2026">
-      <p>BanterBird works best when everyone feels safe. Please follow these guidelines.</p>
+      <p>BanterBird works best when everyone feels welcome and respected. Please follow these guidelines.</p>
       <h2>Be kind</h2>
-      <p>Treat strangers with respect. Disagreements happen. Stay civil or skip the chat.</p>
+      <p>Treat others with respect. Disagreements happen — stay civil or skip the chat.</p>
       <h2>No harassment</h2>
       <p>
         Bullying, hate speech, unwanted advances, and targeted abuse are not allowed. Use the report
         button if someone crosses the line.
       </p>
-      <h2>No illegal content</h2>
-      <p>Do not share or solicit illegal material, including content involving minors.</p>
-      <h2>Protect privacy</h2>
+      <h2>No inappropriate sexual content</h2>
       <p>
-        Do not pressure others to share personal information (real name, address, social accounts,
-        etc.).
+        Sending unsolicited sexual messages or images, soliciting sexual content, or engaging in
+        sexual conversations with anyone who has not consented is prohibited and may result in a
+        permanent ban.
       </p>
-      <h2>No spam</h2>
-      <p>Repeated unsolicited messages, scams, and bot-like behavior may result in restrictions.</p>
+      <h2>No illegal content</h2>
+      <p>
+        Do not share or solicit illegal material of any kind. Content that sexually exploits or
+        endangers minors is strictly forbidden and will be reported to relevant authorities.
+      </p>
+      <h2>Protect your privacy</h2>
+      <p>
+        Never share your real name, home address, phone number, passwords, financial information, or
+        social media accounts in chat. Do not pressure others to share theirs.
+      </p>
+      <h2>No spam or scams</h2>
+      <p>Repeated unsolicited messages, scam attempts, and bot-like behavior may result in restrictions.</p>
+      <h2>Stay safe</h2>
+      <ul>
+        <li>Leave any conversation that makes you feel uncomfortable — it is always okay to skip.</li>
+        <li>Never share passwords or financial details with anyone.</li>
+        <li>Report behavior that seems threatening, abusive, or illegal.</li>
+        <li>Block users when you do not want to interact with them again.</li>
+      </ul>
       <h2>Reporting</h2>
       <p>
-        Reports are reviewed by our team. False or malicious reports may also lead to action. You can
-        temporarily block a user for the current session when reporting.
+        Reports are reviewed by our team. Use the <strong>Report</strong> button inside any chat
+        room. False or malicious reports may also lead to action against the reporter.
       </p>
     </LegalPageShell>
   );

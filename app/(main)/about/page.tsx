@@ -10,20 +10,20 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 export const metadata: Metadata = {
   title: "About BanterBird",
   description:
-    "Learn about BanterBird - the free anonymous chat platform where you can instantly connect 1-on-1 with strangers worldwide. No signup, no accounts, no data kept.",
+    "Learn about BanterBird — the anonymous chat platform where you can instantly connect 1-on-1 with people from around the world. No signup, no personal data required.",
   alternates: { canonical: "/about" },
   openGraph: {
     url: `${baseUrl}/about`,
-    title: "About BanterBird - Free Anonymous Chat",
+    title: "About BanterBird — Anonymous Social Chat",
     description:
-      "BanterBird is a free anonymous chat app with instant 1-on-1 matching, no sign-up required. Learn how it works, who it's for, and why it's private.",
+      "BanterBird is a free anonymous chat platform with instant 1-on-1 matching, no sign-up required. Learn how it works and who it's for.",
     siteName: "BanterBird",
     images: [{ url: "/logo_search.png", width: 1200, height: 630, alt: "BanterBird - About" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "About BanterBird",
-    description: "BanterBird is a free anonymous chat app with instant 1-on-1 matching, no sign-up required.",
+    title: "About BanterBird — Anonymous Social Chat",
+    description: "BanterBird is a free anonymous chat platform with instant 1-on-1 matching, no sign-up required.",
     images: ["/logo_search.png"],
   },
   robots: { index: true, follow: true },
@@ -34,7 +34,7 @@ const jsonLd = {
   "@type": "AboutPage",
   url: `${baseUrl}/about`,
   name: "About BanterBird",
-  description: "BanterBird is a free anonymous chat platform for instant 1-on-1 text conversations with strangers worldwide. No registration required.",
+  description: "BanterBird is a free anonymous chat platform for instant 1-on-1 text conversations with people worldwide. No registration required.",
   isPartOf: { "@type": "WebSite", "@id": `${baseUrl}/#website` },
 };
 
@@ -93,7 +93,7 @@ const FAQS = [
   },
   {
     q: "Who can use BanterBird?",
-    a: "BanterBird is intended for adults aged 18 and over. Users must confirm their age before accessing the platform.",
+    a: "BanterBird is for users aged 16 and over. By starting a chat you confirm you meet this age requirement.",
   },
 ] as const;
 
@@ -119,7 +119,7 @@ export default async function AboutPage() {
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-navy-700 dark:text-navy-300">
             BanterBird is a free anonymous chat platform. Open a chat, get matched with someone in
-            seconds, and have a genuine conversation. No sign-up, no profile, no trace.
+            seconds, and have a real conversation — no sign-up, no profile, no trace.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -142,16 +142,16 @@ export default async function AboutPage() {
           <h2 className="mb-4 text-xl font-bold text-navy-950 dark:text-navy-50">What is BanterBird?</h2>
           <div className="glass-panel rounded-3xl border border-navy-200/70 p-6 dark:border-white/10">
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
-              BanterBird is a real-time anonymous chat web app at{" "}
+              BanterBird is a real-time anonymous chat platform at{" "}
               <strong className="text-navy-900 dark:text-navy-100">banterbird.app</strong>. It
-              connects two strangers in a private 1-on-1 text conversation: a modern, cleaner take
-              on random chat, with smarter matching and a focus on genuine interaction.
+              connects two people in a private 1-on-1 text conversation — a modern take on random
+              chat, with smarter matching and a focus on genuine interaction.
             </p>
             <p className="mt-4 leading-relaxed text-navy-700 dark:text-navy-300">
               The platform is built for people who want to talk to someone new without the friction
               of creating yet another account, or the exposure of sharing a social profile. Whether
-              you want to practise a language, get an outside perspective, vent to a stranger, or
-              just have a good conversation, BanterBird is designed for that.
+              you want to practise a language, get an outside perspective, vent to someone, or just
+              have a good conversation, BanterBird is designed for that.
             </p>
           </div>
         </section>

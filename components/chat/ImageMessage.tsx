@@ -99,7 +99,7 @@ export function ImageMessage({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
-          alt={mine ? "Image you sent" : `Image from ${peerLabel ?? "Stranger"}`}
+          alt={mine ? "Image you sent" : `Image from ${peerLabel ?? "your match"}`}
           className={`block w-full rounded-2xl object-cover transition duration-300 ${
             revealed ? "blur-0" : "blur-xl brightness-75"
           }`}
@@ -111,7 +111,10 @@ export function ImageMessage({
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30">
             <Eye className="h-7 w-7 text-white drop-shadow" />
             <span className="text-xs font-semibold text-white drop-shadow">
-              Tap to see image
+              Tap to reveal
+            </span>
+            <span className="text-[10px] text-white/70 drop-shadow">
+              Blurred for your privacy
             </span>
           </div>
         )}

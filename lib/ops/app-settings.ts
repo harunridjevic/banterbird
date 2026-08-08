@@ -55,8 +55,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     blockDurationMinutes: 15,
   },
   ageGate: {
-    enabled: true,
-    minimumAge: 18,
+    enabled: false,
+    minimumAge: 16,
   },
   blockedWords: {
     enabled: false,

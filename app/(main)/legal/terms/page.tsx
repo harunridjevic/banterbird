@@ -38,8 +38,8 @@ export default async function TermsPage() {
       </p>
       <h2>Eligibility</h2>
       <p>
-        You must meet the minimum age requirement shown at signup. BanterBird is intended for adults
-        and is not directed at children.
+        You must be at least 16 years old to use BanterBird. By using the service, you confirm you
+        meet this age requirement. BanterBird is not directed at children under 13.
       </p>
       <h2>Acceptable use</h2>
       <ul>

@@ -7,27 +7,29 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 
 export const metadata: Metadata = {
   title: {
-    absolute: "BanterBird - Free Anonymous Chat Online (No Signup)",
+    absolute: "BanterBird — Meet Someone New. Start a Conversation.",
   },
   description:
-    "BanterBird is a free anonymous chat online with no signup and no download. Start instant 1-on-1 anonymous text chat with random people. Private, fast, and built for real conversation.",
+    "BanterBird is a simple way to anonymously chat with people from around the world. No signup, no download — just pick your preferences and start talking.",
   keywords: [
     "banterbird",
     "banterbird.app",
     "banter bird",
-    "google ai banterbird",
     "banterbird anonymous chat",
     "anonymous chat",
     "anonymous chat online",
     "free anonymous chat",
     "anonymous text chat",
     "chat anonymously",
-    "anonymous messaging",
-    "random anonymous chat",
-    "online anonymous chat",
-    "instant anonymous chat",
-    "anonymous chat no registration",
-    "chat without account",
+    "random chat",
+    "random chat online",
+    "chat with strangers",
+    "meet new people online",
+    "make new friends online",
+    "online chat",
+    "global chat",
+    "anonymous social network",
+    "random conversation",
     "omegle alternative",
     "random text chat",
     "1 on 1 anonymous chat",
@@ -35,7 +37,6 @@ export const metadata: Metadata = {
     "anonymous chat app",
     "free random chat",
     "chat with random people",
-    "anonymous social chat",
     "no signup chat",
   ],
   alternates: {
@@ -43,9 +44,9 @@ export const metadata: Metadata = {
   },
   openGraph: {
     url: baseUrl,
-    title: "BanterBird - Free Anonymous Chat Online",
+    title: "BanterBird — Meet Someone New. Start a Conversation.",
     description:
-      "Free anonymous chat online, no signup. Instant 1-on-1 anonymous text chat on BanterBird.",
+      "Anonymously chat with people from around the world. No signup needed — just start talking.",
     siteName: "BanterBird",
     images: [
       {
@@ -58,9 +59,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "BanterBird - Free Anonymous Chat Online",
+    title: "BanterBird — Meet Someone New. Start a Conversation.",
     description:
-      "Free anonymous chat online, no signup. Instant 1-on-1 anonymous text chat on BanterBird.",
+      "Anonymously chat with people from around the world. No signup needed — just start talking.",
     images: ["/logo_search.png"],
   },
   robots: {
@@ -74,7 +75,7 @@ export default function HomePage() {
     <AgeGateWrapper>
       <div className="flex h-full w-full items-center justify-center px-4 pb-[14%] pt-8 sm:px-6 sm:pb-[6%]">
         <div className="flex w-full max-w-4xl flex-col items-center">
-          <h1 className="sr-only">BanterBird - free anonymous chat online</h1>
+          <h1 className="sr-only">BanterBird — anonymous chat with people around the world</h1>
           <MatchLobby />
           <SignInNudge />
         </div>

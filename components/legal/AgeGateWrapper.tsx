@@ -1,20 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AgeGateModal, useAgeGate } from "@/components/legal/AgeGateModal";
-import { PageLoader } from "@/components/ui/Loading";
 
+/** Age gate popup removed — BanterBird's 16+ requirement is stated in the
+ *  Terms of Service and site copy rather than enforced via a modal. */
 export function AgeGateWrapper({ children }: { children: ReactNode }) {
-  const { required, minimumAge, checked, confirm } = useAgeGate();
-
-  if (!checked) {
-    return <PageLoader label="Loading…" />;
-  }
-
-  return (
-    <>
-      {required ? <AgeGateModal minimumAge={minimumAge} onConfirm={confirm} /> : null}
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
