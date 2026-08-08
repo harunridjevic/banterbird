@@ -92,8 +92,8 @@ const FAQS = [
     a: "Yes. Both users can report and block each other during a chat. Repeated violations result in access restrictions.",
   },
   {
-    q: "Is BanterBird safe for minors?",
-    a: "BanterBird is intended for users aged 18 and over. An age gate is shown before you can access the platform.",
+    q: "Who can use BanterBird?",
+    a: "BanterBird is intended for adults aged 18 and over. Users must confirm their age before accessing the platform.",
   },
 ] as const;
 

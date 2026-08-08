@@ -30,7 +30,7 @@ export default function CommunityPage() {
       <p>Treat strangers with respect. Disagreements happen. Stay civil or skip the chat.</p>
       <h2>No harassment</h2>
       <p>
-        Bullying, hate speech, sexual harassment, and targeted abuse are not allowed. Use the report
+        Bullying, hate speech, unwanted advances, and targeted abuse are not allowed. Use the report
         button if someone crosses the line.
       </p>
       <h2>No illegal content</h2>
