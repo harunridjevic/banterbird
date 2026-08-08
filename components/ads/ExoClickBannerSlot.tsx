@@ -24,7 +24,6 @@ const CHECKER = {
 export function ExoClickBannerSlot() {
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [ad, setAd] = useState<NeverBlockZone | null>(null);
-  // "neverblock" = NeverBlock filled | "direct" = fallback to <ins> script | "pending" = waiting
   const [adSource, setAdSource] = useState<"pending" | "neverblock" | "direct">("pending");
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const directServedRef = useRef(false);
@@ -37,7 +36,7 @@ export function ExoClickBannerSlot() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  const loadDirectScript = useCallback((zoneId: string) => {
+  const loadDirectScript = useCallback(() => {
     if (directServedRef.current) return;
     directServedRef.current = true;
     if (!document.getElementById("exoclick-provider")) {
@@ -50,7 +49,6 @@ export function ExoClickBannerSlot() {
     (window as unknown as { AdProvider?: unknown[] }).AdProvider =
       (window as unknown as { AdProvider?: unknown[] }).AdProvider ?? [];
     (window as unknown as { AdProvider: unknown[] }).AdProvider.push({ serve: {} });
-    void zoneId; // used by the <ins> tag in render
   }, []);
 
   const fetchAd = useCallback(async (zoneId: string) => {
@@ -61,25 +59,27 @@ export function ExoClickBannerSlot() {
     try {
       const res = await fetch(`/api/neverblock?zones=${zoneId}`);
       if (!res.ok) throw new Error("not ok");
-      const data = (await res.json()) as { zones?: (NeverBlockZone | false)[] };
-      const zone = data.zones?.[0];
-      if (zone && zone !== false && zone.data?.image && zone.data.url) {
-        setAd(zone);
-        setAdSource("neverblock");
-      } else {
-        // NeverBlock has no fill for this zone — use direct script
-        setAdSource("direct");
-        loadDirectScript(zoneId);
-        // Still retry NeverBlock periodically in case inventory becomes available
-        retryTimerRef.current = setTimeout(() => void fetchAd(zoneId), NO_FILL_RETRY_MS);
+      const data = (await res.json()) as { zones?: unknown[] };
+      const raw = data.zones?.[0];
+      // ExoClick returns false (not an object) when there is no fill
+      if (raw && typeof raw === "object" && "data" in raw) {
+        const nb = raw as NeverBlockZone;
+        if (nb.data?.image && nb.data.url) {
+          setAd(nb);
+          setAdSource("neverblock");
+          return;
+        }
       }
+      // No NeverBlock fill — fall back to direct <ins> script
+      setAdSource("direct");
+      retryTimerRef.current = setTimeout(() => void fetchAd(zoneId), NO_FILL_RETRY_MS);
     } catch {
       setAdSource("direct");
-      loadDirectScript(zoneId);
       retryTimerRef.current = setTimeout(() => void fetchAd(zoneId), NO_FILL_RETRY_MS);
     }
-  }, [loadDirectScript]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reset and fetch when viewport size changes
   useEffect(() => {
     if (isMobile === null) return;
     const zoneId = isMobile ? ZONES.mobile.zoneId : ZONES.desktop.zoneId;
@@ -92,6 +92,13 @@ export function ExoClickBannerSlot() {
     };
   }, [isMobile, fetchAd]);
 
+  // Fire the serve call AFTER the <ins> is in the DOM — state update renders
+  // the <ins> first, then this effect runs and pushes the serve call.
+  useEffect(() => {
+    if (adSource !== "direct") return;
+    loadDirectScript();
+  }, [adSource, loadDirectScript]);
+
   const zone = isMobile === null ? null : isMobile ? ZONES.mobile : ZONES.desktop;
   if (!zone) return null;
 
@@ -100,7 +107,6 @@ export function ExoClickBannerSlot() {
       className="relative flex w-full shrink-0 items-center justify-center overflow-hidden"
       style={{ height: zone.height, ...CHECKER }}
     >
-      {/* NeverBlock ad — rendered when API fills */}
       {adSource === "neverblock" && ad?.data.url && ad.data.image && (
         <a
           href={String(ad.data.url)}
@@ -120,7 +126,6 @@ export function ExoClickBannerSlot() {
         </a>
       )}
 
-      {/* Direct fallback — <ins> tag when NeverBlock has no fill */}
       {adSource === "direct" && (
         <ins className={zone.insClass} data-zoneid={zone.zoneId} />
       )}
