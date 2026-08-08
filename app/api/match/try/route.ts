@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { logError } from "@/lib/ops/error-log";
 import { clientIp } from "@/lib/moderation/client-ip";
+import { detectVpn } from "@/lib/moderation/vpn-detect";
 import { normalizeBlockedUserIds } from "@/lib/moderation/blocked-user-ids";
+import {
+  checkGenderSkipAllowed,
+  recordGenderSkip,
+  FREE_DAILY_GENDER_SKIP_LIMIT,
+} from "@/lib/moderation/daily-usage";
 
 export async function POST(req: Request) {
   try {
@@ -26,6 +33,15 @@ export async function POST(req: Request) {
     const ip = clientIp(req as import("next/server").NextRequest);
     const deviceId = body.deviceId?.trim() || null;
 
+    // ── VPN / proxy check ────────────────────────────────────────────────────
+    const vpnResult = await detectVpn(ip);
+    if (vpnResult.isVpn) {
+      return NextResponse.json(
+        { error: "VPN and proxy connections are not allowed.", reason: "vpn_detected" },
+        { status: 403 },
+      );
+    }
+
     const { data: blocked } = await supabase.rpc("is_moderation_blocked", {
       p_user_id: user.id,
       p_ip: ip,
@@ -35,6 +51,40 @@ export async function POST(req: Request) {
       await supabase.rpc("leave_match_queue");
       await supabase.rpc("end_user_active_rooms");
       return NextResponse.json({ error: "Your access has been restricted." }, { status: 403 });
+    }
+
+    // ── PRO status ───────────────────────────────────────────────────────────
+    const svc = createServiceRoleClient();
+    const { data: profile } = await svc
+      .from("profiles")
+      .select("is_pro,pro_until")
+      .eq("id", user.id)
+      .maybeSingle();
+    const isPro = Boolean(
+      profile?.is_pro &&
+        profile.pro_until &&
+        new Date(profile.pro_until).getTime() > Date.now(),
+    );
+
+    // ── Daily gender-match limit (10/day for male/female; any = unlimited) ──
+    const wantsGender = body.wantsGender ?? "any";
+    const isGenderFiltered = wantsGender !== "any";
+
+    if (isGenderFiltered) {
+      const genderCheck = await checkGenderSkipAllowed(ip, deviceId, wantsGender, isPro);
+      if (!genderCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: "You've used all your gender-based matches for today. Come back tomorrow or upgrade to PRO.",
+            reason: "daily_gender_limit",
+            used: FREE_DAILY_GENDER_SKIP_LIMIT,
+            remaining: 0,
+          },
+          { status: 429 },
+        );
+      }
+      // Record this match attempt (fire-and-forget)
+      void recordGenderSkip(ip, deviceId, user.id);
     }
 
     const clientBlocked = normalizeBlockedUserIds(body.blockedUserIds);
@@ -47,9 +97,6 @@ export async function POST(req: Request) {
     const friendIds = (friendships ?? []).map((f: { friend_id: string }) => f.friend_id);
     const friendIdSet = new Set(friendIds);
 
-    // Fetch accepted friend requests to identify former friends.
-    // Former friends should not be permanently blocked from matching just because
-    // they appeared in the session-block list while the friendship was active.
     const { data: acceptedRequests } = await supabase
       .from("friend_requests")
       .select("from_id, to_id")
@@ -58,17 +105,14 @@ export async function POST(req: Request) {
 
     const formerFriendIds = new Set(
       (acceptedRequests ?? []).flatMap((r: { from_id: string; to_id: string }) =>
-        r.from_id === user.id ? [r.to_id] : [r.from_id]
-      )
+        r.from_id === user.id ? [r.to_id] : [r.from_id],
+      ),
     );
 
-    // Strip current AND former friends from client-side session blocks
     const modBlocked = clientBlocked.filter(
-      (id) => !friendIdSet.has(id) && !formerFriendIds.has(id)
+      (id) => !friendIdSet.has(id) && !formerFriendIds.has(id),
     );
 
-    // Fetch server-side session blocks — users this person skipped OR
-    // users who skipped this person. Both directions prevent re-pairing.
     const now = new Date().toISOString();
     const { data: dbBlocksAsBlocker } = await supabase
       .from("session_blocks")
@@ -91,7 +135,7 @@ export async function POST(req: Request) {
 
     const { data: roomId, error } = await supabase.rpc("try_match", {
       p_self_gender: body.selfGender ?? "male",
-      p_wants_gender: body.wantsGender ?? "any",
+      p_wants_gender: wantsGender,
       p_blocked_user_ids: allBlockedIds,
     });
 

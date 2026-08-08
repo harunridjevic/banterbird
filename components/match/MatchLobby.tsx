@@ -19,6 +19,8 @@ import {
   resolveActiveGenders,
 } from "@/lib/match/policy";
 import { getDeviceId } from "@/lib/moderation/device-id";
+import { useDailyUsage } from "@/lib/usage/daily-usage-context";
+import { UpgradeModal } from "@/components/account/UpgradeModal";
 import { getSessionBlockedUsers } from "@/lib/moderation/session-block";
 import { normalizeBlockedUserIds } from "@/lib/moderation/blocked-user-ids";
 import {
@@ -56,6 +58,7 @@ export function MatchLobby() {
   const [hideGenderFilters, setHideGenderFilters] = useState<boolean | null>(null);
   const [accessBlocked, setAccessBlocked] = useState(false);
   const [matchAttempt, setMatchAttempt] = useState(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const matchingPaused = isMatchingPausedForInactivity();
   const matchGendersRef = useRef<{ self: SelfGender; wants: WantsGender } | null>(null);
   const navigatedRef = useRef(false);
@@ -63,6 +66,7 @@ export function MatchLobby() {
   /** Once set, matching loops must not restart or kill this room. */
   const matchedRoomIdRef = useRef<string | null>(null);
   const goToRoomRef = useRef<(roomId: string, uid: string) => Promise<boolean>>(async () => false);
+  const dailyUsage = useDailyUsage();
   const showMatchModePicker = globalSettingsLoaded && matchMode === "user_choice";
   const effectiveIncludeAi = globalSettingsLoaded && matchMode ? computeEffectiveIncludeAi(matchMode, includeAiMatch) : false;
   const { activeSelfGender, activeWantsGender } = resolveActiveGenders(
@@ -269,8 +273,15 @@ export function MatchLobby() {
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
         if (res.status === 403) {
+          if (j.reason === "vpn_detected") {
+            return { data: null, error: { message: j.error ?? "VPN and proxy connections are not allowed." } };
+          }
           setAccessBlocked(true);
           return { data: null, error: { message: j.error ?? "Your access has been restricted." } };
+        }
+        if (res.status === 429 && j.reason === "daily_gender_limit") {
+          // Silently fall back — the MatchLobby UI already shows this via the badge
+          return { data: null, error: null };
         }
         return { data: null, error: { message: j.error ?? `Match failed (${res.status})` } };
       }
@@ -418,10 +429,16 @@ export function MatchLobby() {
     releaseMatchClaim();
     if (hideGenderFilters) {
       matchGendersRef.current = anonymousMatchGenders();
+    } else {
+      // Consume a gender skip if matching with a gendered filter
+      const effectiveWants = wantsGender;
+      if (effectiveWants && effectiveWants !== "any" && !dailyUsage.isPro) {
+        dailyUsage.consumeGenderSkip();
+      }
     }
     setMatchAttempt((n) => n + 1);
     setMatchRequested(true);
-  }, [hideGenderFilters, releaseMatchClaim]);
+  }, [hideGenderFilters, releaseMatchClaim, wantsGender, dailyUsage]);
 
   useEffect(() => {
     if (!ready || !shouldMatch || !effectiveIncludeAi) return;
@@ -673,21 +690,72 @@ export function MatchLobby() {
                   { value: "male" as const, label: "Men" },
                   { value: "female" as const, label: "Women" },
                   { value: "any" as const, label: "Regardless" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setWantsGender(option.value)}
-                    className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
-                      wantsGender === option.value
-                        ? "border-emerald-500/45 bg-emerald-500/10 text-emerald-900 shadow-sm dark:text-emerald-200"
-                        : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+                ].map((option) => {
+                  const isGenderFiltered = option.value !== "any";
+                  const limitHit =
+                    isGenderFiltered &&
+                    !dailyUsage.isPro &&
+                    dailyUsage.genderSkipsRemaining === 0;
+                  const remaining =
+                    isGenderFiltered && !dailyUsage.isPro
+                      ? dailyUsage.genderSkipsRemaining
+                      : null;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        if (limitHit) {
+                          setShowUpgradeModal(true);
+                          return;
+                        }
+                        setWantsGender(option.value);
+                      }}
+                      className={`relative rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                        wantsGender === option.value
+                          ? "border-emerald-500/45 bg-emerald-500/10 text-emerald-900 shadow-sm dark:text-emerald-200"
+                          : limitHit
+                            ? "cursor-not-allowed border-rose-400/40 bg-rose-50/60 text-rose-700 dark:border-rose-500/30 dark:bg-rose-950/20 dark:text-rose-400"
+                            : "border-navy-200/70 bg-white/80 text-navy-900 hover:border-navy-300 dark:border-white/10 dark:bg-navy-900/40 dark:text-navy-200"
+                      }`}
+                    >
+                      {option.label}
+                      {/* Badge: remaining gender skips on this button */}
+                      {remaining !== null && remaining !== undefined && (
+                        <span
+                          className={`absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[10px] font-bold leading-none ${
+                            remaining === 0
+                              ? "bg-rose-500 text-white"
+                              : "bg-amber-400 text-navy-950"
+                          }`}
+                          aria-label={`${remaining} uses remaining`}
+                        >
+                          {remaining}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
+              {!dailyUsage.isPro && dailyUsage.genderSkipsRemaining !== null && (
+                <p className="mt-2 text-center text-[11px] text-navy-500 dark:text-navy-400">
+                  {dailyUsage.genderSkipsRemaining === 0 ? (
+                    <>
+                      Gender matches used up for today.{" "}
+                      <button
+                        type="button"
+                        onClick={() => setShowUpgradeModal(true)}
+                        className="font-semibold text-amber-600 underline-offset-2 hover:underline dark:text-amber-400"
+                      >
+                        Upgrade to PRO
+                      </button>{" "}
+                      for unlimited.
+                    </>
+                  ) : (
+                    <>{dailyUsage.genderSkipsRemaining} gender match{dailyUsage.genderSkipsRemaining === 1 ? "" : "es"} left today</>
+                  )}
+                </p>
+              )}
             </section>
 
             {matchingPaused ? (
@@ -705,6 +773,8 @@ export function MatchLobby() {
           </div>
         )}
       </motion.div>
+
+      <UpgradeModal open={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
     </div>
   );
 }

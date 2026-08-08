@@ -43,6 +43,9 @@ import {
 import { networkErrorMessage } from "@/lib/network-error";
 import { uploadChatImage, encodeImageMessage } from "@/lib/chat/image-upload";
 import { useAccount } from "@/lib/account/context";
+import { useDailyUsage } from "@/lib/usage/daily-usage-context";
+import { UpgradeModal } from "@/components/account/UpgradeModal";
+import { GenderExhaustedModal } from "@/components/account/GenderExhaustedModal";
 
 type Props = { roomId: string };
 
@@ -106,6 +109,15 @@ export function ChatRoom({ roomId }: Props) {
   // Dynamic peer username - updated when peer accepts our friend request
   const [peerUsername, setPeerUsername] = useState<string | null>(null);
   const { state } = useAccount();
+
+  // ── Upgrade / limit modals ──────────────────────────────────────────────────
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showGenderExhaustedModal, setShowGenderExhaustedModal] = useState(false);
+  // Track whether the gender-exhausted popup has already shown this session
+  const genderExhaustedShownRef = useRef(false);
+
+  // Daily usage context
+  const dailyUsage = useDailyUsage();
 
   const cancelOpener = useCallback(() => {
     if (openerTimerRef.current !== null) {
@@ -952,10 +964,21 @@ export function ChatRoom({ roomId }: Props) {
             return;
           }
           if (res.status === 429) {
+            if (j.reason === "daily_image_limit") {
+              // Remove the optimistic message silently and show the upgrade modal
+              setMessages((prev) => prev.filter((m) => m.id !== tempId));
+              setShowUpgradeModal(true);
+              return;
+            }
             setError(j.error ?? "Slow down. Messages sent too quickly.");
             if (j.reason === "rate_limit" || j.reason === "burst_limit") {
               router.replace("/");
             }
+            return;
+          }
+          if (res.status === 403 && j.reason === "vpn_detected") {
+            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+            setError("VPN and proxy connections are not allowed.");
             return;
           }
           setError(j.error ?? "Could not send message");
@@ -1126,10 +1149,25 @@ export function ChatRoom({ roomId }: Props) {
   // ── Image send handler ──────────────────────────────────────
   const sendImage = useCallback(async (file: File) => {
     if (!selfId) return;
+    // Client-side guard: if we know the limit is hit, show upgrade modal
+    if (!dailyUsage.isPro && dailyUsage.imagesRemaining === 0) {
+      setShowUpgradeModal(true);
+      return;
+    }
     const result = await uploadChatImage(file, client, selfId);
-    if (!result.ok) { setError(result.error); return; }
+    if (!result.ok) {
+      // Server rejected as daily_image_limit — show upgrade modal
+      if (result.error.includes("1 image per day") || result.error.includes("daily_image_limit")) {
+        setShowUpgradeModal(true);
+        return;
+      }
+      setError(result.error);
+      return;
+    }
+    // Optimistically decrement client-side counter
+    dailyUsage.consumeImage();
     await sendMessage(encodeImageMessage(result.url));
-  }, [selfId, client, sendMessage]);
+  }, [selfId, client, sendMessage, dailyUsage]);
 
   const displayAsHuman = isAiRoom && hideBotUi;
   const showPeerGender = !hideGenderFilters;
@@ -1257,39 +1295,80 @@ export function ChatRoom({ roomId }: Props) {
             <Flag className="h-3.5 w-3.5" aria-hidden />
             <span className="hidden sm:inline">Report</span>
           </motion.button>
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            disabled={exiting}
-            onClick={() => {
-              if (!skipConfirm) {
-                setSkipConfirm(true);
-                if (skipConfirmTimer.current !== null) clearTimeout(skipConfirmTimer.current);
-                skipConfirmTimer.current = setTimeout(() => {
+          {/* Skip button with gender-skip badge */}
+          <div className="relative">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              disabled={exiting}
+              onClick={() => {
+                if (!skipConfirm) {
+                  setSkipConfirm(true);
+                  if (skipConfirmTimer.current !== null) clearTimeout(skipConfirmTimer.current);
+                  skipConfirmTimer.current = setTimeout(() => {
+                    setSkipConfirm(false);
+                    skipConfirmTimer.current = null;
+                  }, 3000);
+                } else {
+                  if (skipConfirmTimer.current !== null) {
+                    clearTimeout(skipConfirmTimer.current);
+                    skipConfirmTimer.current = null;
+                  }
                   setSkipConfirm(false);
-                  skipConfirmTimer.current = null;
-                }, 3000);
-              } else {
-                if (skipConfirmTimer.current !== null) {
-                  clearTimeout(skipConfirmTimer.current);
-                  skipConfirmTimer.current = null;
+                  // Check if gender skips are exhausted (only show popup on FIRST skip with 0 remaining)
+                  const wantsGenderFiltered =
+                    !hideGenderFilters &&
+                    localStorage.getItem("banterbird:wantsGender") !== "any" &&
+                    localStorage.getItem("banterbird:wantsGender") !== null;
+                  if (
+                    wantsGenderFiltered &&
+                    !dailyUsage.isPro &&
+                    dailyUsage.genderSkipsRemaining === 0 &&
+                    !genderExhaustedShownRef.current
+                  ) {
+                    genderExhaustedShownRef.current = true;
+                    setShowGenderExhaustedModal(true);
+                  }
+                  void leaveManually(false, true);
                 }
-                setSkipConfirm(false);
-                void leaveManually(false, true);
-              }
-            }}
-            className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 ${
-              skipConfirm
-                ? "bg-amber-500 text-white dark:bg-amber-400 dark:text-navy-950"
-                : "bg-navy-900 text-white dark:bg-navy-100 dark:text-navy-950"
-            }`}
-          >
-            <SkipForward className="h-3.5 w-3.5" aria-hidden />
-            {skipConfirm ? "Sure?" : "Skip"}
-          </motion.button>
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 ${
+                skipConfirm
+                  ? "bg-amber-500 text-white dark:bg-amber-400 dark:text-navy-950"
+                  : "bg-navy-900 text-white dark:bg-navy-100 dark:text-navy-950"
+              }`}
+            >
+              <SkipForward className="h-3.5 w-3.5" aria-hidden />
+              {skipConfirm ? "Sure?" : "Skip"}
+            </motion.button>
+            {/* Gender-skip remaining badge */}
+            {!hideGenderFilters &&
+              !dailyUsage.isPro &&
+              dailyUsage.genderSkipsRemaining !== null && (
+                <span
+                  className={`pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[10px] font-bold leading-none ${
+                    dailyUsage.genderSkipsRemaining === 0
+                      ? "bg-rose-500 text-white"
+                      : "bg-amber-400 text-navy-950"
+                  }`}
+                  aria-label={`${dailyUsage.genderSkipsRemaining} gender match${dailyUsage.genderSkipsRemaining === 1 ? "" : "es"} remaining today`}
+                >
+                  {dailyUsage.genderSkipsRemaining}
+                </span>
+              )}
+          </div>
         </div>
       </div>
+
+      {/* Upgrade modal */}
+      <UpgradeModal open={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
+      {/* Gender exhausted modal */}
+      <GenderExhaustedModal
+        open={showGenderExhaustedModal}
+        onClose={() => setShowGenderExhaustedModal(false)}
+        onUpgrade={() => { setShowGenderExhaustedModal(false); setShowUpgradeModal(true); }}
+      />
 
       {showReport ? (
         <ReportUserDialog
@@ -1338,6 +1417,8 @@ export function ChatRoom({ roomId }: Props) {
           onSendImage={sendImage}
           onTypingChange={handleComposerTyping}
           onFocus={() => scrollToBottom(true)}
+          onImageLimitHit={() => setShowUpgradeModal(true)}
+          imagesRemaining={dailyUsage.isPro ? null : dailyUsage.imagesRemaining}
         />
       </div>
     </div>

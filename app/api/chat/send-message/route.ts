@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { loadAppSettings } from "@/lib/ops/app-settings";
 import { logError } from "@/lib/ops/error-log";
 import { clientIp } from "@/lib/moderation/client-ip";
+import { detectVpn } from "@/lib/moderation/vpn-detect";
+import { checkImageAllowed, recordImageSent } from "@/lib/moderation/daily-usage";
+import { isImageMessage } from "@/lib/chat/image-upload";
 
 export async function POST(req: Request) {
   try {
@@ -33,6 +37,15 @@ export async function POST(req: Request) {
     const ip = clientIp(req as import("next/server").NextRequest);
     const deviceId = body.deviceId?.trim() || null;
 
+    // ── VPN / proxy check ────────────────────────────────────────────────────
+    const vpnResult = await detectVpn(ip);
+    if (vpnResult.isVpn) {
+      return NextResponse.json(
+        { error: "VPN and proxy connections are not allowed.", reason: "vpn_detected" },
+        { status: 403 },
+      );
+    }
+
     const { data: blocked } = await supabase.rpc("is_moderation_blocked", {
       p_user_id: user.id,
       p_ip: ip,
@@ -57,10 +70,7 @@ export async function POST(req: Request) {
       if (result && !result.allowed) {
         return NextResponse.json(
           {
-            error:
-              result.reason === "burst_limit" || result.reason === "rate_limit"
-                ? "Slow down. You're sending messages too quickly."
-                : "Slow down. You're sending messages too quickly.",
+            error: "Slow down. You're sending messages too quickly.",
             reason: result.reason,
           },
           { status: 429 },
@@ -68,16 +78,44 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── Daily image limit (1/day per identity for free users) ────────────────
+    const isImage = isImageMessage(content);
+    if (isImage) {
+      // Check PRO status
+      const svc = createServiceRoleClient();
+      const { data: profile } = await svc
+        .from("profiles")
+        .select("is_pro,pro_until")
+        .eq("id", user.id)
+        .maybeSingle();
+      const isPro = Boolean(
+        profile?.is_pro &&
+          profile.pro_until &&
+          new Date(profile.pro_until).getTime() > Date.now(),
+      );
+
+      const check = await checkImageAllowed(ip, deviceId, isPro);
+      if (!check.allowed) {
+        return NextResponse.json(
+          { error: "You can only send 1 image per day. Upgrade to PRO for unlimited images.", reason: "daily_image_limit" },
+          { status: 429 },
+        );
+      }
+
+      // Increment counter (fire-and-forget so it doesn't slow the response)
+      void recordImageSent(ip, deviceId, user.id);
+    }
+
     // Check for blocked words
     if (settings.blockedWords.enabled && settings.blockedWords.words.length > 0) {
       const contentLower = content.toLowerCase();
       const hasBlockedWord = settings.blockedWords.words.some((word) =>
-        contentLower.includes(word.toLowerCase())
+        contentLower.includes(word.toLowerCase()),
       );
       if (hasBlockedWord) {
         return NextResponse.json(
           { error: "Your message contains blocked content." },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }

@@ -29,24 +29,24 @@ type Props = {
 
 const FEATURES = [
   {
-    icon: <Zap className="h-5 w-5" />,
-    title: "No ads, ever",
-    desc: "Browse and chat without any banner or video ads.",
-  },
-  {
     icon: <ImageIcon className="h-5 w-5" />,
     title: "Unlimited image sending",
-    desc: "Send as many images as you want in every chat.",
+    desc: "Send as many images as you want — free users are limited to 1 image per day.",
   },
   {
     icon: <Sliders className="h-5 w-5" />,
-    title: "Infinite gender matching",
-    desc: "No limits on how many times you can change your matching preferences.",
+    title: "Unlimited gender-based matching",
+    desc: "Match with men or women as many times as you like. Free users get 10 per day.",
+  },
+  {
+    icon: <Zap className="h-5 w-5" />,
+    title: "No ads, ever",
+    desc: "Browse and chat completely ad-free — no banners, no video ads.",
   },
   {
     icon: <Crown className="h-5 w-5" />,
     title: "Exclusive PRO badge",
-    desc: "Stand out with a golden PRO badge on your profile and in the navbar.",
+    desc: "Stand out with a golden PRO badge on your profile and next to your name.",
   },
 ];
 
@@ -217,7 +217,7 @@ export function UpgradeModal({ open, onClose }: Props) {
                 </div>
               </div>
               <p className="mt-3 text-sm text-navy-500 dark:text-navy-400">
-                BanterBird is free because of ads. Upgrade to PRO to remove them and unlock exclusive features — for just ${priceUsd}/month.
+                BanterBird is free because of ads. Upgrade to PRO to remove them and unlock unlimited image sending, unlimited gender matching, and an exclusive badge — for just ${priceUsd}/month.
               </p>
             </div>
 

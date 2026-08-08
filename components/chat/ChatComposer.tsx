@@ -14,9 +14,13 @@ type Props = {
   onTypingChange: (typing: boolean) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  /** Called instead of opening the file picker when the daily image limit is hit */
+  onImageLimitHit?: () => void;
+  /** Remaining images today — null = unlimited (pro), 0 = limit hit */
+  imagesRemaining?: number | null;
 };
 
-export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, onFocus, onBlur }: Props) {
+export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, onFocus, onBlur, onImageLimitHit, imagesRemaining }: Props) {
   const { state } = useAccount();
   const isAnonymous = state.status === "anonymous" || state.status === "loading";
   const [showImageNudge, setShowImageNudge] = useState(false);
@@ -158,6 +162,7 @@ export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, on
               disabled={disabled || sending}
               onClick={() => {
                 if (isAnonymous) { setShowImageNudge(true); return; }
+                if (imagesRemaining === 0) { onImageLimitHit?.(); return; }
                 fileRef.current?.click();
               }}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-navy-200/80 bg-white/70 text-navy-600 transition hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-navy-900/50 dark:text-navy-400 dark:hover:bg-navy-800"
@@ -165,6 +170,19 @@ export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, on
             >
               <ImagePlus className="h-5 w-5" />
             </button>
+            {/* Daily image limit badge */}
+            {!isAnonymous && imagesRemaining !== null && imagesRemaining !== undefined && (
+              <span
+                className={`pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[10px] font-bold leading-none ${
+                  imagesRemaining === 0
+                    ? "bg-rose-500 text-white"
+                    : "bg-amber-400 text-navy-950"
+                }`}
+                aria-label={`${imagesRemaining} image${imagesRemaining === 1 ? "" : "s"} remaining today`}
+              >
+                {imagesRemaining}
+              </span>
+            )}
             <AccountNudge
               visible={showImageNudge}
               onDismiss={() => setShowImageNudge(false)}
