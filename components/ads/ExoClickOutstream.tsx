@@ -36,7 +36,7 @@ export function ExoClickOutstream({ zoneId = ZONE_ID, className }: Props) {
         return;
       }
       // No fill on the outstream zone — retry later, don't fall back to banner zones
-      retryTimerRef.current = setTimeout(() => void fetchNeverBlock(zoneId, 0), NO_FILL_RETRY_MS);
+      retryTimerRef.current = setTimeout(() => void fetchNeverBlock(zoneId), NO_FILL_RETRY_MS);
     } catch {
       retryTimerRef.current = setTimeout(() => void fetchNeverBlock(zoneId), NO_FILL_RETRY_MS);
     }
