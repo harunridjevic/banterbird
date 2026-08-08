@@ -1,11 +1,18 @@
 -- Daily usage limits: image sends (1/day free) and gender-based match skips (10/day free)
--- Keyed by a composite of ip + device_id so both must match to be the same "identity".
+--
+-- Identity strategy: keyed by IP address alone.
+-- device_id is recorded for auditing but NOT part of the key, so:
+--   - Incognito tabs (fresh localStorage = new device_id) share the same counter.
+--   - Clearing localStorage or using a different browser on the same network
+--     does NOT reset the counter.
 -- Resets at UTC midnight each day.
 
 create table if not exists public.daily_usage (
   id bigserial primary key,
-  -- identity key: SHA-256 of (ip || ':' || device_id) or just ip when device_id absent
+  -- identity key: hex of hashtext(ip) — IP is the sole rate-limit axis
   identity_key text not null,
+  -- raw IP stored separately for ops inspection / debugging
+  ip_address text,
   -- the UTC date this row covers  (e.g. '2026-08-08')
   usage_date date not null default (current_date at time zone 'UTC'),
   -- number of images sent today
@@ -32,12 +39,12 @@ alter table public.daily_usage enable row level security;
 -- No client access — all reads/writes go through security-definer functions
 -- (service role bypasses RLS automatically)
 
--- ── Helper: build the identity key ────────────────────────────────────────────
--- We concatenate ip and device_id so a VPN hop alone isn't enough to bypass.
--- Uses built-in hashtext() — no pgcrypto extension required.
+-- ── Helper: build the identity key from IP only ────────────────────────────
+-- device_id is intentionally NOT part of the key so incognito / cleared
+-- localStorage on the same IP doesn't reset the counter.
 create or replace function public.build_identity_key(
   p_ip text,
-  p_device_id text
+  p_device_id text default ''  -- kept for signature compat, ignored in key
 )
 returns text
 language sql
@@ -49,18 +56,15 @@ as $$
     abs(
       hashtext(
         coalesce(nullif(trim(p_ip), ''), 'unknown')
-          || ':'
-          || coalesce(nullif(trim(p_device_id), ''), 'unknown')
       )
     )::bigint
   );
 $$;
 
 -- ── Check daily image usage ─────────────────────────────────────────────────
--- Returns the current image count for today.  Never inserts.
 create or replace function public.get_daily_image_count(
   p_ip text,
-  p_device_id text
+  p_device_id text default ''
 )
 returns int
 language plpgsql
@@ -72,7 +76,7 @@ declare
   ikey text;
   cnt  int;
 begin
-  ikey := public.build_identity_key(p_ip, p_device_id);
+  ikey := public.build_identity_key(p_ip);
   select coalesce(images_sent, 0) into cnt
   from public.daily_usage
   where identity_key = ikey
@@ -84,7 +88,7 @@ $$;
 -- ── Increment daily image count (returns new count) ─────────────────────────
 create or replace function public.increment_daily_image_count(
   p_ip text,
-  p_device_id text,
+  p_device_id text default '',
   p_user_id uuid default null
 )
 returns int
@@ -98,11 +102,11 @@ declare
   new_cnt  int;
   today    date;
 begin
-  ikey  := public.build_identity_key(p_ip, p_device_id);
+  ikey  := public.build_identity_key(p_ip);
   today := (current_timestamp at time zone 'UTC')::date;
 
-  insert into public.daily_usage (identity_key, usage_date, images_sent, user_id)
-  values (ikey, today, 1, p_user_id)
+  insert into public.daily_usage (identity_key, ip_address, usage_date, images_sent, user_id)
+  values (ikey, nullif(trim(p_ip), ''), today, 1, p_user_id)
   on conflict (identity_key, usage_date) do update
     set images_sent = public.daily_usage.images_sent + 1,
         user_id     = coalesce(excluded.user_id, public.daily_usage.user_id),
@@ -116,7 +120,7 @@ $$;
 -- ── Check daily gender-match skip count ────────────────────────────────────
 create or replace function public.get_daily_gender_skips(
   p_ip text,
-  p_device_id text
+  p_device_id text default ''
 )
 returns int
 language plpgsql
@@ -128,7 +132,7 @@ declare
   ikey text;
   cnt  int;
 begin
-  ikey := public.build_identity_key(p_ip, p_device_id);
+  ikey := public.build_identity_key(p_ip);
   select coalesce(gender_skips, 0) into cnt
   from public.daily_usage
   where identity_key = ikey
@@ -140,7 +144,7 @@ $$;
 -- ── Increment daily gender-skip count (returns new count) ────────────────────
 create or replace function public.increment_daily_gender_skips(
   p_ip text,
-  p_device_id text,
+  p_device_id text default '',
   p_user_id uuid default null
 )
 returns int
@@ -154,11 +158,11 @@ declare
   new_cnt  int;
   today    date;
 begin
-  ikey  := public.build_identity_key(p_ip, p_device_id);
+  ikey  := public.build_identity_key(p_ip);
   today := (current_timestamp at time zone 'UTC')::date;
 
-  insert into public.daily_usage (identity_key, usage_date, gender_skips, user_id)
-  values (ikey, today, 1, p_user_id)
+  insert into public.daily_usage (identity_key, ip_address, usage_date, gender_skips, user_id)
+  values (ikey, nullif(trim(p_ip), ''), today, 1, p_user_id)
   on conflict (identity_key, usage_date) do update
     set gender_skips = public.daily_usage.gender_skips + 1,
         user_id      = coalesce(excluded.user_id, public.daily_usage.user_id),
@@ -172,7 +176,7 @@ $$;
 -- ── Get both counts at once for the status endpoint ─────────────────────────
 create or replace function public.get_daily_usage_counts(
   p_ip text,
-  p_device_id text
+  p_device_id text default ''
 )
 returns jsonb
 language plpgsql
@@ -182,24 +186,22 @@ set search_path = public
 as $$
 declare
   ikey text;
-  row  public.daily_usage%rowtype;
+  rec  public.daily_usage%rowtype;
 begin
-  ikey := public.build_identity_key(p_ip, p_device_id);
-  select * into row
+  ikey := public.build_identity_key(p_ip);
+  select * into rec
   from public.daily_usage
   where identity_key = ikey
     and usage_date = (current_timestamp at time zone 'UTC')::date;
 
   return jsonb_build_object(
-    'imagesSent',   coalesce(row.images_sent, 0),
-    'genderSkips',  coalesce(row.gender_skips, 0)
+    'imagesSent',   coalesce(rec.images_sent, 0),
+    'genderSkips',  coalesce(rec.gender_skips, 0)
   );
 end;
 $$;
 
 -- ── VPN/proxy detection entries ─────────────────────────────────────────────
--- Ops can manually add IPs or CIDR ranges here to block VPN exits.
--- Automated VPN checks (ipqualityscore / ipapi) are handled server-side in code.
 create table if not exists public.vpn_ip_blocks (
   id bigserial primary key,
   ip_or_cidr text not null unique,
@@ -211,8 +213,7 @@ create index if not exists vpn_ip_blocks_ip_idx on public.vpn_ip_blocks (ip_or_c
 
 alter table public.vpn_ip_blocks enable row level security;
 
--- Grant execute on all usage functions to service_role
--- (service_role bypasses RLS but we still grant for explicitness)
+-- Grants
 grant execute on function public.build_identity_key(text, text) to service_role;
 grant execute on function public.get_daily_image_count(text, text) to service_role;
 grant execute on function public.increment_daily_image_count(text, text, uuid) to service_role;
@@ -220,9 +221,6 @@ grant execute on function public.get_daily_gender_skips(text, text) to service_r
 grant execute on function public.increment_daily_gender_skips(text, text, uuid) to service_role;
 grant execute on function public.get_daily_usage_counts(text, text) to service_role;
 
--- Also allow anon/authenticated to call the getter functions via the API layer
--- (they never go through Supabase RPC directly — only via our Next.js routes)
--- Keep revoked from public for safety.
 revoke all on function public.build_identity_key(text, text) from public, anon, authenticated;
 revoke all on function public.get_daily_image_count(text, text) from public, anon, authenticated;
 revoke all on function public.increment_daily_image_count(text, text, uuid) from public, anon, authenticated;

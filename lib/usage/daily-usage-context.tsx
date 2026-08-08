@@ -6,8 +6,12 @@
  * Provides client-side access to today's usage counts so badges and
  * upgrade gates in ChatRoom, ChatComposer, and MatchLobby stay in sync.
  *
- * Fetched once on mount and refreshed whenever `refresh()` is called
- * (e.g. after successfully sending an image or consuming a gender skip).
+ * Refresh strategy:
+ *   - On mount.
+ *   - Whenever Supabase auth state changes (login / logout / token refresh),
+ *     so badges appear immediately after sign-out or sign-in.
+ *   - After consumeImage / consumeGenderSkip: optimistic decrement first,
+ *     then server re-fetch to confirm the true count.
  */
 
 import {
@@ -15,10 +19,12 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { getDeviceId } from "@/lib/moderation/device-id";
+import { createClient } from "@/utils/supabase/client";
 
 export const FREE_IMAGE_LIMIT = 1;
 export const FREE_GENDER_SKIP_LIMIT = 10;
@@ -42,9 +48,15 @@ export type DailyUsageState = {
 type DailyUsageCtx = DailyUsageState & {
   /** Re-fetch counts from the server */
   refresh: () => Promise<void>;
-  /** Optimistically decrement imagesSent remaining by 1 */
+  /**
+   * Call after successfully sending an image.
+   * Optimistically decrements the badge, then re-fetches from the server.
+   */
   consumeImage: () => void;
-  /** Optimistically decrement genderSkips remaining by 1 */
+  /**
+   * Call after starting a gender-filtered match.
+   * Optimistically decrements the badge, then re-fetches from the server.
+   */
   consumeGenderSkip: () => void;
 };
 
@@ -63,6 +75,8 @@ const DailyUsageContext = createContext<DailyUsageCtx | null>(null);
 
 export function DailyUsageProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DailyUsageState>(DEFAULT);
+  // Debounce re-fetch after optimistic updates so we don't hammer the API
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -81,15 +95,41 @@ export function DailyUsageProvider({ children }: { children: ReactNode }) {
         genderSkipsRemaining: data.genderSkipsRemaining ?? null,
       });
     } catch {
-      // non-fatal — keep defaults
+      // non-fatal — keep whatever state we had
       setState((prev) => ({ ...prev, loaded: true }));
     }
   }, []);
 
+  // Schedule a server re-fetch after a short delay (lets the server-side
+  // increment finish before we read the new count back).
+  const scheduleRefresh = useCallback(
+    (delayMs = 800) => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => {
+        void refresh();
+      }, delayMs);
+    },
+    [refresh],
+  );
+
+  // ── Initial fetch + auth-state listener ────────────────────────────────────
   useEffect(() => {
     void refresh();
+
+    const supabase = createClient();
+    // Re-fetch whenever the user logs in, logs out, or their token refreshes —
+    // this is what makes badges show up immediately after logout.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      void refresh();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    };
   }, [refresh]);
 
+  // ── Optimistic updates with server confirmation ─────────────────────────────
   const consumeImage = useCallback(() => {
     setState((prev) => {
       if (prev.isPro) return prev;
@@ -101,7 +141,9 @@ export function DailyUsageProvider({ children }: { children: ReactNode }) {
         imagesRemaining: Math.max(0, lim - newSent),
       };
     });
-  }, []);
+    // Confirm with server after the increment has had time to land
+    scheduleRefresh(1200);
+  }, [scheduleRefresh]);
 
   const consumeGenderSkip = useCallback(() => {
     setState((prev) => {
@@ -114,7 +156,8 @@ export function DailyUsageProvider({ children }: { children: ReactNode }) {
         genderSkipsRemaining: Math.max(0, lim - newUsed),
       };
     });
-  }, []);
+    scheduleRefresh(1200);
+  }, [scheduleRefresh]);
 
   return (
     <DailyUsageContext.Provider value={{ ...state, refresh, consumeImage, consumeGenderSkip }}>
