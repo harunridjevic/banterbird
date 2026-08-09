@@ -2,15 +2,13 @@
 
 import { useEffect, useRef } from "react";
 
-/**
- * Rotate / refresh IPP this often (midpoint of 3–4 minutes).
- */
+/** Rotate / refresh IPP this often (midpoint of 3–4 minutes). */
 const RELOAD_INTERVAL_MS = 3.5 * 60 * 1000;
 
 /**
  * In-Page Push zone IDs to rotate through.
- * Add more via NEXT_PUBLIC_MONETAG_IPP_ZONES=id1,id2,id3 after creating
- * extra IPP zones in Monetag (each zone is frequency-capped independently).
+ * Set NEXT_PUBLIC_MONETAG_IPP_ZONES=id1,id2,id3 after creating extra IPP zones
+ * in Monetag (each zone is frequency-capped independently).
  */
 const FALLBACK_ZONES = ["11540658"];
 
@@ -46,7 +44,7 @@ function clearMonetagState() {
   }
 
   try {
-    const w = window as Window & Record<string, unknown>;
+    const w = window as unknown as Record<string, unknown>;
     for (const key of Object.keys(w)) {
       if (!STORAGE_KEY_RE.test(key) && key !== "_shownFakepushFormats") continue;
       try {
@@ -67,25 +65,23 @@ function clearMonetagState() {
 }
 
 function removeZoneScripts() {
-  document
-    .querySelectorAll<HTMLScriptElement>('script[src*="nap5k.com/tag"], script[data-zone]')
-    .forEach((el) => {
-      const zone = el.dataset["zone"];
-      const src = el.getAttribute("src") ?? "";
-      if (src.includes("nap5k.com/tag") || (zone && /^\d+$/.test(zone))) {
-        el.remove();
-      }
-    });
+  document.querySelectorAll<HTMLScriptElement>("script[data-bb-monetag='ipp']").forEach((el) => {
+    el.remove();
+  });
 }
 
 function injectZone(zone: string) {
-  const w = window as Window & { fakepushMax?: number; fakepushMaxMobile?: number };
+  const w = window as unknown as {
+    fakepushMax?: number;
+    fakepushMaxMobile?: number;
+  };
   w.fakepushMax = 3;
   w.fakepushMaxMobile = 3;
 
   removeZoneScripts();
 
   const s = document.createElement("script");
+  s.dataset["bbMonetag"] = "ipp";
   s.dataset["zone"] = zone;
   s.src = SRC;
   s.async = true;
@@ -93,17 +89,18 @@ function injectZone(zone: string) {
 }
 
 /**
- * Monetag In-Page Push — injected into the page (not an overlay iframe).
- * A full-viewport iframe was blocking all clicks on the site.
- *
- * Every RELOAD_INTERVAL_MS we clear local frequency state and inject the next
- * zone in the rotation (add extra IPP zone IDs for reliable re-shows).
+ * Monetag In-Page Push — direct page inject (no overlay iframe).
+ * Every RELOAD_INTERVAL_MS clears local frequency state and injects the next
+ * zone in the rotation.
  */
 export function MonteagBannerSlot() {
   const epochRef = useRef(0);
-  const zones = readZones();
+  const zonesRef = useRef(readZones());
 
   useEffect(() => {
+    const zones = zonesRef.current;
+    if (zones.length === 0) return;
+
     injectZone(zones[0]!);
 
     const timer = setInterval(() => {
@@ -115,9 +112,8 @@ export function MonteagBannerSlot() {
 
     return () => {
       clearInterval(timer);
+      removeZoneScripts();
     };
-    // zones list is from env — stable for the page lifetime
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return null;
