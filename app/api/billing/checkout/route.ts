@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { createPaddleTransaction, getClientToken } from "@/lib/billing/paddle";
@@ -138,6 +138,32 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error("[Checkout] Caught error:", e instanceof Error ? e.message : e);
+
+    // Log to ops error_logs so failed checkouts are visible in the dashboard.
+    // Non-fatal — never let logging block the response.
+    try {
+      const svcLog = createServiceRoleClient();
+      // Attempt to get the user for context (may not be available if auth itself failed)
+      let logUserId: string | null = null;
+      let logEmail: string | null = null;
+      try {
+        const cookieStore2 = await cookies();
+        const supabase2 = createClient(cookieStore2);
+        const { data: { user: u } } = await supabase2.auth.getUser();
+        logUserId = u?.id ?? null;
+        logEmail = u?.email ?? null;
+      } catch { /* ignore */ }
+
+      await svcLog.from("error_logs").insert({
+        source: "billing/checkout",
+        level: "error",
+        message: `Checkout failed: ${e instanceof Error ? e.message : String(e)}`,
+        stack: e instanceof Error ? (e.stack ?? null) : null,
+        metadata: { email: logEmail, userId: logUserId },
+        user_id: logUserId,
+      });
+    } catch { /* never block response */ }
+
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Checkout failed" },
       { status: 500 },

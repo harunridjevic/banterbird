@@ -564,6 +564,18 @@ export default function OpsBotSettingsPage() {
                 </span>
               </span>
             </label>
+            <div className="mt-4">
+              <SliderField
+                label="Bot / anonymous gender — female %"
+                hint={`${botSettings.botFemaleWeight}% female · ${100 - botSettings.botFemaleWeight}% male. Applied to hidden-gender queues and AI bot rooms.`}
+                value={botSettings.botFemaleWeight}
+                min={0}
+                max={100}
+                step={1}
+                format={(n) => `${n}%`}
+                onChange={(botFemaleWeight) => patch({ botFemaleWeight })}
+              />
+            </div>
             <p className="mt-2 text-xs text-navy-400">
               Hidden bots keeps practice partners available after a short wait but makes chat look identical to a human match.
             </p>

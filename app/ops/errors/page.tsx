@@ -12,6 +12,8 @@ type ErrorRow = {
   level: string;
   message: string;
   stack: string | null;
+  metadata: Record<string, unknown> | null;
+  user_id: string | null;
   created_at: string;
 };
 
@@ -159,6 +161,11 @@ export default function OpsErrorsPage() {
                         </span>
                         <span className="font-mono text-xs text-violet-300">{e.source}</span>
                         <span className="text-xs text-navy-500">{new Date(e.created_at).toLocaleString()}</span>
+                        {(e.metadata?.email || e.user_id) && (
+                          <span className="rounded bg-navy-800/60 px-1.5 py-0.5 font-mono text-[11px] text-navy-300">
+                            {String(e.metadata?.email ?? e.user_id ?? "")}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-2 text-sm text-white">{e.message}</p>
                       {e.stack ? (

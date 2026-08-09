@@ -40,7 +40,7 @@ import {
   recordInactivitySkip,
   resetInactivityStrikes,
 } from "@/lib/moderation/inactivity-strikes";
-import { networkErrorMessage } from "@/lib/network-error";
+import { networkErrorMessage, friendlyApiError } from "@/lib/network-error";
 import { uploadChatImage, encodeImageMessage } from "@/lib/chat/image-upload";
 import { useAccount } from "@/lib/account/context";
 import { useDailyUsage } from "@/lib/usage/daily-usage-context";
@@ -262,6 +262,13 @@ export function ChatRoom({ roomId }: Props) {
     }
 
     if (roomErr || !room) {
+      // If we're already navigating away (skip/rematch), silently go home
+      // rather than flashing an error — the room row may simply not have
+      // replicated yet and the user is already leaving.
+      if (exitInFlightRef.current || roomEndedRef.current) {
+        router.replace("/");
+        return;
+      }
       setPeerId(null);
       setPeerGender(null);
       setIsAiRoom(false);
@@ -282,6 +289,11 @@ export function ChatRoom({ roomId }: Props) {
     if (safeRoom.user_a !== session.user.id && safeRoom.user_b !== session.user.id) {
       setPeerId(null);
       setPeerGender(null);
+      // Navigate silently if we're already on our way out
+      if (exitInFlightRef.current || roomEndedRef.current) {
+        router.replace("/");
+        return;
+      }
       setError("You are not a participant in this chat.");
       setLoading(false);
       return;
@@ -336,7 +348,7 @@ export function ChatRoom({ roomId }: Props) {
       setPeerId(null);
       setPeerGender(null);
       setIsAiRoom(false);
-      setError(msgErr.message);
+      setError(friendlyApiError(msgErr.message, "Couldn't load messages. Try refreshing."));
       setLoading(false);
       return;
     }
@@ -973,12 +985,11 @@ export function ChatRoom({ roomId }: Props) {
           }
           if (res.status === 429) {
             if (j.reason === "daily_image_limit") {
-              // Remove the optimistic message silently and show the upgrade modal
               setMessages((prev) => prev.filter((m) => m.id !== tempId));
               setShowUpgradeModal(true);
               return;
             }
-            setError(j.error ?? "Slow down. Messages sent too quickly.");
+            setError("You're sending messages too fast. Wait a moment and try again.");
             if (j.reason === "rate_limit" || j.reason === "burst_limit") {
               router.replace("/");
             }
@@ -986,10 +997,10 @@ export function ChatRoom({ roomId }: Props) {
           }
           if (res.status === 403 && j.reason === "vpn_detected") {
             setMessages((prev) => prev.filter((m) => m.id !== tempId));
-            setError("VPN and proxy connections are not allowed.");
+            setError("VPN and proxy connections aren't allowed. Disable yours and try again.");
             return;
           }
-          setError(j.error ?? "Could not send message");
+          setError(friendlyApiError(j.error, "Couldn't send that message. Try again."));
         }
         // Optimistic message will be replaced by real message via realtime subscription
       } catch (err) {
@@ -1186,7 +1197,9 @@ export function ChatRoom({ roomId }: Props) {
     return <PageLoader label="Opening your chat…" />;
   }
 
-  if (error) {
+  // Suppress error screen during navigation (skip/rematch) — the error was
+  // likely a transient replication lag or a stale room row, not a real failure.
+  if (error && !exiting && !roomEndedRef.current) {
     return (
       <div className="mx-auto flex max-w-lg flex-col items-center gap-6 px-4 py-20 text-center">
         <MessageCircle className="h-12 w-12 text-navy-400" />
@@ -1421,7 +1434,13 @@ export function ChatRoom({ roomId }: Props) {
         />
       ) : null}
 
-      <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div ref={messagesScrollRef} className="scroll-hide min-h-0 flex-1 overflow-y-auto" onScroll={() => {
+        const el = messagesScrollRef.current;
+        if (!el) return;
+        el.classList.add("is-scrolling");
+        clearTimeout((el as HTMLDivElement & { _scrollTimer?: ReturnType<typeof setTimeout> })._scrollTimer);
+        (el as HTMLDivElement & { _scrollTimer?: ReturnType<typeof setTimeout> })._scrollTimer = setTimeout(() => el.classList.remove("is-scrolling"), 1000);
+      }}>
         {messages.length === 0 && !peerTyping ? (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
             {loading ? <PageLoader label="Opening your chat..." /> : <motion.div

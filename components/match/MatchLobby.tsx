@@ -190,7 +190,7 @@ export function MatchLobby() {
     const handleStartMatchingEvent = () => {
       if (isMatching) return;
       if (hideGenderFilters) {
-        matchGendersRef.current = anonymousMatchGenders();
+        matchGendersRef.current = anonymousMatchGenders(globalBotSettings);
       }
       setMatchRequested(true);
     };
@@ -315,16 +315,15 @@ export function MatchLobby() {
         const j = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
         if (res.status === 403) {
           if (j.reason === "vpn_detected") {
-            return { data: null, error: { message: j.error ?? "VPN and proxy connections are not allowed." } };
+            return { data: null, error: { message: "VPN and proxy connections aren't allowed. Disable yours and try again." } };
           }
           setAccessBlocked(true);
-          return { data: null, error: { message: j.error ?? "Your access has been restricted." } };
+          return { data: null, error: { message: "Your access has been restricted. Contact support if you think this is a mistake." } };
         }
         if (res.status === 429 && j.reason === "daily_gender_limit") {
-          // Silently fall back — the MatchLobby UI already shows this via the badge
           return { data: null, error: null };
         }
-        return { data: null, error: { message: j.error ?? `Match failed (${res.status})` } };
+        return { data: null, error: { message: j.error ?? "Couldn't find a match right now. Try again." } };
       }
       const j = (await res.json()) as { roomId?: string | null };
       return { data: j.roomId ?? null, error: null };
@@ -469,7 +468,7 @@ export function MatchLobby() {
     resetInactivityStrikes();
     releaseMatchClaim();
     if (hideGenderFilters) {
-      matchGendersRef.current = anonymousMatchGenders();
+      matchGendersRef.current = anonymousMatchGenders(globalBotSettings);
     }
     setMatchAttempt((n) => n + 1);
     setMatchRequested(true);

@@ -91,7 +91,11 @@ export async function GET(req: Request) {
       is_anonymous: false,
       is_pro: Boolean(profile?.is_pro) && !!profile?.pro_until && new Date(profile.pro_until).getTime() > Date.now(),
       pro_until: profile?.pro_until ?? null,
-      is_unlimited_pro: profile?.pro_until === "2099-12-31T00:00:00.000Z",
+      is_unlimited_pro: (() => {
+        if (!profile?.pro_until) return false;
+        const d = new Date(profile.pro_until);
+        return d.getFullYear() >= 2099;
+      })(),
     };
   });
 

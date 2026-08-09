@@ -31,6 +31,12 @@ export type BotSettings = {
    */
   hideGenderFilters: boolean;
 
+  /**
+   * Chance (0–100) that a bot or anonymous-queue match is female.
+   * 50 = equal split, 100 = always female, 0 = always male.
+   */
+  botFemaleWeight: number;
+
   /** Sexual vibe: random uses weights below; otherwise forces every bot. */
   sexualDisposition: "random" | SexualDisposition;
   strictWeight: number;
@@ -90,6 +96,8 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   strictWeight: 50,
   persuadableWeight: 30,
   hornyWeight: 20,
+
+  botFemaleWeight: 50,
 
   writingStyle: "random",
   messageStyle: "random",
@@ -192,6 +200,7 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     strictWeight: clamp(merged.strictWeight, 0, 100),
     persuadableWeight: clamp(merged.persuadableWeight, 0, 100),
     hornyWeight: clamp(merged.hornyWeight, 0, 100),
+    botFemaleWeight: clamp(merged.botFemaleWeight, 0, 100),
     replySpeed: clamp(merged.replySpeed, 0.55, 1.65),
     ghostPingMs: clamp(merged.ghostPingMs, 1000, 120_000),
     ghostSkipMs: clamp(merged.ghostSkipMs, 1000, 120_000),
@@ -249,11 +258,18 @@ export function resolveOpenerDelayMs(settings?: BotSettings | null): number {
 }
 
 /** Internal queue genders when gender filters are hidden from the user. */
-export function anonymousMatchGenders(): { self: "male" | "female"; wants: "any" } {
+export function anonymousMatchGenders(settings?: BotSettings | null): { self: "male" | "female"; wants: "any" } {
+  const femaleWeight = settings?.botFemaleWeight ?? DEFAULT_BOT_SETTINGS.botFemaleWeight;
   return {
-    self: Math.random() < 0.5 ? "male" : "female",
+    self: Math.random() * 100 < femaleWeight ? "female" : "male",
     wants: "any",
   };
+}
+
+/** Pick a bot gender for a new AI room based on the configured odds. */
+export function rollBotGender(settings?: BotSettings | null): "male" | "female" {
+  const femaleWeight = settings?.botFemaleWeight ?? DEFAULT_BOT_SETTINGS.botFemaleWeight;
+  return Math.random() * 100 < femaleWeight ? "female" : "male";
 }
 
 export function invalidateBotSettingsCache() {

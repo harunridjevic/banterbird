@@ -134,7 +134,7 @@ export default function OpsUsersPage() {
     setUsers((prev) =>
       prev.map((u) =>
         u.id === userId
-          ? { ...u, is_unlimited_pro: grant, is_pro: grant, pro_until: grant ? "2099-12-31T00:00:00.000Z" : null }
+          ? { ...u, is_unlimited_pro: grant, is_pro: grant, pro_until: grant ? "2099-12-31 00:00:00+00" : null }
           : u,
       ),
     );

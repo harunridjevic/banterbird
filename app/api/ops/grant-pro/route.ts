@@ -30,10 +30,10 @@ export async function POST(req: Request) {
   const svc = createServiceRoleClient();
 
   if (grant) {
-    // Set is_pro = true with a far-future pro_until so it never expires
+    // Set is_pro = true with a far-future pro_until (year 2099 sentinel = unlimited)
     const { error } = await svc
       .from("profiles")
-      .update({ is_pro: true, pro_until: "2099-12-31T00:00:00.000Z" })
+      .update({ is_pro: true, pro_until: "2099-12-31 00:00:00+00" })
       .eq("id", userId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else {

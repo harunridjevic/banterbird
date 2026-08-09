@@ -52,6 +52,25 @@ body {
   font-family: var(--font-sans);
 }
 
+/* ── Scroll container: hide scrollbar, reveal briefly while scrolling ──── */
+.scroll-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.scroll-hide::-webkit-scrollbar {
+  display: none; /* Chrome/Safari default */
+}
+.scroll-hide.is-scrolling::-webkit-scrollbar {
+  display: block;
+  width: 4px;
+}
+.scroll-hide.is-scrolling {
+  scrollbar-width: thin;
+}
+.scroll-hide::-webkit-scrollbar-thumb {
+  background: rgba(100, 120, 160, 0.35);
+  border-radius: 99px;
+}
 @utility glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(16px);

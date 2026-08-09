@@ -16,38 +16,39 @@ function scale(n: number, s: number) {
 /** Pause before we even ask the model - simulates reading what you wrote. */
 export function readDelayBeforeReplyMs(userMessageLen: number, timing: TimingScale = {}) {
   const s = timing.readScale ?? 1;
-  const base = 520 + Math.random() * 2200;
-  const perChar = userMessageLen * (10 + Math.random() * 24);
-  return clamp(scale(base + perChar, s), 280, 7200);
+  const base = 900 + Math.random() * 2800;
+  const perChar = userMessageLen * (14 + Math.random() * 28);
+  return clamp(scale(base + perChar, s), 500, 9000);
 }
 
 export function readDelayOpenerMs(timing: TimingScale = {}) {
   const s = timing.readScale ?? 1;
-  return clamp(scale(480 + Math.random() * 1700, s), 300, 3800);
+  return clamp(scale(800 + Math.random() * 2200, s), 600, 4800);
 }
 
 /**
  * Typing bubble duration from message length.
- * Tuned for casual phone typing - never flash-short even for "fast" personas.
+ * Tuned for realistic phone typing — never flash-short even for "fast" personas.
+ * Think: someone typing on a phone keyboard, not a desktop speed-runner.
  */
-const TYPING_BASE_MS = 1800;
-const TYPING_MS_PER_CHAR = 64;
+const TYPING_BASE_MS = 2800;
+const TYPING_MS_PER_CHAR = 90;
 
 export function typingDurationForReply(reply: string, timing: TimingScale = {}) {
   // Floor at 1× so replySpeed 0.55 personas still type at a believable pace.
   // Slower personas (scale > 1) still type slower.
   const s = Math.max(timing.typingScale ?? 1, 1);
   const len = reply.trim().length || 1;
-  // Light jitter (±10%) so identical lengths don't feel robotic.
-  const jitter = 0.9 + Math.random() * 0.2;
+  // Light jitter (±12%) so identical lengths don't feel robotic.
+  const jitter = 0.88 + Math.random() * 0.24;
   const scaled = (TYPING_BASE_MS + len * TYPING_MS_PER_CHAR) * s * jitter;
   // Hard floors: even the shortest messages must linger long enough to feel human.
   const min =
-    len <= 4  ? 2600 :
-    len <= 12 ? 3400 :
-    len <= 28 ? 4400 :
-    len <= 60 ? 5500 : 7000;
-  return clamp(Math.round(scaled), min, 28_000);
+    len <= 4  ? 3200 :
+    len <= 12 ? 4500 :
+    len <= 28 ? 6000 :
+    len <= 60 ? 7500 : 9500;
+  return clamp(Math.round(scaled), min, 38_000);
 }
 
 /**
