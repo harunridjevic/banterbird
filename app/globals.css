@@ -43,33 +43,66 @@
 }
 
 html {
-  /* scroll-behavior is kept via data-scroll-behavior on the element (Next.js requirement) */
+  height: 100%;
+  overflow: hidden !important;
 }
 
 body {
+  height: 100%;
+  overflow: hidden !important;
   background: var(--page-bg);
   color: var(--page-fg);
   font-family: var(--font-sans);
 }
 
-/* ── Scroll container: hide scrollbar, reveal briefly while scrolling ──── */
+/* ── Scroll container: hide scrollbar, reveal briefly while user scrolls ── */
 .scroll-hide {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
 }
 .scroll-hide::-webkit-scrollbar {
-  display: none; /* Chrome/Safari default */
-}
-.scroll-hide.is-scrolling::-webkit-scrollbar {
-  display: block;
-  width: 4px;
+  width: 0;
+  height: 0;
+  background: transparent;
 }
 .scroll-hide.is-scrolling {
   scrollbar-width: thin;
 }
+.scroll-hide.is-scrolling::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
 .scroll-hide::-webkit-scrollbar-thumb {
   background: rgba(100, 120, 160, 0.35);
   border-radius: 99px;
+}
+
+/* Mobile: overlay-only — never reserve gutter; only show while actively scrolling */
+@media (hover: none), (pointer: coarse) {
+  .scroll-hide {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  .scroll-hide::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+  }
+  .scroll-hide.is-scrolling::-webkit-scrollbar {
+    display: block !important;
+    width: 3px !important;
+    height: 3px !important;
+  }
+  .scroll-hide.is-scrolling {
+    scrollbar-width: thin !important;
+  }
+}
+
+/* Monetag IPP: never expand document layout (avoids brief site scrollbar) */
+body > [class^="pl-"],
+body > [class*=" pl-"] {
+  position: fixed !important;
+  max-width: 100vw !important;
 }
 @utility glass-panel {
   background: var(--glass-bg);

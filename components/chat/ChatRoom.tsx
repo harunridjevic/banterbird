@@ -197,13 +197,30 @@ export function ChatRoom({ roomId }: Props) {
     tabCloseFetch("/api/presence/leave");
   }, [roomId]);
 
+  /** True while we drive scroll programmatically — skips scrollbar flash CSS. */
+  const programmaticScrollRef = useRef(false);
+  /** Whether the user was pinned near the bottom before the latest content change. */
+  const stickToBottomRef = useRef(true);
+
+  const getDistanceFromBottom = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return 0;
+    return el.scrollHeight - el.scrollTop - el.clientHeight;
+  }, []);
+
   const scrollToBottom = useCallback((instant = false) => {
     const el = messagesScrollRef.current;
     if (!el) return;
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: instant ? "auto" : "smooth",
-    });
+    programmaticScrollRef.current = true;
+    if (instant) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+    stickToBottomRef.current = true;
+    window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+    }, instant ? 50 : 400);
   }, []);
 
   const shouldAbortBotTurn = useCallback(() => abortBotTurnRef.current, []);
@@ -213,11 +230,29 @@ export function ChatRoom({ roomId }: Props) {
   }, [peerTyping]);
 
   useEffect(() => {
+    if (!stickToBottomRef.current) return;
     scrollToBottom(true);
   }, [keyboardInset, scrollToBottom]);
 
+  // New messages / typing:
+  // - Already at bottom → do nothing if flush; silent pin only if content grew.
+  // - User scrolled up → smooth-scroll to latest.
   useEffect(() => {
-    scrollToBottom();
+    const el = messagesScrollRef.current;
+    if (!el) return;
+
+    if (stickToBottomRef.current) {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distance <= 1) return;
+      programmaticScrollRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false;
+      });
+      return;
+    }
+
+    scrollToBottom(false);
   }, [messages.length, peerTyping, scrollToBottom]);
 
   const load = useCallback(async () => {
@@ -1435,11 +1470,13 @@ export function ChatRoom({ roomId }: Props) {
       ) : null}
 
       <div ref={messagesScrollRef} className="scroll-hide min-h-0 flex-1 overflow-y-auto" onScroll={() => {
+        if (programmaticScrollRef.current) return;
         const el = messagesScrollRef.current;
         if (!el) return;
+        stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 80;
         el.classList.add("is-scrolling");
         clearTimeout((el as HTMLDivElement & { _scrollTimer?: ReturnType<typeof setTimeout> })._scrollTimer);
-        (el as HTMLDivElement & { _scrollTimer?: ReturnType<typeof setTimeout> })._scrollTimer = setTimeout(() => el.classList.remove("is-scrolling"), 1000);
+        (el as HTMLDivElement & { _scrollTimer?: ReturnType<typeof setTimeout> })._scrollTimer = setTimeout(() => el.classList.remove("is-scrolling"), 800);
       }}>
         {messages.length === 0 && !peerTyping ? (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">

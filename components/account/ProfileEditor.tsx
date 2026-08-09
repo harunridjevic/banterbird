@@ -208,7 +208,8 @@ export function ProfileEditor({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Scrollable content — thin scrollbar that doesn't overlap buttons */}
+      {/* Scrollable settings + actions (actions scroll with content so mobile
+          keyboard doesn't cover a pinned footer). */}
       <div className="flex-1 overflow-y-auto space-y-4 pb-4 pr-5 sm:pr-6 [scrollbar-width:thin] [scrollbar-color:theme(colors.navy.200/0.6)_transparent] dark:[scrollbar-color:theme(colors.white/0.1)_transparent]">
         <div className="space-y-4">
         {/* Avatar */}
@@ -344,73 +345,74 @@ export function ProfileEditor({
         )}
 
         </div>
-      </div>
 
-      {/* Sticky bottom action bar */}
-      <div className="shrink-0 space-y-2 border-t border-navy-200/60 px-0 pr-5 sm:pr-6 pt-4 bg-white/[0.97] dark:bg-navy-950/[0.97] dark:border-white/10"
-           style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saving}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-navy-900 py-3 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:opacity-60 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"
+        {/* Action buttons — inside scroll pane so they move with the keyboard on mobile */}
+        <div
+          className="space-y-2 border-t border-navy-200/60 pt-4 dark:border-white/10"
+          style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
         >
-          {saving ? <InlineSpinner /> : "Save changes"}
-        </button>
-
-        <button
-          type="button"
-          onClick={handleSignOut}
-          disabled={signingOut}
-          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-navy-200/70 py-2.5 text-sm font-semibold text-navy-600 transition hover:bg-navy-100 disabled:opacity-60 dark:border-white/10 dark:text-navy-400 dark:hover:bg-navy-800"
-        >
-          {signingOut ? <InlineSpinner className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
-          Sign out
-        </button>
-
-        {/* Close account — under sign out */}
-        {confirmDelete ? (
-          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 space-y-3">
-            <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">Are you sure? This is permanent.</p>
-            <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
-              Your account, profile, friends and all messages will be deleted. This cannot be undone.
-            </p>
-            {isProActive(profile) && (
-              <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
-                Your PRO subscription will be cancelled and auto-renewal turned off. Your current period is
-                non-refundable — for refund requests email{" "}
-                <a href="mailto:support@banterbird.app" className="underline underline-offset-2">
-                  support@banterbird.app
-                </a>.
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => void handleDeleteAccount()}
-                disabled={deletingAccount}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
-              >
-                {deletingAccount ? <InlineSpinner className="h-4 w-4" /> : "Yes, delete my account"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(false)}
-                className="rounded-xl border border-navy-200/70 px-4 py-2.5 text-sm font-semibold text-navy-600 transition hover:bg-navy-100 dark:border-white/10 dark:text-navy-400 dark:hover:bg-navy-800"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
           <button
             type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="w-full text-center text-xs text-navy-400 underline-offset-2 transition hover:text-rose-500 hover:underline dark:text-navy-500 dark:hover:text-rose-400"
+            onClick={() => void handleSave()}
+            disabled={saving}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-navy-900 py-3 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:opacity-60 dark:bg-navy-100 dark:text-navy-950 dark:hover:bg-white"
           >
-            Close account
+            {saving ? <InlineSpinner /> : "Save changes"}
           </button>
-        )}
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-navy-200/70 py-2.5 text-sm font-semibold text-navy-600 transition hover:bg-navy-100 disabled:opacity-60 dark:border-white/10 dark:text-navy-400 dark:hover:bg-navy-800"
+          >
+            {signingOut ? <InlineSpinner className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
+            Sign out
+          </button>
+
+          {confirmDelete ? (
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 space-y-3">
+              <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">Are you sure? This is permanent.</p>
+              <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
+                Your account, profile, friends and all messages will be deleted. This cannot be undone.
+              </p>
+              {isProActive(profile) && (
+                <p className="text-xs text-rose-600/80 dark:text-rose-400/70">
+                  Your PRO subscription will be cancelled and auto-renewal turned off. Your current period is
+                  non-refundable — for refund requests email{" "}
+                  <a href="mailto:support@banterbird.app" className="underline underline-offset-2">
+                    support@banterbird.app
+                  </a>.
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteAccount()}
+                  disabled={deletingAccount}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {deletingAccount ? <InlineSpinner className="h-4 w-4" /> : "Yes, delete my account"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="rounded-xl border border-navy-200/70 px-4 py-2.5 text-sm font-semibold text-navy-600 transition hover:bg-navy-100 dark:border-white/10 dark:text-navy-400 dark:hover:bg-navy-800"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="w-full text-center text-xs text-navy-400 underline-offset-2 transition hover:text-rose-500 hover:underline dark:text-navy-500 dark:hover:text-rose-400"
+            >
+              Close account
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

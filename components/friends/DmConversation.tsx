@@ -125,8 +125,18 @@ export function DmConversation({
   };
 
   // ── Scroll helper ──────────────────────────────────────────────────────────
+  const messagesPaneRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+
   const scrollToBottom = useCallback((instant = false) => {
-    bottomRef.current?.scrollIntoView({ behavior: instant ? "instant" : "smooth" } as ScrollIntoViewOptions);
+    if (instant) {
+      const el = messagesPaneRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      else bottomRef.current?.scrollIntoView({ behavior: "instant" } as ScrollIntoViewOptions);
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" } as ScrollIntoViewOptions);
+    }
+    stickToBottomRef.current = true;
   }, []);
 
   // ── Fetch messages ─────────────────────────────────────────────────────────
@@ -153,14 +163,30 @@ export function DmConversation({
     return () => { cancelled = true; };
   }, [friend.id, supabase, fetchMessages]);
 
-  // Scroll to bottom when messages load or change
+  // Pinned at bottom → silent pin if needed; scrolled up → smooth to latest.
   useEffect(() => {
-    scrollToBottom();
+    const el = messagesPaneRef.current;
+    if (!el) return;
+    if (stickToBottomRef.current) {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distance <= 1) return;
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+    scrollToBottom(false);
   }, [messages, scrollToBottom]);
 
-  // Also scroll when typing bubble appears/disappears
   useEffect(() => {
-    if (peerTyping) scrollToBottom();
+    if (!peerTyping) return;
+    const el = messagesPaneRef.current;
+    if (!el) return;
+    if (stickToBottomRef.current) {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distance <= 1) return;
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+    scrollToBottom(false);
   }, [peerTyping, scrollToBottom]);
 
   // ── Realtime: new DM messages ──────────────────────────────────────────────
@@ -265,7 +291,7 @@ export function DmConversation({
       setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
     }
     // Scroll after send regardless of whether realtime fires
-    scrollToBottom();
+    scrollToBottom(true);
   }, [friend.id, roomId, scrollToBottom]);
 
   const handleSend = async () => {
@@ -331,7 +357,15 @@ export function DmConversation({
       )}
 
       {/* Messages */}
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div
+        ref={messagesPaneRef}
+        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        onScroll={() => {
+          const el = messagesPaneRef.current;
+          if (!el) return;
+          stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 80;
+        }}
+      >
         {loading && <div className="flex justify-center pt-8"><InlineSpinner /></div>}
         {!loading && messages.length === 0 && (
           <p className="pt-10 text-center text-sm text-navy-400 dark:text-navy-500">

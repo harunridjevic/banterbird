@@ -253,7 +253,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="min-h-full antialiased">
+      <body className="h-full antialiased">
         <AppProviders>{children}</AppProviders>
         {/* Google tag (gtag.js) - placed in body via Next.js Script to avoid
             head hydration conflicts */}

@@ -1,57 +1,123 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
-const ZONE = "11540658";
+/**
+ * Rotate / refresh IPP this often (midpoint of 3–4 minutes).
+ */
+const RELOAD_INTERVAL_MS = 3.5 * 60 * 1000;
+
+/**
+ * In-Page Push zone IDs to rotate through.
+ * Add more via NEXT_PUBLIC_MONETAG_IPP_ZONES=id1,id2,id3 after creating
+ * extra IPP zones in Monetag (each zone is frequency-capped independently).
+ */
+const FALLBACK_ZONES = ["11540658"];
+
 const SRC = "https://nap5k.com/tag.min.js";
+const BANNER_SELECTOR = '[class^="pl-"]';
+const STORAGE_KEY_RE = /zfg|fakepush|pushkin|_shownFake|webpush|snxrchfu|monetag/i;
 
-/**
- * How often to re-inject the Monetag In-Page Push script (ms).
- * 3 minutes — after a user closes a notification it will reappear at this cadence.
- */
-const REINJECT_INTERVAL_MS = 3 * 60 * 1000;
+function readZones(): string[] {
+  const fromEnv = process.env.NEXT_PUBLIC_MONETAG_IPP_ZONES;
+  if (fromEnv?.trim()) {
+    const parsed = fromEnv
+      .split(/[,\s]+/)
+      .map((z) => z.replace(/[^\d]/g, ""))
+      .filter(Boolean);
+    if (parsed.length) return parsed;
+  }
+  return FALLBACK_ZONES;
+}
 
-/**
- * Maximum number of In-Page Push notifications visible at the same time.
- * Monetag honours this via the `inLimitPerPage` window config key.
- */
-const MAX_BANNERS = 3;
+function clearMonetagState() {
+  for (const store of [localStorage, sessionStorage]) {
+    try {
+      store.removeItem("zfgstorage");
+      const keys: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const key = store.key(i);
+        if (key && STORAGE_KEY_RE.test(key)) keys.push(key);
+      }
+      for (const key of keys) store.removeItem(key);
+    } catch {
+      /* private mode */
+    }
+  }
 
-function injectScript() {
-  // Configure Monetag before injecting so the widget picks up the limit.
-  // The `inLimitPerPage` key is the Monetag In-Page Push per-page cap.
-  // @ts-expect-error — Monetag global config on window
-  window.monetag_in_page_config = {
-    // eslint-disable-next-line camelcase
-    inLimitPerPage: MAX_BANNERS,
-  };
+  try {
+    const w = window as Window & Record<string, unknown>;
+    for (const key of Object.keys(w)) {
+      if (!STORAGE_KEY_RE.test(key) && key !== "_shownFakepushFormats") continue;
+      try {
+        delete w[key];
+      } catch {
+        try {
+          w[key] = undefined;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
 
-  // Remove any previous instance so Monetag re-initialises cleanly.
-  const old = document.querySelector<HTMLScriptElement>(`script[data-zone="${ZONE}"]`);
-  if (old) old.remove();
+  document.querySelectorAll(BANNER_SELECTOR).forEach((el) => el.remove());
+}
+
+function removeZoneScripts() {
+  document
+    .querySelectorAll<HTMLScriptElement>('script[src*="nap5k.com/tag"], script[data-zone]')
+    .forEach((el) => {
+      const zone = el.dataset["zone"];
+      const src = el.getAttribute("src") ?? "";
+      if (src.includes("nap5k.com/tag") || (zone && /^\d+$/.test(zone))) {
+        el.remove();
+      }
+    });
+}
+
+function injectZone(zone: string) {
+  const w = window as Window & { fakepushMax?: number; fakepushMaxMobile?: number };
+  w.fakepushMax = 3;
+  w.fakepushMaxMobile = 3;
+
+  removeZoneScripts();
 
   const s = document.createElement("script");
-  s.dataset["zone"] = ZONE;
+  s.dataset["zone"] = zone;
   s.src = SRC;
   s.async = true;
   document.body.appendChild(s);
 }
 
 /**
- * Monetag In-Page Push banner — zone 11540658.
- * Injects on mount, then re-injects every REINJECT_INTERVAL_MS so the ad
- * reappears after dismiss in a single-page app that never does a full reload.
- * Capped at MAX_BANNERS visible notifications at once.
+ * Monetag In-Page Push — injected into the page (not an overlay iframe).
+ * A full-viewport iframe was blocking all clicks on the site.
+ *
+ * Every RELOAD_INTERVAL_MS we clear local frequency state and inject the next
+ * zone in the rotation (add extra IPP zone IDs for reliable re-shows).
  */
 export function MonteagBannerSlot() {
-  useEffect(() => {
-    injectScript();
+  const epochRef = useRef(0);
+  const zones = readZones();
 
-    const timer = setInterval(injectScript, REINJECT_INTERVAL_MS);
+  useEffect(() => {
+    injectZone(zones[0]!);
+
+    const timer = setInterval(() => {
+      epochRef.current += 1;
+      const zone = zones[epochRef.current % zones.length]!;
+      clearMonetagState();
+      injectZone(zone);
+    }, RELOAD_INTERVAL_MS);
 
     return () => {
       clearInterval(timer);
     };
+    // zones list is from env — stable for the page lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return null;
