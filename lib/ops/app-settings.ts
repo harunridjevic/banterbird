@@ -3,7 +3,7 @@ import { PRO_PRICE_USD, PRO_PERIOD_DAYS } from "@/lib/billing/constants";
 
 export type AdsSettings = {
   showBannerAds: boolean;
-  showOutstreamAds: boolean;
+  showVignetteAds: boolean;
 };
 
 export type BillingSettings = {
@@ -75,7 +75,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   ads: {
     showBannerAds: true,
-    showOutstreamAds: true,
+    showVignetteAds: true,
   },
 };
 
@@ -135,11 +135,12 @@ export function llmGuardSensitivityMultiplier(sensitivity: LlmGuardSensitivity):
   }
 }
 
-export function normalizeAdsSettings(raw: Partial<AdsSettings>): AdsSettings {
+export function normalizeAdsSettings(raw: Partial<AdsSettings> & { showOutstreamAds?: boolean }): AdsSettings {
   const d = DEFAULT_APP_SETTINGS.ads;
   return {
     showBannerAds: raw.showBannerAds ?? d.showBannerAds,
-    showOutstreamAds: raw.showOutstreamAds ?? d.showOutstreamAds,
+    // Fall back to the old DB key name so existing settings rows aren't lost on upgrade.
+    showVignetteAds: raw.showVignetteAds ?? raw.showOutstreamAds ?? d.showVignetteAds,
   };
 }
 

@@ -35,6 +35,7 @@ import {
   recordInactivitySkip,
   resetInactivityStrikes,
 } from "@/lib/moderation/inactivity-strikes";
+import { recordSkipAndCheckVignette } from "@/lib/ads/vignette-skip-counter";
 
 export function MatchLobby() {
   const router = useRouter();
@@ -49,12 +50,29 @@ export function MatchLobby() {
   });
   // Read the skip-rematch flag once on mount — set by ChatRoom before router.replace("/")
   // so we start in matching state immediately, skipping the idle "Find your vibe" flash.
+  // Both skipRematch and pendingVignette read the same sessionStorage key; we cache the
+  // parsed values in a module-level variable so the second useState sees the same result.
   const [skipRematch] = useState(() => {
     if (typeof window === "undefined") return false;
     const flag = sessionStorage.getItem("banterbird:skipRematch") === "1";
-    if (flag) sessionStorage.removeItem("banterbird:skipRematch");
+    if (flag) {
+      sessionStorage.removeItem("banterbird:skipRematch");
+      // Stash the parsed flag for the immediately-following pendingVignette useState.
+      sessionStorage.setItem("banterbird:_skipConsumed", "1");
+    }
     return flag;
   });
+  // Evaluate whether a Monetag vignette should fire before the next match.
+  // Uses the stashed signal written by the skipRematch initialiser above.
+  const [pendingVignette] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const wasSkip = sessionStorage.getItem("banterbird:_skipConsumed") === "1";
+    sessionStorage.removeItem("banterbird:_skipConsumed");
+    if (!wasSkip) return false;
+    return recordSkipAndCheckVignette();
+  });
+  // Gate: matchmaking should not start until the vignette (if any) is done.
+  const [vignetteReady, setVignetteReady] = useState(!pendingVignette);
   // True when returning from a chat room — skips the PageLoader so there's no loading flash.
   const [returningFromChat] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -99,7 +117,7 @@ export function MatchLobby() {
     activeSelfGender,
     activeWantsGender,
   );
-  const shouldMatch = globalSettingsLoaded && canMatch && !matchingPaused;
+  const shouldMatch = globalSettingsLoaded && canMatch && !matchingPaused && vignetteReady;
 
   const releaseMatchClaim = useCallback(() => {
     matchedRoomIdRef.current = null;
@@ -590,8 +608,15 @@ export function MatchLobby() {
     );
   }
 
-  if (isMatching) {
-    return <MatchingLoader key={matchAttempt} onCancel={handleCancelMatching} />;
+  if (isMatching || pendingVignette) {
+    return (
+      <MatchingLoader
+        key={matchAttempt}
+        onCancel={handleCancelMatching}
+        showVignette={pendingVignette && !vignetteReady}
+        onVignetteDone={() => setVignetteReady(true)}
+      />
+    );
   }
 
   return (

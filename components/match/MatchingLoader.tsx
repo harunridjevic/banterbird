@@ -1,21 +1,32 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Sparkles } from "lucide-react";
-import { ExoClickOutstream } from "@/components/ads/ExoClickOutstream";
+import { MonteagVignette } from "@/components/ads/MonteagVignette";
 import { useAccount } from "@/lib/account/context";
 
-const OUTSTREAM_ZONE_ID = "5991074";
 const MIN_DISPLAY_MS = 2000;
 
-type Props = { onCancel: () => void };
+type Props = {
+  onCancel: () => void;
+  /** When true, show a Monetag vignette before matchmaking begins. */
+  showVignette?: boolean;
+  /** Called once the vignette has finished (or been skipped) — parent should start matching. */
+  onVignetteDone?: () => void;
+};
 
-export function MatchingLoader({ onCancel }: Props) {
+export function MatchingLoader({ onCancel, showVignette = false, onVignetteDone }: Props) {
   const { isPro } = useAccount();
   const [canCancel, setCanCancel] = useState(false);
-  const [showOutstream, setShowOutstream] = useState(false);
+  const [showVignetteAds, setShowVignetteAds] = useState(false);
+  const [vignetteComplete, setVignetteComplete] = useState(!showVignette);
   const mountedAt = useRef(Date.now());
+  const onVignetteDoneRef = useRef(onVignetteDone);
+
+  useEffect(() => {
+    onVignetteDoneRef.current = onVignetteDone;
+  }, [onVignetteDone]);
 
   useEffect(() => {
     const elapsed = Date.now() - mountedAt.current;
@@ -29,22 +40,34 @@ export function MatchingLoader({ onCancel }: Props) {
       try {
         const res = await fetch("/api/settings/public");
         if (!res.ok) return;
-        const data = (await res.json()) as { ads?: { showOutstreamAds?: boolean } };
-        setShowOutstream(data.ads?.showOutstreamAds !== false);
+        const data = (await res.json()) as { ads?: { showVignetteAds?: boolean } };
+        setShowVignetteAds(data.ads?.showVignetteAds !== false);
       } catch { /* keep hidden on error */ }
     })();
   }, []);
 
+  const handleVignetteDone = useCallback(() => {
+    setVignetteComplete(true);
+    onVignetteDoneRef.current?.();
+  }, []);
+
+  const shouldShowVignette = !isPro && showVignette && showVignetteAds && !vignetteComplete;
+
   return (
     <div className="w-full px-4 py-6">
 
+      {/* Monetag vignette — fires before matchmaking resumes */}
+      {shouldShowVignette && (
+        <MonteagVignette onDone={handleVignetteDone} />
+      )}
+
       {/* ── Main content area ──────────────────────────────────────────────────
           Mobile:  stacked, centred
-          Desktop: two equal columns side-by-side, vertically centred        */}
-      <div className="flex flex-col items-center gap-6 md:flex-row md:items-stretch md:gap-8">
+          Desktop: single centred column (outstream removed)                  */}
+      <div className="flex flex-col items-center gap-6">
 
-        {/* Left panel — matching animation + text */}
-        <div className="flex w-full flex-col items-center justify-center text-center md:flex-1">
+        {/* Matching animation + text */}
+        <div className="flex w-full flex-col items-center justify-center text-center">
           <motion.div
             className="relative flex h-20 w-20 items-center justify-center rounded-[1.75rem] border border-navy-200/70 bg-white/80 shadow-lg sm:h-24 sm:w-24 sm:rounded-[2rem] dark:border-white/10 dark:bg-navy-900/40"
             animate={{ scale: [1, 1.08, 1], rotate: [0, 3, -3, 0] }}
@@ -65,7 +88,6 @@ export function MatchingLoader({ onCancel }: Props) {
             Hang tight. We&apos;re pairing you with someone now.
           </p>
 
-          {/* Cancel button sits under the text on desktop */}
           <motion.button
             type="button"
             whileHover={canCancel ? { scale: 1.02 } : {}}
@@ -77,13 +99,6 @@ export function MatchingLoader({ onCancel }: Props) {
             <ArrowLeft className="h-4 w-4" /> Cancel
           </motion.button>
         </div>
-
-        {/* Right panel — outstream video ad (hidden for PRO) */}
-        {!isPro && showOutstream && (
-          <div className="flex w-full items-center justify-center md:flex-1">
-            <ExoClickOutstream zoneId={OUTSTREAM_ZONE_ID} className="w-full px-2" />
-          </div>
-        )}
 
       </div>
 

@@ -20,7 +20,7 @@ export async function GET() {
       },
       ads: {
         showBannerAds: settings.ads.showBannerAds,
-        showOutstreamAds: settings.ads.showOutstreamAds,
+        showVignetteAds: settings.ads.showVignetteAds,
       },
       botSettings: {
         matchMode: botSettings.matchMode,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAccount } from "@/lib/account/context";
-import { ExoClickBannerSlot } from "@/components/ads/ExoClickBannerSlot";
+import { MonteagBannerSlot } from "@/components/ads/MonteagBannerSlot";
 
 /** Site banner ads — hidden for PRO subscribers, while auth is loading,
  *  and when disabled via ops settings. */
@@ -24,5 +24,5 @@ export function AdBannerGate() {
   if (state.status === "loading") return null;
   if (isPro) return null;
   if (!showBanner) return null;
-  return <ExoClickBannerSlot />;
+  return <MonteagBannerSlot />;
 }

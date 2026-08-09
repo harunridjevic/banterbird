@@ -252,25 +252,25 @@ export default function OpsBotSettingsPage() {
                   <span>
                     <span className="block text-sm font-medium text-navy-100">Show banner ad</span>
                     <span className="mt-1 block text-xs text-navy-400">
-                      ExoClick banner shown to free users below the navbar. Hidden for PRO.
+                      Monetag banner shown to free users below the navbar. Hidden for PRO.
                     </span>
                   </span>
                 </label>
                 <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
                   <input
                     type="checkbox"
-                    checked={appSettings.ads?.showOutstreamAds ?? true}
+                    checked={appSettings.ads?.showVignetteAds ?? true}
                     onChange={(e) =>
                       void patchAppSettings({
-                        ads: { ...(appSettings.ads ?? {}), showOutstreamAds: e.target.checked },
+                        ads: { ...(appSettings.ads ?? {}), showVignetteAds: e.target.checked },
                       })
                     }
                     className="mt-1 accent-violet-500"
                   />
                   <span>
-                    <span className="block text-sm font-medium text-navy-100">Show video (outstream) ad</span>
+                    <span className="block text-sm font-medium text-navy-100">Show vignette ad</span>
                     <span className="mt-1 block text-xs text-navy-400">
-                      ExoClick outstream video shown during matching. Hidden for PRO.
+                      Monetag vignette shown after every 3rd skip during matchmaking. Hidden for PRO.
                     </span>
                   </span>
                 </label>
