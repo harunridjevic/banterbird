@@ -10,7 +10,10 @@ declare global {
   interface Window {
     Paddle?: {
       Environment: { set: (env: "production" | "sandbox") => void };
-      Initialize: (opts: { token: string; eventCallback?: (event: { name: string; data?: unknown }) => void }) => void;
+      Initialize: (opts: {
+        token: string;
+        eventCallback?: (event: { name: string; data?: unknown }) => void;
+      }) => void;
       Checkout: {
         open: (opts: {
           transactionId: string;
@@ -51,13 +54,18 @@ const FEATURES = [
 ];
 
 export function UpgradeModal({ open, onClose }: Props) {
-  const { refresh, openModal } = useAccount();
+  const { state, refresh, openModal } = useAccount();
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loginPrompt, setLoginPrompt] = useState(false);
   const [priceUsd, setPriceUsd] = useState(PRO_PRICE_USD);
   const paddleLoaded = useRef(false);
 
+  // True when the user is not signed in — derived directly from auth state so
+  // the login prompt appears instantly when the modal opens, no network call needed.
+  const needsLogin = state.status !== "named";
+
+  // Fetch the live price once on mount.
   useEffect(() => {
     void (async () => {
       try {
@@ -65,16 +73,18 @@ export function UpgradeModal({ open, onClose }: Props) {
         if (!res.ok) return;
         const data = (await res.json()) as { billing?: { proPriceUsd?: number } };
         if (typeof data.billing?.proPriceUsd === "number") setPriceUsd(data.billing.proPriceUsd);
-      } catch { /* fall back */ }
+      } catch { /* fall back to constant */ }
     })();
   }, []);
 
-  // Close on Escape
+  // Reset error state when the modal closes.
   useEffect(() => {
-    if (!open) {
-      setLoginPrompt(false);
-      return;
-    }
+    if (!open) setError(null);
+  }, [open]);
+
+  // Close on Escape.
+  useEffect(() => {
+    if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -93,8 +103,6 @@ export function UpgradeModal({ open, onClose }: Props) {
       script.id = "paddle-js";
       script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
       script.onload = () => {
-        // Set environment only — do NOT Initialize here.
-        // Caller sets up eventCallback then calls Initialize once.
         if (sandbox) window.Paddle?.Environment.set("sandbox");
         paddleLoaded.current = true;
         resolve();
@@ -102,6 +110,21 @@ export function UpgradeModal({ open, onClose }: Props) {
       document.head.appendChild(script);
     });
   }
+
+  /** Fire-and-forget: send the error to ops so it shows in the admin
+   *  failed-checkout panel. Never throws or blocks the UI. */
+  const logCheckoutError = (message: string, extra?: Record<string, unknown>) => {
+    fetch("/api/ops/errors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "billing/checkout-client",
+        level: "error",
+        message,
+        metadata: extra ?? {},
+      }),
+    }).catch(() => undefined);
+  };
 
   const startCheckout = async () => {
     setLoading(true);
@@ -118,13 +141,9 @@ export function UpgradeModal({ open, onClose }: Props) {
       };
 
       if (!res.ok || !data.transactionId || !data.clientToken) {
-        if (res.status === 401) {
-          // Not signed in — show in-modal prompt before redirecting to login
-          setLoginPrompt(true);
-          setLoading(false);
-          return;
-        }
-        setError(data.error ?? "Could not start checkout.");
+        const msg = data.error ?? "Could not start checkout.";
+        setError(msg);
+        logCheckoutError(msg, { httpStatus: res.status });
         setLoading(false);
         return;
       }
@@ -132,7 +151,9 @@ export function UpgradeModal({ open, onClose }: Props) {
       await loadPaddleScript(data.clientToken, data.sandbox ?? false);
 
       if (!window.Paddle) {
-        setError("Payment system failed to load. Please refresh and try again.");
+        const msg = "Payment system failed to load. Please refresh and try again.";
+        setError(msg);
+        logCheckoutError(msg, { step: "paddle-script-load" });
         setLoading(false);
         return;
       }
@@ -166,8 +187,13 @@ export function UpgradeModal({ open, onClose }: Props) {
             }
           : {}),
       });
-    } catch {
-      setError("Network error. Try again.");
+    } catch (err) {
+      const msg = "Network error. Try again.";
+      setError(msg);
+      logCheckoutError(msg, {
+        step: "fetch",
+        detail: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setLoading(false);
     }
@@ -222,17 +248,24 @@ export function UpgradeModal({ open, onClose }: Props) {
                 </div>
               </div>
               <p className="mt-3 text-sm text-navy-500 dark:text-navy-400">
-                BanterBird is free because of ads. Upgrade to PRO to remove them and unlock unlimited image sending, unlimited gender matching, and an exclusive badge - for just ${priceUsd}/month.
+                BanterBird is free because of ads. Upgrade to PRO to remove them and unlock
+                unlimited image sending, unlimited gender matching, and an exclusive badge — for
+                just ${priceUsd}/month.
               </p>
             </div>
 
             {/* Features */}
             <ul className="mt-5 space-y-2 px-6">
               {FEATURES.map((f) => (
-                <li key={f.title} className="flex items-start gap-3 rounded-2xl bg-amber-50/80 px-4 py-3 dark:bg-amber-950/20">
+                <li
+                  key={f.title}
+                  className="flex items-start gap-3 rounded-2xl bg-amber-50/80 px-4 py-3 dark:bg-amber-950/20"
+                >
                   <span className="mt-0.5 shrink-0 text-amber-500">{f.icon}</span>
                   <div>
-                    <p className="text-sm font-semibold text-navy-900 dark:text-navy-50">{f.title}</p>
+                    <p className="text-sm font-semibold text-navy-900 dark:text-navy-50">
+                      {f.title}
+                    </p>
                     <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">{f.desc}</p>
                   </div>
                 </li>
@@ -241,12 +274,13 @@ export function UpgradeModal({ open, onClose }: Props) {
 
             {/* CTA */}
             <div className="px-6 pb-6 pt-4">
-              {loginPrompt ? (
-                <div className="mb-4 rounded-2xl border border-amber-400/40 bg-amber-50/80 px-4 py-3 dark:bg-amber-950/20">
+              {needsLogin ? (
+                /* ── Not signed in: show sign-in prompt immediately ── */
+                <div className="rounded-2xl border border-amber-400/40 bg-amber-50/80 px-4 py-4 dark:bg-amber-950/20">
                   <p className="text-sm font-semibold text-navy-900 dark:text-navy-50">
-                    You need to be logged in to upgrade
+                    Sign in to upgrade to PRO
                   </p>
-                  <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
+                  <p className="mt-1 text-xs text-navy-500 dark:text-navy-400">
                     Create a free account or sign in first, then come back to unlock PRO.
                   </p>
                   <button
@@ -256,15 +290,9 @@ export function UpgradeModal({ open, onClose }: Props) {
                   >
                     Sign in / Create account
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setLoginPrompt(false)}
-                    className="mt-2 w-full text-center text-xs text-navy-400 underline-offset-2 hover:underline dark:text-navy-500"
-                  >
-                    Go back
-                  </button>
                 </div>
               ) : (
+                /* ── Signed in: show the checkout button ── */
                 <>
                   {error && (
                     <p className="mb-3 text-xs text-rose-600 dark:text-rose-400">{error}</p>

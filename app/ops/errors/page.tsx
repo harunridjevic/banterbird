@@ -19,13 +19,17 @@ type ErrorRow = {
 
 type FailedCheckoutRow = {
   id: string;
-  user_id: string;
+  kind: "subscription" | "error-log";
+  user_id: string | null;
   email: string | null;
-  status: "pending" | "failed";
-  provider: string;
-  order_id: string;
+  status: string;
+  message: string | null;
+  provider: string | null;
+  order_id: string | null;
   paddle_transaction_id: string | null;
-  amount_usd: number;
+  amount_usd: number | null;
+  failure_origin: "server" | "client";
+  metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -135,10 +139,11 @@ export default function OpsErrorsPage() {
   };
 
   // ── Failed checkouts: clear one / all ──────────────────────────────────────
-  const clearOneCheckout = async (id: string) => {
-    const res = await fetch(`/api/ops/billing-failures?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
+  const clearOneCheckout = async (id: string, kind: "subscription" | "error-log") => {
+    const res = await fetch(
+      `/api/ops/billing-failures?id=${encodeURIComponent(id)}&kind=${kind}`,
+      { method: "DELETE" },
+    );
     if (res.ok) {
       setCheckouts((prev) => prev.filter((c) => c.id !== id));
       setCheckoutsTotal((t) => Math.max(0, t - 1));
@@ -233,18 +238,30 @@ export default function OpsErrorsPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        {/* Status badge + provider + timestamp */}
+                        {/* Status badge + origin + provider + timestamp */}
                         <div className="flex flex-wrap items-center gap-2">
                           <span
                             className={`rounded px-2 py-0.5 text-xs font-semibold uppercase ${
-                              c.status === "failed"
+                              c.status === "failed" || c.status === "error"
                                 ? "bg-rose-500/20 text-rose-200"
                                 : "bg-amber-500/20 text-amber-200"
                             }`}
                           >
                             {c.status === "pending" ? "abandoned" : c.status}
                           </span>
-                          <span className="font-mono text-xs text-violet-300">{c.provider}</span>
+                          {/* Client vs server origin tag */}
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs font-semibold uppercase ${
+                              c.failure_origin === "client"
+                                ? "bg-sky-500/20 text-sky-200"
+                                : "bg-navy-500/20 text-navy-300"
+                            }`}
+                          >
+                            {c.failure_origin === "client" ? "client error" : "server error"}
+                          </span>
+                          {c.provider && (
+                            <span className="font-mono text-xs text-violet-300">{c.provider}</span>
+                          )}
                           <span className="text-xs text-navy-500">
                             {new Date(c.created_at).toLocaleString()}
                           </span>
@@ -253,16 +270,23 @@ export default function OpsErrorsPage() {
                         {/* Email / user identifier */}
                         <p className="mt-2 text-sm font-medium text-white">
                           {c.email ?? (
-                            <span className="font-mono text-navy-400">{c.user_id}</span>
+                            <span className="font-mono text-navy-400">{c.user_id ?? "unknown user"}</span>
                           )}
                         </p>
 
+                        {/* Error message (for error-log rows) */}
+                        {c.message && (
+                          <p className="mt-1 text-xs text-rose-300/80">{c.message}</p>
+                        )}
+
                         {/* Extra details */}
                         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-navy-400">
-                          <span>
-                            Amount:{" "}
-                            <span className="text-navy-200">${c.amount_usd.toFixed(2)}</span>
-                          </span>
+                          {c.amount_usd != null && (
+                            <span>
+                              Amount:{" "}
+                              <span className="text-navy-200">${c.amount_usd.toFixed(2)}</span>
+                            </span>
+                          )}
                           {c.paddle_transaction_id && (
                             <span>
                               Txn:{" "}
@@ -271,12 +295,27 @@ export default function OpsErrorsPage() {
                               </span>
                             </span>
                           )}
-                          <span>
-                            Order:{" "}
-                            <span className="font-mono text-navy-300 break-all">
-                              {c.order_id}
+                          {c.order_id && (
+                            <span>
+                              Order:{" "}
+                              <span className="font-mono text-navy-300 break-all">
+                                {c.order_id}
+                              </span>
                             </span>
-                          </span>
+                          )}
+                          {/* Step metadata for client errors */}
+                          {c.metadata?.step && (
+                            <span>
+                              Step:{" "}
+                              <span className="font-mono text-navy-300">{String(c.metadata.step)}</span>
+                            </span>
+                          )}
+                          {c.metadata?.httpStatus && (
+                            <span>
+                              HTTP:{" "}
+                              <span className="font-mono text-navy-300">{String(c.metadata.httpStatus)}</span>
+                            </span>
+                          )}
                           {c.user_id && c.email && (
                             <span>
                               UID:{" "}
@@ -290,7 +329,7 @@ export default function OpsErrorsPage() {
                       <button
                         type="button"
                         aria-label="Dismiss this record"
-                        onClick={() => void clearOneCheckout(c.id)}
+                        onClick={() => void clearOneCheckout(c.id, c.kind)}
                         className="shrink-0 rounded-lg border border-white/10 p-1.5 text-navy-400 hover:bg-white/5 hover:text-rose-300"
                       >
                         <X className="h-4 w-4" />

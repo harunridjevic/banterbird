@@ -421,14 +421,48 @@ export function ChatRoom({ roomId }: Props) {
         },
         (payload) => {
           const row = payload.new as MessageRow;
-          // If this message is from the peer, immediately clear the typing
-          // indicator so the bubble disappears before the message appears.
+          // If this message is from the peer, clear the typing indicator first
+          // so AnimatePresence starts the exit animation before the message
+          // bubble appears. We defer setMessages by one rAF so the two state
+          // updates land in separate renders and are never visible together.
           if (row.user_id && row.user_id !== selfIdRef.current) {
             if (typingHide.current) {
               clearTimeout(typingHide.current);
               typingHide.current = null;
             }
             setPeerTyping(false);
+            // Defer the message insertion to the next frame so the typing
+            // bubble's exit transition starts rendering before the new message
+            // enters. Without this React batches both into one render.
+            requestAnimationFrame(() => {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === row.id)) return prev;
+                const optimisticIndex = prev.findIndex(
+                  (m) =>
+                    (m.id.startsWith("temp-") || m.id.startsWith("local-sys-")) &&
+                    m.content === row.content &&
+                    m.user_id === row.user_id,
+                );
+                if (optimisticIndex >= 0) {
+                  const clientKey = prev[optimisticIndex]!.clientKey ?? prev[optimisticIndex]!.id;
+                  const updated = [...prev];
+                  updated[optimisticIndex] = {
+                    ...row,
+                    clientKey,
+                    is_from_ai: Boolean(row.is_from_ai) || row.user_id == null,
+                  };
+                  return updated;
+                }
+                return [
+                  ...prev,
+                  {
+                    ...row,
+                    is_from_ai: Boolean(row.is_from_ai) || row.user_id == null,
+                  } as MessageRow,
+                ];
+              });
+            });
+            return;
           }
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) return prev;

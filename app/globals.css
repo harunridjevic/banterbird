@@ -97,21 +97,32 @@ body {
     scrollbar-width: thin !important;
   }
 
-  /* Suppress the ghost scrollbar that appears on the page edge when the
-     software keyboard opens and briefly changes the visual viewport height.
-     The chat layout uses overflow-hidden at the root so no real content
-     scrolls there anyway. */
+  /* Suppress every scrollbar on touch devices. The root layout uses
+     overflow-hidden so nothing meaningful actually scrolls at the page level.
+     The ghost gray bar that appears when the software keyboard opens is caused
+     by WebKit re-painting the <main> overflow-y-auto scrollbar gutter as the
+     visual viewport shrinks. Hiding it on all overflow elements kills it. */
   html,
-  body {
+  body,
+  main,
+  [class*="overflow-y-auto"],
+  [class*="overflow-auto"] {
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
-    overflow: hidden !important;
   }
   html::-webkit-scrollbar,
-  body::-webkit-scrollbar {
+  body::-webkit-scrollbar,
+  main::-webkit-scrollbar,
+  [class*="overflow-y-auto"]::-webkit-scrollbar,
+  [class*="overflow-auto"]::-webkit-scrollbar {
     display: none !important;
     width: 0 !important;
     height: 0 !important;
+  }
+  /* Re-enable for elements the user is actively scrolling */
+  .scroll-hide.is-scrolling::-webkit-scrollbar {
+    display: block !important;
+    width: 3px !important;
   }
 }
 
