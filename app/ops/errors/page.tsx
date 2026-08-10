@@ -304,16 +304,20 @@ export default function OpsErrorsPage() {
                             </span>
                           )}
                           {/* Step metadata for client errors */}
-                          {c.metadata?.step && (
+                          {c.metadata?.step != null && (
                             <span>
                               Step:{" "}
-                              <span className="font-mono text-navy-300">{String(c.metadata.step)}</span>
+                              <span className="font-mono text-navy-300">
+                                {String(c.metadata.step)}
+                              </span>
                             </span>
                           )}
-                          {c.metadata?.httpStatus && (
+                          {c.metadata?.httpStatus != null && (
                             <span>
                               HTTP:{" "}
-                              <span className="font-mono text-navy-300">{String(c.metadata.httpStatus)}</span>
+                              <span className="font-mono text-navy-300">
+                                {String(c.metadata.httpStatus)}
+                              </span>
                             </span>
                           )}
                           {c.user_id && c.email && (
