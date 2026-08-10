@@ -24,7 +24,7 @@ function ProviderBadge({ provider, isAnonymous }: { provider: string; isAnonymou
 }
 
 function fmt(iso: string | null) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleString(undefined, {
     month: "short", day: "numeric", year: "numeric",
     hour: "2-digit", minute: "2-digit",
@@ -32,7 +32,7 @@ function fmt(iso: string | null) {
 }
 
 function fmtShort(iso: string | null) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString(undefined, {
     month: "short", day: "numeric", year: "numeric",
   });
@@ -397,7 +397,7 @@ export default function OpsUsersPage() {
 
                   {/* Email */}
                   <span className="truncate text-navy-300">
-                    {u.email ?? <span className="italic text-navy-600">—</span>}
+                    {u.email ?? <span className="italic text-navy-600">n/a</span>}
                   </span>
 
                   {/* Provider */}
@@ -459,7 +459,7 @@ export default function OpsUsersPage() {
                         </p>
                         <ProviderBadge provider={u.provider} isAnonymous={u.is_anonymous} />
                       </div>
-                      <p className="truncate text-xs text-navy-400">{u.email ?? "—"}</p>
+                      <p className="truncate text-xs text-navy-400">{u.email ?? "n/a"}</p>
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-navy-500">

@@ -63,7 +63,7 @@ export function GenderExhaustedModal({ open, onContinue, onUpgrade }: Props) {
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 px-4 py-3 text-sm font-bold text-navy-950 shadow-lg transition hover:bg-amber-300"
                 >
                   <Crown className="h-4 w-4" />
-                  Upgrade to PRO — unlimited gender matching
+                  Upgrade to PRO: unlimited gender matching
                 </button>
                 <button
                   type="button"

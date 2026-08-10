@@ -10,11 +10,11 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://banterbird.app";
 export const metadata: Metadata = {
   title: "About BanterBird",
   description:
-    "Learn about BanterBird — the anonymous chat platform where you can instantly connect 1-on-1 with people from around the world. No signup, no personal data required.",
+    "Learn about BanterBird, the anonymous chat platform where you can instantly connect 1-on-1 with people from around the world. No signup, no personal data required.",
   alternates: { canonical: "/about" },
   openGraph: {
     url: `${baseUrl}/about`,
-    title: "About BanterBird — Anonymous Social Chat",
+    title: "About BanterBird: Anonymous Social Chat",
     description:
       "BanterBird is a free anonymous chat platform with instant 1-on-1 matching, no sign-up required. Learn how it works and who it's for.",
     siteName: "BanterBird",
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "About BanterBird — Anonymous Social Chat",
+    title: "About BanterBird: Anonymous Social Chat",
     description: "BanterBird is a free anonymous chat platform with instant 1-on-1 matching, no sign-up required.",
     images: ["/logo_search.png"],
   },
@@ -119,7 +119,7 @@ export default async function AboutPage() {
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-navy-700 dark:text-navy-300">
             BanterBird is a free anonymous chat platform. Open a chat, get matched with someone in
-            seconds, and have a real conversation — no sign-up, no profile, no trace.
+            seconds, and have a real conversation. No sign-up, no profile, no trace.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -144,7 +144,7 @@ export default async function AboutPage() {
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
               BanterBird is a real-time anonymous chat platform at{" "}
               <strong className="text-navy-900 dark:text-navy-100">banterbird.app</strong>. It
-              connects two people in a private 1-on-1 text conversation — a modern take on random
+              connects two people in a private 1-on-1 text conversation, a modern take on random
               chat, with smarter matching and a focus on genuine interaction.
             </p>
             <p className="mt-4 leading-relaxed text-navy-700 dark:text-navy-300">
@@ -215,11 +215,11 @@ export default async function AboutPage() {
             <p className="leading-relaxed text-navy-700 dark:text-navy-300">
               BanterBird is free. An optional PRO subscription is available for signed-in accounts
               at <strong className="text-navy-900 dark:text-navy-100">${price}/month</strong>, billed
-              monthly. Cancel any time — no contracts, no hidden fees.
+              Cancel any time. No contracts, no hidden fees.
             </p>
             <ul className="mt-4 space-y-2 text-sm text-navy-700 dark:text-navy-300">
               {[
-                "No ads — browse and chat completely ad-free",
+                "No ads. Browse and chat completely ad-free",
                 "Unlimited gender-based matching (free users get 10 per day)",
                 "Unlimited image sending in chat (free users get 1 per day)",
                 "Exclusive PRO badge on your profile",

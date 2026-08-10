@@ -99,6 +99,9 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
     });
   }
 
+  const CHECKOUT_SERVER_ERROR_MSG =
+    "There was an error starting checkout. This has been registered and you can expect an email from us regarding this.";
+
   const startCheckout = async () => {
     setLoading(true);
     setError(null);
@@ -106,7 +109,11 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
       const res = await fetch("/api/billing/checkout", { method: "POST" });
       const data = (await res.json()) as CheckoutResponse;
       if (!res.ok || !data.transactionId || !data.clientToken) {
-        setError(data.error ?? "Could not start checkout.");
+        // 5xx errors (e.g. Paddle onboarding incomplete) get a friendly message
+        const msg = res.status >= 500
+          ? CHECKOUT_SERVER_ERROR_MSG
+          : (data.error ?? "Could not start checkout.");
+        setError(msg);
         setLoading(false);
         return;
       }
@@ -231,7 +238,7 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
               <p className="mt-1 text-xs text-rose-600/80 dark:text-rose-400/70">
                 Your PRO access continues until{" "}
                 {untilLabel ?? "the end of your billing period"}. No future charges.
-                Current period is non-refundable — for refund requests email{" "}
+                Current period is non-refundable. For refund requests email{" "}
                 <a href="mailto:support@banterbird.app" className="underline">
                   support@banterbird.app
                 </a>.
@@ -294,7 +301,7 @@ export function ProSubscribePanel({ isPro, proUntil }: Props) {
       >
         {loading
           ? <><Loader2 className="h-4 w-4 animate-spin" />Opening checkout…</>
-          : `Subscribe — $${priceUsd}/mo`}
+          : `Subscribe $${priceUsd}/mo`}
       </button>
 
       {error && (

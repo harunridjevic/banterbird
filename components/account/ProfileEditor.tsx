@@ -298,10 +298,10 @@ export function ProfileEditor({
                 <label className="block text-xs font-semibold text-navy-700 dark:text-navy-300">Email</label>
                 <div className="flex items-center gap-2 rounded-xl border border-navy-200/60 bg-navy-100/60 px-3 py-2.5 dark:border-white/10 dark:bg-navy-800/50">
                   <Mail className="h-4 w-4 shrink-0 text-navy-400 dark:text-navy-500" />
-                  <span className="flex-1 truncate text-sm text-navy-700 dark:text-navy-300">{currentEmail ?? "—"}</span>
+                  <span className="flex-1 truncate text-sm text-navy-700 dark:text-navy-300">{currentEmail ?? "n/a"}</span>
                   <Lock className="h-3.5 w-3.5 shrink-0 text-navy-400 dark:text-navy-500" />
                 </div>
-                <p className="text-[11px] text-navy-400 dark:text-navy-500">Managed by Google — change it in your Google account.</p>
+                <p className="text-[11px] text-navy-400 dark:text-navy-500">Managed by Google. Change it in your Google account.</p>
               </div>
             ) : (
               <div className="space-y-1.5">

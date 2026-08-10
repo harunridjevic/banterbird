@@ -431,11 +431,9 @@ export function ChatRoom({ roomId }: Props) {
               typingHide.current = null;
             }
             setPeerTyping(false);
-            // Wait for the typing bubble's spring exit animation to finish
-            // (~180 ms) before inserting the message. Without this delay the
-            // message arrives while the bubble is still animating out, causing
-            // both to be in the DOM simultaneously — which shifts the scroll
-            // position down then snaps it back up as the bubble disappears.
+            // Wait for the typing bubble's exit animation to fully complete
+            // before inserting the message. 500 ms clears the spring exit on
+            // mobile so the two states are never visible simultaneously.
             window.setTimeout(() => {
               setMessages((prev) => {
                 if (prev.some((m) => m.id === row.id)) return prev;
@@ -463,7 +461,7 @@ export function ChatRoom({ roomId }: Props) {
                   } as MessageRow,
                 ];
               });
-            }, 180);
+            }, 500);
             return;
           }
           setMessages((prev) => {

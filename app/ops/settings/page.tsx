@@ -566,7 +566,7 @@ export default function OpsBotSettingsPage() {
             </label>
             <div className="mt-4">
               <SliderField
-                label="Bot / anonymous gender — female %"
+                label="Bot / anonymous gender: female %"
                 hint={`${botSettings.botFemaleWeight}% female · ${100 - botSettings.botFemaleWeight}% male. Applied to hidden-gender queues and AI bot rooms.`}
                 value={botSettings.botFemaleWeight}
                 min={0}

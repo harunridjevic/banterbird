@@ -62,7 +62,7 @@ export default async function TermsPage() {
         </Link>
         .
       </p>
-      <h2>BanterBird PRO — paid subscriptions</h2>
+      <h2>BanterBird PRO: paid subscriptions</h2>
       <p>
         BanterBird offers an optional paid subscription called BanterBird PRO. By subscribing you
         agree to the following:

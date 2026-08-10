@@ -34,7 +34,7 @@ const FEATURES = [
   {
     icon: <ImageIcon className="h-5 w-5" />,
     title: "Unlimited image sending",
-    desc: "Send as many images as you want — free users are limited to 1 image per day.",
+    desc: "Send as many images as you want. Free users are limited to 1 image per day.",
   },
   {
     icon: <Sliders className="h-5 w-5" />,
@@ -44,7 +44,7 @@ const FEATURES = [
   {
     icon: <Zap className="h-5 w-5" />,
     title: "No ads, ever",
-    desc: "Browse and chat completely ad-free — no banners, no video ads.",
+    desc: "Browse and chat completely ad-free. No banners, no video ads.",
   },
   {
     icon: <Crown className="h-5 w-5" />,
@@ -126,6 +126,9 @@ export function UpgradeModal({ open, onClose }: Props) {
     }).catch(() => undefined);
   };
 
+  const CHECKOUT_SERVER_ERROR_MSG =
+    "There was an error starting checkout. This has been registered and you can expect an email from us regarding this.";
+
   const startCheckout = async () => {
     setLoading(true);
     setError(null);
@@ -141,9 +144,11 @@ export function UpgradeModal({ open, onClose }: Props) {
       };
 
       if (!res.ok || !data.transactionId || !data.clientToken) {
-        const msg = data.error ?? "Could not start checkout.";
+        const rawMsg = data.error ?? "Could not start checkout.";
+        // 5xx errors (e.g. Paddle onboarding incomplete) get a friendly message
+        const msg = res.status >= 500 ? CHECKOUT_SERVER_ERROR_MSG : rawMsg;
         setError(msg);
-        logCheckoutError(msg, { httpStatus: res.status });
+        logCheckoutError(rawMsg, { httpStatus: res.status });
         setLoading(false);
         return;
       }
@@ -249,8 +254,8 @@ export function UpgradeModal({ open, onClose }: Props) {
               </div>
               <p className="mt-3 text-sm text-navy-500 dark:text-navy-400">
                 BanterBird is free because of ads. Upgrade to PRO to remove them and unlock
-                unlimited image sending, unlimited gender matching, and an exclusive badge — for
-                just ${priceUsd}/month.
+                unlimited image sending, unlimited gender matching, and an exclusive badge. Just
+                ${priceUsd}/month.
               </p>
             </div>
 
@@ -308,7 +313,7 @@ export function UpgradeModal({ open, onClose }: Props) {
                     ) : (
                       <>
                         <Crown className="h-4 w-4" strokeWidth={2.5} />
-                        Get PRO — ${priceUsd}/mo
+                        Get PRO ${priceUsd}/mo
                       </>
                     )}
                   </button>

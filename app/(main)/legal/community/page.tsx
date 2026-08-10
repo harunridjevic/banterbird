@@ -27,7 +27,7 @@ export default function CommunityPage() {
     <LegalPageShell title="Community Guidelines" updated="July 3, 2026">
       <p>BanterBird works best when everyone feels welcome and respected. Please follow these guidelines.</p>
       <h2>Be kind</h2>
-      <p>Treat others with respect. Disagreements happen — stay civil or skip the chat.</p>
+      <p>Treat others with respect. Disagreements happen. Stay civil or skip the chat.</p>
       <h2>No harassment</h2>
       <p>
         Bullying, hate speech, unwanted advances, and targeted abuse are not allowed. Use the report
@@ -53,7 +53,7 @@ export default function CommunityPage() {
       <p>Repeated unsolicited messages, scam attempts, and bot-like behavior may result in restrictions.</p>
       <h2>Stay safe</h2>
       <ul>
-        <li>Leave any conversation that makes you feel uncomfortable — it is always okay to skip.</li>
+        <li>Leave any conversation that makes you feel uncomfortable. It is always okay to skip.</li>
         <li>Never share passwords or financial details with anyone.</li>
         <li>Report behavior that seems threatening, abusive, or illegal.</li>
         <li>Block users when you do not want to interact with them again.</li>

@@ -13,11 +13,11 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "BanterBird — Anonymous Chat with People Around the World",
+    default: "BanterBird: Anonymous Chat with People Around the World",
     template: "%s · BanterBird",
   },
   description:
-    "BanterBird is a free anonymous chat platform for people 16 and older. Meet someone new and start a real conversation — no signup, no download required.",
+    "BanterBird is a free anonymous chat platform for people 16 and older. Meet someone new and start a real conversation. No signup, no download required.",
   keywords: [
     "banterbird",
     "banterbird.app",
@@ -61,9 +61,9 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "https://banterbird.app",
-    title: "BanterBird — Anonymous Chat with People Around the World",
+    title: "BanterBird: Anonymous Chat with People Around the World",
     description:
-      "Meet someone new and start a conversation. BanterBird is a free anonymous chat platform — no signup needed.",
+      "Meet someone new and start a conversation. BanterBird is a free anonymous chat platform. No signup needed.",
     siteName: "BanterBird",
     images: [
       {
@@ -76,9 +76,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "BanterBird — Anonymous Chat with People Around the World",
+    title: "BanterBird: Anonymous Chat with People Around the World",
     description:
-      "Meet someone new and start a conversation. BanterBird is a free anonymous chat platform — no signup needed.",
+      "Meet someone new and start a conversation. BanterBird is a free anonymous chat platform. No signup needed.",
     images: ["/logo_search.png"],
     creator: "@banterbird",
   },
@@ -146,7 +146,7 @@ export default async function RootLayout({
         url: baseUrl,
         name: "BanterBird",
         description:
-          "BanterBird is a free anonymous chat platform at banterbird.app — meet someone new and start a real conversation, no registration required.",
+          "BanterBird is a free anonymous chat platform at banterbird.app. Meet someone new and start a real conversation, no registration required.",
         publisher: {
           "@id": `${baseUrl}/#organization`,
         },
@@ -187,7 +187,7 @@ export default async function RootLayout({
           priceCurrency: "USD",
         },
         description:
-          "Free anonymous chat on BanterBird (banterbird.app) — instant 1-on-1 conversations with people around the world, no signup required.",
+          "Free anonymous chat on BanterBird (banterbird.app). Instant 1-on-1 conversations with people around the world, no signup required.",
         featureList: [
           "Anonymous chat",
           "Random matching",
@@ -205,7 +205,7 @@ export default async function RootLayout({
             name: "What is BanterBird?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "BanterBird (banterbird.app) is a free anonymous chat platform for instant 1-on-1 conversations with people around the world — no signup required.",
+              text: "BanterBird (banterbird.app) is a free anonymous chat platform for instant 1-on-1 conversations with people around the world. No signup required.",
             },
           },
           {
@@ -237,7 +237,7 @@ export default async function RootLayout({
             name: "Is BanterBird the same as banterbird.com?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "No. This product is BanterBird at banterbird.app — a free anonymous chat platform. It is not affiliated with other sites using similar names.",
+              text: "No. This product is BanterBird at banterbird.app, a free anonymous chat platform. It is not affiliated with other sites using similar names.",
             },
           },
         ],
