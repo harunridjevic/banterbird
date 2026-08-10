@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, Settings, Shield, AlertTriangle, KeyRound, Users } from "lucide-react";
+import { BarChart3, Settings, Shield, AlertTriangle, KeyRound, Users, Video } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const cards = [
@@ -40,6 +40,12 @@ const cards = [
     title: "Error monitoring",
     description: "Server errors, failed API requests, and client exceptions for production debugging.",
     icon: AlertTriangle,
+  },
+  {
+    href: "/ops/video-generator",
+    title: "Reels / Video Generator",
+    description: "Build TikTok, Instagram Reels, and YouTube Shorts from fake BanterBird chat conversations. Export as MP4.",
+    icon: Video,
   },
 ] as const;
 
