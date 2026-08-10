@@ -756,7 +756,7 @@ export function MatchLobby() {
                         }
                         setWantsGender(option.value);
                       }}
-                      className={`relative rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                      className={`relative rounded-2xl border px-4 py-3 text-sm font-semibold transition ${option.value === "any" ? "col-span-2 sm:col-span-1" : ""} ${
                         wantsGender === option.value
                           ? "border-emerald-500/45 bg-emerald-500/10 text-emerald-900 shadow-sm dark:text-emerald-200"
                           : limitHit

@@ -431,10 +431,12 @@ export function ChatRoom({ roomId }: Props) {
               typingHide.current = null;
             }
             setPeerTyping(false);
-            // Defer the message insertion to the next frame so the typing
-            // bubble's exit transition starts rendering before the new message
-            // enters. Without this React batches both into one render.
-            requestAnimationFrame(() => {
+            // Wait for the typing bubble's spring exit animation to finish
+            // (~180 ms) before inserting the message. Without this delay the
+            // message arrives while the bubble is still animating out, causing
+            // both to be in the DOM simultaneously — which shifts the scroll
+            // position down then snaps it back up as the bubble disappears.
+            window.setTimeout(() => {
               setMessages((prev) => {
                 if (prev.some((m) => m.id === row.id)) return prev;
                 const optimisticIndex = prev.findIndex(
@@ -461,7 +463,7 @@ export function ChatRoom({ roomId }: Props) {
                   } as MessageRow,
                 ];
               });
-            });
+            }, 180);
             return;
           }
           setMessages((prev) => {
