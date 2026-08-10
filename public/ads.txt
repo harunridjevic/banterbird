@@ -1,1 +1,6 @@
+# Authorized Digital Sellers (ads.txt)
+# https://iabtechlab.com/ads-txt/
+
+# Monetag (publisher ID: pub-11540658)
+# All Monetag ad formats (Vignette, IPP, Push, Multitag) use this single DIRECT entry.
 monetag.com, pub-11540658, DIRECT

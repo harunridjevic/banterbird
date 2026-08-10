@@ -199,7 +199,7 @@ export function ChatComposer({ disabled, onSend, onSendImage, onTypingChange, on
           disabled={disabled || !!imageFile}
           placeholder={imageFile ? "Image ready to send…" : "Say something nice…"}
           enterKeyHint="send"
-          className="max-h-32 min-h-[44px] flex-1 resize-none rounded-2xl border border-navy-200/80 bg-white/80 px-4 py-3 text-[16px] text-navy-950 outline-none ring-navy-900/10 placeholder:text-navy-400 focus:ring-2 disabled:opacity-60 dark:border-white/10 dark:bg-navy-950/60 dark:text-navy-50 dark:placeholder:text-navy-500"
+          className="max-h-32 min-h-[44px] flex-1 resize-none overflow-y-auto rounded-2xl border border-navy-200/80 bg-white/80 px-4 py-3 text-[16px] text-navy-950 outline-none ring-navy-900/10 placeholder:text-navy-400 focus:ring-2 disabled:opacity-60 dark:border-white/10 dark:bg-navy-950/60 dark:text-navy-50 dark:placeholder:text-navy-500"
           value={value}
           onChange={(e) => handleChange(e.target.value)}
           onFocus={() => onFocus?.()}

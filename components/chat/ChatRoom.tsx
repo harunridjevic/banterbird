@@ -421,6 +421,15 @@ export function ChatRoom({ roomId }: Props) {
         },
         (payload) => {
           const row = payload.new as MessageRow;
+          // If this message is from the peer, immediately clear the typing
+          // indicator so the bubble disappears before the message appears.
+          if (row.user_id && row.user_id !== selfIdRef.current) {
+            if (typingHide.current) {
+              clearTimeout(typingHide.current);
+              typingHide.current = null;
+            }
+            setPeerTyping(false);
+          }
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) return prev;
             // Replace optimistic (temp-) or local-injected (local-sys-) messages
@@ -660,6 +669,15 @@ export function ChatRoom({ roomId }: Props) {
     },
     [endRoomAndGoMatch, peerId, isAiRoom],
   );
+
+  // Listen for the logo click fired from Logo.tsx when the user is on a chat
+  // page. We must go through leaveManually so the room is ended server-side
+  // and the vignette skip-counter sessionStorage flags are written correctly.
+  useEffect(() => {
+    const handler = () => void leaveManually(true);
+    window.addEventListener("banterbird:logo-leave", handler);
+    return () => window.removeEventListener("banterbird:logo-leave", handler);
+  }, [leaveManually]);
 
   const leaveForInactivity = useCallback(async () => {
     recordInactivitySkip();

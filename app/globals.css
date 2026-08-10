@@ -96,6 +96,23 @@ body {
   .scroll-hide.is-scrolling {
     scrollbar-width: thin !important;
   }
+
+  /* Suppress the ghost scrollbar that appears on the page edge when the
+     software keyboard opens and briefly changes the visual viewport height.
+     The chat layout uses overflow-hidden at the root so no real content
+     scrolls there anyway. */
+  html,
+  body {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    overflow: hidden !important;
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
 }
 
 /* Monetag IPP: never expand document layout (avoids brief site scrollbar) */

@@ -8,7 +8,7 @@
  *  - If the vignette script fails, continue matchmaking normally.
  */
 
-const SKIPS_PER_VIGNETTE = 3;
+const SKIPS_PER_VIGNETTE = 4;
 const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 let skipCount = 0;

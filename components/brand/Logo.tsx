@@ -49,9 +49,34 @@ export function Logo({
   const pathname = usePathname();
   const onMatchPage = pathname === "/" || pathname === "/match" || pathname.startsWith("/match/");
 
+  const onChatPage = pathname.startsWith("/chat/");
+
   const startMatching = () => {
     window.dispatchEvent(new CustomEvent("banterbird:start-matching"));
   };
+
+  // When on a chat page, clicking the logo must go through the proper leave
+  // flow so the room is ended server-side and the vignette counter is not
+  // corrupted. We fire a custom event that ChatRoom listens for; ChatRoom
+  // calls endRoomAndGoMatch which sets the correct sessionStorage flags before
+  // router.replace("/").
+  const handleChatPageClick = () => {
+    window.dispatchEvent(new CustomEvent("banterbird:logo-leave"));
+  };
+
+  if (onChatPage) {
+    return (
+      <button
+        type="button"
+        onClick={handleChatPageClick}
+        className={`group inline-flex flex-col items-center gap-1 ${className}`}
+        aria-label="Leave chat and return to BanterBird"
+      >
+        <LogoImage isDark={isDark} priority={priority} />
+        {!showWordmark ? <span className="sr-only">BanterBird</span> : null}
+      </button>
+    );
+  }
 
   if (onMatchPage) {
     return (
