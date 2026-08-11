@@ -209,10 +209,11 @@ function canvasScrubFrames(
             rvfc.requestVideoFrameCallback(onFrame);
           } else {
             // rAF fallback — throttle to TARGET_FPS
+            const vid = video as HTMLVideoElement;
             let lastFrame = -1;
             const loop = () => {
-              if (video.ended || video.paused) return;
-              const f = Math.floor(video.currentTime * TARGET_FPS);
+              if (vid.ended || vid.paused) return;
+              const f = Math.floor(vid.currentTime * TARGET_FPS);
               if (f > lastFrame) { frames.push(extractFrame()); lastFrame = f; }
               requestAnimationFrame(loop);
             };
