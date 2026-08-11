@@ -28,7 +28,7 @@ export function CTAScreen({
   const outerOpacity = isExportMode ? exportOpacity : (visible ? 1 : 0);
   const outerTransition = instantTransitions || isExportMode
     ? T0
-    : { type: "tween" as const, duration: 0.55 * s, ease: "easeInOut" };
+    : { type: "tween" as const, duration: 0.55 * s, ease: "easeInOut" as const };
 
   // Inner elements: when in export mode we drive them via exportOpacity too,
   // just with a small offset so they appear to stagger in.
