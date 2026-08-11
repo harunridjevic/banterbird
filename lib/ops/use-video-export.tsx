@@ -383,14 +383,12 @@ export function useVideoExport(): UseVideoExportReturn {
         getDisplayMedia(opts?: object): Promise<MediaStream>;
       }).getDisplayMedia({
         video: {
-          // @ts-expect-error — preferCurrentTab not in lib.dom.d.ts yet
           preferCurrentTab: true,
           frameRate: TARGET_FPS,
           width:  { ideal: window.screen.width },
           height: { ideal: window.screen.height },
         },
         audio: false,
-        // @ts-expect-error
         preferCurrentTab:    true,
         selfBrowserSurface:  "include",
         systemAudio:         "exclude",
