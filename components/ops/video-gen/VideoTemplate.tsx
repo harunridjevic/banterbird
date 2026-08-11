@@ -43,6 +43,30 @@ export function VideoTemplate({
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden" style={{ background: "#0c121c" }}>
 
+      {/* ── Dynamic background — shifts when choices active ── */}
+      <motion.div
+        className="pointer-events-none absolute inset-0"
+        animate={instantTransitions ? {} : {
+          opacity: choicesVisible ? 1 : 0,
+        }}
+        transition={instantTransitions ? { duration: 0 } : { type: "tween", duration: 0.8 * s, ease: "easeInOut" }}
+        style={{
+          background: "linear-gradient(180deg, #0a0f1e 0%, #0c121c 40%, #080d1a 100%)",
+        }}
+      />
+
+      {/* Subtle violet ambient top glow */}
+      <motion.div
+        className="pointer-events-none absolute inset-x-0 top-0 h-40"
+        animate={instantTransitions ? {} : {
+          opacity: choicesVisible ? 0.35 : 0.1,
+        }}
+        transition={instantTransitions ? { duration: 0 } : { type: "tween", duration: 1 * s, ease: "easeInOut" }}
+        style={{
+          background: "radial-gradient(ellipse 80% 100% at 50% 0%, rgba(124,58,237,0.25) 0%, transparent 100%)",
+        }}
+      />
+
       {/* ── Status bar ── */}
       <div className="flex shrink-0 items-center justify-between px-6 pt-3 pb-1">
         <span className="text-[11px] font-semibold tabular-nums text-[#a8b5cc]">9:41</span>
@@ -133,7 +157,7 @@ export function VideoTemplate({
 
                   {msg.text ? (
                     <motion.div
-                      className={`rounded-3xl px-4 py-2.5 text-[15px] leading-snug ${isMe ? "rounded-br-md text-white" : "rounded-bl-md text-[#e8ecf2]"}`}
+                      className={`relative rounded-3xl px-4 py-2.5 text-[15px] leading-snug ${isMe ? "rounded-br-md text-white" : "rounded-bl-md text-[#e8ecf2]"}`}
                       style={{
                         background: isMe
                           ? "linear-gradient(135deg, #1e3a5f 0%, #1a4a7a 100%)"
@@ -142,9 +166,22 @@ export function VideoTemplate({
                           ? "0 4px 16px rgba(30,58,95,0.55), 0 0 0 1px rgba(100,149,237,0.12)"
                           : "0 4px 12px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)",
                       }}
-                      whileHover={instantTransitions ? {} : { scale: 1.01 }}
                     >
-                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                      {/* Brief glow on appear */}
+                      {!instantTransitions && (
+                        <motion.div
+                          className="pointer-events-none absolute inset-0 rounded-3xl"
+                          initial={{ opacity: 0.6 }}
+                          animate={{ opacity: 0 }}
+                          transition={{ duration: 0.7 * s, ease: "easeOut" }}
+                          style={{
+                            background: isMe
+                              ? "rgba(100,149,237,0.2)"
+                              : "rgba(167,139,250,0.12)",
+                          }}
+                        />
+                      )}
+                      <p className="relative whitespace-pre-wrap break-words">{msg.text}</p>
                     </motion.div>
                   ) : null}
                 </div>

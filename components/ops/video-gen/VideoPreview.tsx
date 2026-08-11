@@ -1,4 +1,5 @@
 "use client";
+"use client";
 
 /**
  * VideoPreview
@@ -25,6 +26,8 @@ import { buildTimeline } from "@/lib/ops/video-generator-types";
 import { VideoTemplate } from "./VideoTemplate";
 import { ChoicesOverlay, type ChoicePhase } from "./ChoicesOverlay";
 import { CTAScreen } from "./CTAScreen";
+import { VFXLayer } from "./VFXLayer";
+import { useSFX } from "@/lib/ops/use-sfx";
 import type { ChatMessage } from "@/lib/ops/video-generator-types";
 
 export interface VideoPreviewHandle {
@@ -108,6 +111,9 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
 
     // CTA visible
     const ctaVisible = elapsedMs >= timeline.ctaAppearTime;
+
+    // Play SFX during live preview (not during export — slowFactor > 1)
+    useSFX(script, elapsedMs, isPlaying && slowFactor === 1, choicePhase);
 
     // During export (slowFactor > 1), compute CTA opacity directly from
     // elapsed time so html2canvas captures the correct fade-in value
@@ -254,6 +260,15 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           visibleMessages={allMessages}
           strangerTyping={strangerTyping}
           choicesVisible={choicePhase !== "hidden" && choicePhase !== "exit"}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
+        />
+
+        <VFXLayer
+          elapsedMs={elapsedMs}
+          timeline={timeline}
+          choicePhase={choicePhase}
+          messageCount={allMessages.length}
           instantTransitions={instantTransitions}
           slowFactor={slowFactor}
         />

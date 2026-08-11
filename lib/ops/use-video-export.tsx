@@ -1,4 +1,5 @@
 "use client";
+"use client";
 
 /**
  * useVideoExport — off-screen render + html2canvas-pro
@@ -35,6 +36,7 @@ import type { Root } from "react-dom/client";
 import type { VideoScript } from "./video-generator-types";
 import { buildTimeline } from "./video-generator-types";
 import { VideoPreview } from "@/components/ops/video-gen/VideoPreview";
+import { renderSFXBuffer, type SFXEvent } from "./sfx";
 
 export type ExportStatus =
   | "idle"
@@ -218,28 +220,32 @@ async function encodeWithWebCodecs(
   fps:        number,
   width:      number,
   height:     number,
+  audioPcm:   Float32Array,
+  sampleRate: number,
   onProgress: (p: number) => void,
 ): Promise<Blob> {
   const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
 
+  const hasAudio = audioPcm.length > 0;
   const target = new ArrayBufferTarget();
   const muxer  = new Muxer({
     target,
     video: { codec: "avc", width, height, frameRate: fps },
+    ...(hasAudio ? { audio: { codec: "aac", numberOfChannels: 1, sampleRate } } : {}),
     fastStart: "in-memory",
     firstTimestampBehavior: "strict",
   });
 
-  const chunks: EncodedChunkWithMeta[] = [];
+  const videoChunks: EncodedChunkWithMeta[] = [];
   let encErr: Error | null = null;
 
   const encoder = new VideoEncoder({
-    output: (chunk, meta) => chunks.push({ chunk, meta }),
+    output: (chunk, meta) => videoChunks.push({ chunk, meta }),
     error:  (e) => { encErr = e; },
   });
 
   encoder.configure({
-    codec:       "avc1.640032", // H.264 High Profile 5.0
+    codec:       "avc1.640032",
     width, height,
     bitrate:     8_000_000,
     framerate:   fps,
@@ -248,16 +254,13 @@ async function encodeWithWebCodecs(
 
   for (let i = 0; i < frames.length; i++) {
     if (encErr) throw encErr;
-
     const timestamp = Math.round((i / fps) * 1_000_000);
     const duration  = Math.round((1 / fps) * 1_000_000);
-
     const oc = new OffscreenCanvas(width, height);
     oc.getContext("2d")!.putImageData(frames[i], 0, 0);
     const vf = new VideoFrame(oc, { timestamp, duration });
     encoder.encode(vf, { keyFrame: i === 0 || i % (fps * 2) === 0 });
     vf.close();
-
     if (i % 5 === 4) await sleep(0);
     onProgress((i + 1) / frames.length);
   }
@@ -266,9 +269,53 @@ async function encodeWithWebCodecs(
   if (encErr) throw encErr;
   encoder.close();
 
-  for (const { chunk, meta } of chunks) muxer.addVideoChunk(chunk, meta);
-  muxer.finalize();
+  for (const { chunk, meta } of videoChunks) muxer.addVideoChunk(chunk, meta);
 
+  // Mux audio — encode PCM Float32 as raw AAC chunks via AudioEncoder
+  if (hasAudio && typeof AudioEncoder !== "undefined") {
+    const AUDIO_CHUNK = 1024; // samples per AAC frame
+    const audioChunks: { chunk: EncodedAudioChunk; meta?: EncodedAudioChunkMetadata }[] = [];
+    let audioErr: Error | null = null;
+
+    const audioEncoder = new AudioEncoder({
+      output: (chunk, meta) => audioChunks.push({ chunk, meta }),
+      error:  (e) => { audioErr = e; },
+    });
+
+    audioEncoder.configure({
+      codec:            "mp4a.40.2", // AAC-LC
+      sampleRate,
+      numberOfChannels: 1,
+      bitrate:          128_000,
+    });
+
+    // Feed PCM in chunks
+    for (let offset = 0; offset < audioPcm.length; offset += AUDIO_CHUNK) {
+      if (audioErr) break;
+      const slice = audioPcm.slice(offset, offset + AUDIO_CHUNK);
+      const timestamp = Math.round((offset / sampleRate) * 1_000_000);
+      const buf = new AudioData({
+        format:           "f32",
+        sampleRate,
+        numberOfFrames:   slice.length,
+        numberOfChannels: 1,
+        timestamp,
+        data:             slice,
+      });
+      audioEncoder.encode(buf);
+      buf.close();
+    }
+
+    await audioEncoder.flush();
+    if (!audioErr) {
+      audioEncoder.close();
+      for (const { chunk, meta } of audioChunks) {
+        muxer.addAudioChunk(chunk, meta);
+      }
+    }
+  }
+
+  muxer.finalize();
   return new Blob([target.buffer], { type: "video/mp4" });
 }
 
@@ -366,11 +413,54 @@ export function useVideoExport(): UseVideoExportReturn {
         return;
       }
 
-      // ── Phase 2: Encode ───────────────────────────────────────────────
+      // ── Phase 2: Render audio + encode ───────────────────────────────
       setStatus("encoding");
 
       const w = toEven(OUT_W);
       const h = toEven(OUT_H);
+
+      // Build SFX event list from timeline
+      const sfxEvents: SFXEvent[] = [
+        // Typing sounds before each stranger message (900ms typing window)
+        ...script.strangerMessages.flatMap((_, i) => {
+          const msgTime = timeline.strangerMessageTimes[i];
+          const typingStart = msgTime - 900;
+          const typingSounds: SFXEvent[] = [];
+          // Add typing clicks every 150ms during the typing period
+          for (let offset = 0; offset < 900; offset += 150) {
+            typingSounds.push({
+              timeMs: typingStart + offset,
+              sfx: "typing" as const,
+            });
+          }
+          return typingSounds;
+        }),
+        // Each stranger message
+        ...script.strangerMessages.map((_, i) => ({
+          timeMs: timeline.strangerMessageTimes[i],
+          sfx: "messagePop" as const,
+        })),
+        // Each response message (user's own)
+        ...script.responseMessages.map((_, i) => ({
+          timeMs: timeline.responseMessageTimes[i],
+          sfx: "messageWhoosh" as const,
+        })),
+        // Choices appear
+        { timeMs: timeline.choicesAppearTime,      sfx: "choicesWhoosh" as const },
+        // Pulse A
+        { timeMs: timeline.aHighlightTime,          sfx: "pulseHit"      as const },
+        // Pulse B
+        { timeMs: timeline.bHighlightTime,          sfx: "pulseHit"      as const },
+        // Winner reveal
+        { timeMs: timeline.winnerRevealTime,        sfx: "winnerReveal"  as const },
+        // Confetti burst 200ms after winner
+        { timeMs: timeline.winnerRevealTime + 200,  sfx: "confettiBurst" as const },
+        // CTA appear
+        { timeMs: timeline.ctaAppearTime,           sfx: "ctaRise"       as const },
+      ].filter(e => e.timeMs >= 0 && e.timeMs < totalMs);
+
+      const AUDIO_SAMPLE_RATE = 44100;
+      const audioPcm = await renderSFXBuffer(sfxEvents, totalMs, AUDIO_SAMPLE_RATE);
 
       const hasWebCodecs =
         typeof VideoEncoder    !== "undefined" &&
@@ -381,7 +471,7 @@ export function useVideoExport(): UseVideoExportReturn {
       let ext: string;
 
       if (hasWebCodecs) {
-        blob = await encodeWithWebCodecs(frames, TARGET_FPS, w, h,
+        blob = await encodeWithWebCodecs(frames, TARGET_FPS, w, h, audioPcm, AUDIO_SAMPLE_RATE,
           (p) => setProgress(0.7 + p * 0.3));
         ext = "mp4";
       } else {
