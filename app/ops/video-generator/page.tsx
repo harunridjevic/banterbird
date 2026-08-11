@@ -126,8 +126,10 @@ function ExportStatus({
   if (status === "idle") return null;
 
   const label =
-    status === "capturing"
-      ? "Capturing frames…"
+    status === "requesting"
+      ? "Waiting for screen share permission…"
+      : status === "capturing"
+      ? "Recording live preview…"
       : status === "encoding"
       ? "Encoding video…"
       : status === "done"
@@ -139,7 +141,7 @@ function ExportStatus({
   return (
     <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4">
       <div className="flex items-center gap-2 mb-2.5">
-        {status === "capturing" || status === "encoding" ? (
+        {status === "requesting" || status === "capturing" || status === "encoding" ? (
           <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
         ) : status === "done" ? (
           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -227,12 +229,19 @@ function PlaybackControls({
   );
 }
 
+// Fixed size of the preview during screen-capture recording.
+// Kept at a known size so the crop rect is always {x:0,y:0,w,h}.
+const EXPORT_PREVIEW_W = 400;
+const EXPORT_PREVIEW_H = Math.round(EXPORT_PREVIEW_W * (16 / 9)); // 711
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function VideoGeneratorPage() {
   const [template, setTemplate] = useState<VideoTemplate>(createDefaultTemplate);
   const previewRef = useRef<VideoPreviewHandle | null>(null);
   const frameElRef = useRef<HTMLDivElement | null>(null);
+  // Ref for the inner 9:16 content box — this is what we crop to during export
+  const innerFrameRef = useRef<HTMLDivElement | null>(null);
 
   // Playback state — kept in React state so controls always re-render correctly
   const [isPlaying, setIsPlaying] = useState(false);
@@ -306,30 +315,35 @@ export default function VideoGeneratorPage() {
 
   function handleExport() {
     if (!frameElRef.current) return;
+
+    // Pause + reset to t=0 first
     previewRef.current?.pause();
     setIsPlaying(false);
     setProgress(0);
     setElapsedMs(0);
-    // Reset preview to t=0 then startExport triggers play via onReady
     setTemplate((t) => ({ ...t }));
-    setTimeout(() => {
-      startExport({
-        frameEl: frameElRef.current!,
-        script: template.script,
-        filename: template.name,
-        onReady: () => {
+
+    // startExport requests screen-capture permission, starts recording,
+    // then calls onReady — we just start playback, no fullscreen needed.
+    void startExport({
+      frameEl: innerFrameRef.current ?? frameElRef.current,
+      script: template.script,
+      filename: template.name,
+      onReady: () => {
+        // Wait 400ms for the Chrome "tab is being recorded" bar to appear
+        // and settle — then read the element's actual position.
+        setTimeout(() => {
           previewRef.current?.play();
           setIsPlaying(true);
-        },
-        onPlaybackEnd: () => {},
-      });
-    }, 100);
+        }, 400);
+      },
+    });
   }
 
   const isExportingRef = useRef(false);
-  const isExporting = exportStatus === "capturing" || exportStatus === "encoding";
+  const isExporting = exportStatus === "capturing" || exportStatus === "encoding" || exportStatus === "requesting";
 
-  // Keep ref in sync so onEnd closure always reads the live value
+  // Keep ref in sync so the onEnd closure always reads the live value
   useEffect(() => {
     isExportingRef.current = exportStatus === "capturing";
   }, [exportStatus]);
@@ -454,36 +468,65 @@ export default function VideoGeneratorPage() {
 
                 {/* Outer aspect-ratio shell — scales to available width */}
                 <div className="relative w-full" style={{ aspectRatio: "9/16" }}>
+                  {/*
+                   * During recording the preview teleports to a fixed position
+                   * at the top-left of the viewport so the crop rect is always
+                   * {x:0, y:0} — no coordinate math needed.
+                   */}
+                  {exportStatus === "capturing" && (
+                    <div
+                      className="fixed inset-0 z-[9998] bg-black"
+                      aria-hidden
+                    />
+                  )}
                   <div
                     ref={frameElRef}
                     data-video-export-root
-                    className="absolute inset-0 overflow-hidden rounded-xl"
-                    style={{ background: "#0c121c" }}
+                    className="overflow-hidden rounded-xl"
+                    style={
+                      exportStatus === "capturing"
+                        ? {
+                            position: "fixed",
+                            bottom: 0,
+                            left: 0,
+                            width: EXPORT_PREVIEW_W,
+                            height: EXPORT_PREVIEW_H,
+                            zIndex: 9999,
+                            borderRadius: 0,
+                            background: "#0c121c",
+                          }
+                        : {
+                            position: "absolute",
+                            inset: 0,
+                            background: "#0c121c",
+                          }
+                    }
                   >
-                    <VideoPreview
-                      ref={setPreviewRef}
-                      script={template.script}
-                      onEnd={() => {
-                        setIsPlaying(false);
-                        setProgress(1);
-                        // Use ref — exportStatus in closure would be stale
-                        if (isExportingRef.current) {
-                          void finishCapture();
-                        }
-                      }}
-                    />
+                    <div ref={innerFrameRef} className="absolute inset-0">
+                      <VideoPreview
+                        ref={setPreviewRef}
+                        script={template.script}
+                        playbackRate={exportStatus === "capturing" ? 0.5 : 1}
+                        onEnd={() => {
+                          setIsPlaying(false);
+                          setProgress(1);
+                          if (isExportingRef.current) {
+                            finishCapture();
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Export overlay: dims preview while exporting */}
-                  {isExporting && (
-                    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/60">
+                  {/* Recording indicator — intentionally omitted during export */}
+
+                  {/* Encoding overlay */}
+                  {(exportStatus === "encoding" || exportStatus === "requesting") && (
+                    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/70">
                       <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
                       <p className="text-sm font-semibold text-white">
-                        {exportStatus === "capturing" ? "Recording…" : "Encoding…"}
+                        {exportStatus === "requesting" ? "Allow screen sharing…" : "Encoding…"}
                       </p>
-                      {exportStatus === "capturing" && (
-                        <p className="text-xs text-navy-400">Playing through at normal speed</p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -522,7 +565,9 @@ export default function VideoGeneratorPage() {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50 transition"
                 >
                   {isExporting ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Exporting…</>
+                    <><Loader2 className="h-4 w-4 animate-spin" />
+                      {exportStatus === "requesting" ? "Requesting…" : "Exporting…"}
+                    </>
                   ) : (
                     <><Download className="h-4 w-4" /> Export MP4</>
                   )}
@@ -535,9 +580,9 @@ export default function VideoGeneratorPage() {
                 />
 
                 <p className="mt-3 text-[11px] leading-relaxed text-navy-600">
-                  Records the live preview in real time at 30 fps, then encodes to
-                  MP4 (H.264 8 Mbps). Export takes as long as the video itself. Keep the
-                  browser tab visible during recording.
+                  Expands the preview fullscreen, records your screen at native
+                  quality, then crops and encodes to MP4 (H.264, 8 Mbps).
+                  Chrome will ask you to share this tab — just click Share.
                 </p>
               </div>
 

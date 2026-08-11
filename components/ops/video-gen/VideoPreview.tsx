@@ -46,10 +46,17 @@ interface Props {
   script: VideoScript;
   /** Called when playback reaches the end */
   onEnd?: () => void;
+  /**
+   * Speed multiplier for the internal clock. Default 1.0 (real time).
+   * Pass 0.5 during screen-capture export so the recording plays at half
+   * speed — the captured frames, when encoded at TARGET_FPS, will play
+   * back at normal speed.
+   */
+  playbackRate?: number;
 }
 
 export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
-  function VideoPreview({ script, onEnd }, ref) {
+  function VideoPreview({ script, onEnd, playbackRate = 1 }, ref) {
     const timeline = buildTimeline(script);
     const [elapsedMs, setElapsedMs] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -108,12 +115,15 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
 
     // ── Playback loop ─────────────────────────────────────────────────────
 
+    const playbackRateRef = useRef(playbackRate);
+    playbackRateRef.current = playbackRate;
+
     const tick = useCallback(
       (now: number) => {
         if (startWallRef.current === null) {
           startWallRef.current = now;
         }
-        const wall = now - startWallRef.current;
+        const wall = (now - startWallRef.current) * playbackRateRef.current;
         const next = startElapsedRef.current + wall;
 
         if (next >= timeline.totalDuration) {
