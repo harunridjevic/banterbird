@@ -76,10 +76,12 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
     const nextStrangerIdx = script.strangerMessages.findIndex(
       (_, i) => elapsedMs < timeline.strangerMessageTimes[i]
     );
+    const nextStrangerTime = timeline.strangerMessageTimes[nextStrangerIdx] ?? 0;
+    const typingStart = Math.max(0, nextStrangerTime - 900);
     const strangerTyping =
       nextStrangerIdx !== -1 &&
-      elapsedMs >= (timeline.strangerMessageTimes[nextStrangerIdx] ?? 0) - 900 &&
-      elapsedMs < (timeline.strangerMessageTimes[nextStrangerIdx] ?? 0);
+      elapsedMs >= typingStart &&
+      elapsedMs < nextStrangerTime;
 
     // Which response messages are visible
     const visibleResponse: ChatMessage[] = script.responseMessages.filter(
@@ -262,6 +264,7 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           choicesVisible={choicePhase !== "hidden" && choicePhase !== "exit"}
           instantTransitions={instantTransitions}
           slowFactor={slowFactor}
+          typingKey={`typing-${nextStrangerIdx}`}
         />
 
         <VFXLayer

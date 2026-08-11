@@ -200,16 +200,20 @@ export default function VideoGeneratorPage() {
     return () => clearTimeout(t);
   }, [template]);
 
-  // Poll handle → keep controls in sync
+  // Sync with handle using requestAnimationFrame for smooth updates
   useEffect(() => {
-    const id = setInterval(() => {
+    let rafId: number;
+    const update = () => {
       const h = previewRef.current;
-      if (!h) return;
-      setIsPlaying(h.isPlaying);
-      setProgress(h.progress);
-      setElapsedMs(h.elapsedMs);
-    }, 80);
-    return () => clearInterval(id);
+      if (h) {
+        setIsPlaying(h.isPlaying);
+        setProgress(h.progress);
+        setElapsedMs(h.elapsedMs);
+      }
+      rafId = requestAnimationFrame(update);
+    };
+    rafId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(rafId);
   }, []);
 
   const setPreviewRef = useCallback((h: VideoPreviewHandle | null) => {
@@ -223,13 +227,17 @@ export default function VideoGeneratorPage() {
     setTemplate((t) => ({ ...t, script: { ...t.script, ...patch } }));
   }
 
-  function handlePlay()    { previewRef.current?.play();  setIsPlaying(true);  }
-  function handlePause()   { previewRef.current?.pause(); setIsPlaying(false); }
+  function handlePlay()    {
+    previewRef.current?.play();
+  }
+  function handlePause()   {
+    previewRef.current?.pause();
+  }
   function handleRestart() {
     previewRef.current?.pause();
-    setIsPlaying(false); setProgress(0); setElapsedMs(0);
-    setTemplate((t) => ({ ...t }));
-    setTimeout(() => { previewRef.current?.play(); setIsPlaying(true); }, 50);
+    setTimeout(() => {
+      previewRef.current?.play();
+    }, 50);
   }
 
   function handleExport() {
@@ -332,30 +340,32 @@ export default function VideoGeneratorPage() {
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-navy-500">
                   Live preview · 9:16
                 </p>
-                <div className="relative w-full" style={{ aspectRatio: "9/16" }}>
-                  <div
-                    className="absolute inset-0 overflow-hidden rounded-xl"
-                    style={{ background: "#0c121c" }}
-                  >
-                    <VideoPreview
-                      ref={setPreviewRef}
-                      script={template.script}
-                      onEnd={() => { setIsPlaying(false); setProgress(1); }}
-                    />
-                  </div>
+                <div className="relative w-full" style={{ maxHeight: "100vh" }}>
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <div
+                      className="relative overflow-hidden rounded-xl"
+                      style={{ aspectRatio: "9/16", maxHeight: "100%", maxWidth: "100%", background: "#0c121c" }}
+                    >
+                      <VideoPreview
+                        ref={setPreviewRef}
+                        script={template.script}
+                        onEnd={() => { setIsPlaying(false); setProgress(1); }}
+                      />
 
-                  {/* Rendering overlay */}
-                  {isExporting && (
-                    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/75">
-                      <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
-                      <p className="text-sm font-semibold text-white">
-                        {exportStatus === "rendering" ? "Rendering…" : "Encoding…"}
-                      </p>
-                      <p className="text-xs text-navy-400">
-                        {Math.round(exportProgress * 100)}%
-                      </p>
+                      {/* Rendering overlay */}
+                      {isExporting && (
+                        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/75">
+                          <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+                          <p className="text-sm font-semibold text-white">
+                            {exportStatus === "rendering" ? "Rendering…" : "Encoding…"}
+                          </p>
+                          <p className="text-xs text-navy-400">
+                            {Math.round(exportProgress * 100)}%
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
 

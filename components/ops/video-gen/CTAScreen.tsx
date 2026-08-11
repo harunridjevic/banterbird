@@ -101,11 +101,11 @@ export function CTAScreen({
             stiffness: Math.max(60, 300 / s),
             damping: Math.max(8, 20 / s),
           }}
-          className="flex items-center justify-center rounded-[28px] px-5 py-4"
+          className="flex items-center justify-center rounded-3xl px-5 py-4"
           style={{
-            background: "linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(124,58,237,0.1) 100%)",
-            border: "1.5px solid rgba(167,139,250,0.5)",
-            boxShadow: "0 12px 40px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
+            background: "#1e1a3d",
+            border: "2px solid rgba(167,139,250,0.6)",
+            boxShadow: "0 12px 40px rgba(124,58,237,0.35)",
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}

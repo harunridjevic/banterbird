@@ -9,6 +9,7 @@ interface Props {
   choicesVisible?: boolean;
   instantTransitions?: boolean;
   slowFactor?: number;
+  typingKey?: string;
 }
 
 function TypingDots({ instant, slow }: { instant: boolean; slow: number }) {
@@ -37,6 +38,7 @@ export function VideoTemplate({
   choicesVisible = false,
   instantTransitions = false,
   slowFactor = 1,
+  typingKey = "typing",
 }: Props) {
   const s = slowFactor;
 
@@ -193,7 +195,7 @@ export function VideoTemplate({
           <AnimatePresence initial={false}>
             {strangerTyping && (
               <motion.div
-                key="typing"
+                key={typingKey}
                 initial={{ opacity: 0, y: 12, scale: 0.9, x: -16 }}
                 animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 8, transition: { duration: instantTransitions ? 0 : 0.15 * s } }}

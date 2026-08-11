@@ -421,13 +421,14 @@ export function useVideoExport(): UseVideoExportReturn {
 
       // Build SFX event list from timeline
       const sfxEvents: SFXEvent[] = [
-        // Typing sounds before each stranger message (900ms typing window)
+        // Typing sounds before each stranger message (up to 900ms typing window)
         ...script.strangerMessages.flatMap((_, i) => {
           const msgTime = timeline.strangerMessageTimes[i];
-          const typingStart = msgTime - 900;
+          const typingStart = Math.max(0, msgTime - 900);
+          const typingDuration = msgTime - typingStart;
           const typingSounds: SFXEvent[] = [];
           // Add typing clicks every 150ms during the typing period
-          for (let offset = 0; offset < 900; offset += 150) {
+          for (let offset = 0; offset < typingDuration; offset += 150) {
             typingSounds.push({
               timeMs: typingStart + offset,
               sfx: "typing" as const,
