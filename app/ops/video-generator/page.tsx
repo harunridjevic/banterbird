@@ -4,14 +4,6 @@
  * /ops/video-generator
  *
  * BanterBird Reels / TikTok / Shorts Video Generator
- *
- * Layout (two-column on desktop, stacked on mobile):
- *   Left  — Editor panel (script configuration)
- *   Right — 9:16 live preview + playback controls + export
- *
- * The preview is driven by the VideoPreview component via a ref handle.
- * Export is handled by useVideoExport which captures frames from the
- * rendered preview element and encodes them to MP4/WebM.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -40,16 +32,14 @@ import {
   type VideoTemplate,
 } from "@/lib/ops/video-generator-types";
 import { useVideoExport } from "@/lib/ops/use-video-export";
-// ─── Local storage persistence ────────────────────────────────────────────────
+
+// ─── Local storage ────────────────────────────────────────────────────────────
 
 const LS_KEY = "banterbird:ops:videoTemplate";
 
 function saveTemplate(t: VideoTemplate) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(t));
-  } catch {}
+  try { localStorage.setItem(LS_KEY, JSON.stringify(t)); } catch {}
 }
-
 function loadTemplate(): VideoTemplate {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -61,13 +51,11 @@ function loadTemplate(): VideoTemplate {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtMs(ms: number) {
-  const s = Math.floor(ms / 1000);
-  const frac = Math.floor((ms % 1000) / 100);
-  return `${s}.${frac}s`;
+  return `${Math.floor(ms / 1000)}.${Math.floor((ms % 1000) / 100)}s`;
 }
 
 function progressBarColor(status: string) {
-  if (status === "done") return "bg-emerald-500";
+  if (status === "done")  return "bg-emerald-500";
   if (status === "error") return "bg-rose-500";
   return "bg-violet-500";
 }
@@ -75,15 +63,9 @@ function progressBarColor(status: string) {
 // ─── Section accordion ────────────────────────────────────────────────────────
 
 function Section({
-  title,
-  badge,
-  children,
-  defaultOpen = true,
+  title, badge, children, defaultOpen = true,
 }: {
-  title: string;
-  badge?: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
+  title: string; badge?: string; children: React.ReactNode; defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -101,47 +83,34 @@ function Section({
             </span>
           )}
         </div>
-        {open ? (
-          <ChevronUp className="h-4 w-4 text-navy-500" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-navy-500" />
-        )}
+        {open
+          ? <ChevronUp className="h-4 w-4 text-navy-500" />
+          : <ChevronDown className="h-4 w-4 text-navy-500" />}
       </button>
       {open && <div className="border-t border-white/10 px-5 py-4">{children}</div>}
     </div>
   );
 }
 
-// ─── Progress / status bar ────────────────────────────────────────────────────
+// ─── Export status bar ────────────────────────────────────────────────────────
 
-function ExportStatus({
-  status,
-  progress,
-  errorMessage,
+function ExportStatusBar({
+  status, progress, errorMessage,
 }: {
-  status: string;
-  progress: number;
-  errorMessage: string | null;
+  status: string; progress: number; errorMessage: string | null;
 }) {
   if (status === "idle") return null;
 
   const label =
-    status === "requesting"
-      ? "Waiting for screen share permission…"
-      : status === "capturing"
-      ? "Recording live preview…"
-      : status === "encoding"
-      ? "Encoding video…"
-      : status === "done"
-      ? "Export complete — check your Downloads"
-      : status === "error"
-      ? errorMessage ?? "Export failed"
-      : "";
+    status === "rendering" ? "Rendering frames…" :
+    status === "encoding"  ? "Encoding video…" :
+    status === "done"      ? "Export complete — check your Downloads" :
+    status === "error"     ? (errorMessage ?? "Export failed") : "";
 
   return (
     <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4">
       <div className="flex items-center gap-2 mb-2.5">
-        {status === "requesting" || status === "capturing" || status === "encoding" ? (
+        {status === "rendering" || status === "encoding" ? (
           <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
         ) : status === "done" ? (
           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -163,28 +132,16 @@ function ExportStatus({
   );
 }
 
-// ─── Playback scrubber + controls ─────────────────────────────────────────────
+// ─── Playback controls ────────────────────────────────────────────────────────
 
 function PlaybackControls({
-  isPlaying,
-  progress,
-  elapsedMs,
-  totalMs,
-  onPlay,
-  onPause,
-  onRestart,
+  isPlaying, progress, elapsedMs, totalMs, onPlay, onPause, onRestart,
 }: {
-  isPlaying: boolean;
-  progress: number;
-  elapsedMs: number;
-  totalMs: number;
-  onPlay: () => void;
-  onPause: () => void;
-  onRestart: () => void;
+  isPlaying: boolean; progress: number; elapsedMs: number; totalMs: number;
+  onPlay: () => void; onPause: () => void; onRestart: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
-      {/* Scrubber */}
       <div className="flex items-center gap-3">
         <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-navy-500">
           {fmtMs(elapsedMs)}
@@ -199,70 +156,51 @@ function PlaybackControls({
           {fmtMs(totalMs)}
         </span>
       </div>
-
-      {/* Buttons */}
       <div className="flex items-center justify-center gap-3">
         <button
-          type="button"
-          onClick={onRestart}
+          type="button" onClick={onRestart}
           className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-navy-300 hover:bg-white/10 hover:text-white transition"
           aria-label="Restart preview"
         >
-          <RotateCcw className="h-4 w-4" />
-          Restart
+          <RotateCcw className="h-4 w-4" /> Restart
         </button>
-
         <button
-          type="button"
-          onClick={isPlaying ? onPause : onPlay}
+          type="button" onClick={isPlaying ? onPause : onPlay}
           className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-500 transition"
-          aria-label={isPlaying ? "Pause preview" : "Play preview"}
+          aria-label={isPlaying ? "Pause" : "Play"}
         >
-          {isPlaying ? (
-            <><Pause className="h-4 w-4" /> Pause</>
-          ) : (
-            <><Play className="h-4 w-4" /> Play</>
-          )}
+          {isPlaying
+            ? <><Pause className="h-4 w-4" /> Pause</>
+            : <><Play  className="h-4 w-4" /> Play</>}
         </button>
       </div>
     </div>
   );
 }
 
-// Fixed size of the preview during screen-capture recording.
-// Kept at a known size so the crop rect is always {x:0,y:0,w,h}.
-const EXPORT_PREVIEW_W = 400;
-const EXPORT_PREVIEW_H = Math.round(EXPORT_PREVIEW_W * (16 / 9)); // 711
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function VideoGeneratorPage() {
   const [template, setTemplate] = useState<VideoTemplate>(createDefaultTemplate);
   const previewRef = useRef<VideoPreviewHandle | null>(null);
-  const frameElRef = useRef<HTMLDivElement | null>(null);
-  // Ref for the inner 9:16 content box — this is what we crop to during export
-  const innerFrameRef = useRef<HTMLDivElement | null>(null);
 
-  // Playback state — kept in React state so controls always re-render correctly
   const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [progress,  setProgress]  = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
 
-  const { startExport, finishCapture, status: exportStatus, progress: exportProgress, errorMessage, canExport } =
+  const { startExport, status: exportStatus, progress: exportProgress, errorMessage, canExport } =
     useVideoExport();
 
-  // Load persisted template on mount
-  useEffect(() => {
-    setTemplate(loadTemplate());
-  }, []);
+  const isExporting = exportStatus === "rendering" || exportStatus === "encoding";
 
-  // Save to localStorage on every change (debounced)
+  // Persist
+  useEffect(() => { setTemplate(loadTemplate()); }, []);
   useEffect(() => {
     const t = setTimeout(() => saveTemplate(template), 400);
     return () => clearTimeout(t);
   }, [template]);
 
-  // Poll the handle at 80 ms to keep scrubber + button state in sync
+  // Poll handle → keep controls in sync
   useEffect(() => {
     const id = setInterval(() => {
       const h = previewRef.current;
@@ -274,86 +212,37 @@ export default function VideoGeneratorPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Stable ref callback
-  const setPreviewRef = useCallback((handle: VideoPreviewHandle | null) => {
-    previewRef.current = handle;
+  const setPreviewRef = useCallback((h: VideoPreviewHandle | null) => {
+    previewRef.current = h;
   }, []);
 
-  // Derived timeline stats
   const timeline = buildTimeline(template.script);
-  const totalMs = timeline.totalDuration;
+  const totalMs  = timeline.totalDuration;
 
   function updateScript(patch: Partial<VideoScript>) {
-    setTemplate((t) => ({
-      ...t,
-      script: { ...t.script, ...patch },
-    }));
+    setTemplate((t) => ({ ...t, script: { ...t.script, ...patch } }));
   }
 
-  function handlePlay() {
-    previewRef.current?.play();
-    setIsPlaying(true);
-  }
-
-  function handlePause() {
-    previewRef.current?.pause();
-    setIsPlaying(false);
-  }
-
+  function handlePlay()    { previewRef.current?.play();  setIsPlaying(true);  }
+  function handlePause()   { previewRef.current?.pause(); setIsPlaying(false); }
   function handleRestart() {
     previewRef.current?.pause();
-    setIsPlaying(false);
-    setProgress(0);
-    setElapsedMs(0);
-    // Force VideoPreview to reset by nudging template identity, then play
+    setIsPlaying(false); setProgress(0); setElapsedMs(0);
     setTemplate((t) => ({ ...t }));
-    setTimeout(() => {
-      previewRef.current?.play();
-      setIsPlaying(true);
-    }, 50);
+    setTimeout(() => { previewRef.current?.play(); setIsPlaying(true); }, 50);
   }
 
   function handleExport() {
-    if (!frameElRef.current) return;
-
-    // Pause + reset to t=0 first
-    previewRef.current?.pause();
-    setIsPlaying(false);
-    setProgress(0);
-    setElapsedMs(0);
-    setTemplate((t) => ({ ...t }));
-
-    // startExport requests screen-capture permission, starts recording,
-    // then calls onReady — we just start playback, no fullscreen needed.
-    void startExport({
-      frameEl: innerFrameRef.current ?? frameElRef.current,
-      script: template.script,
-      filename: template.name,
-      onReady: () => {
-        // Wait 400ms for the Chrome "tab is being recorded" bar to appear
-        // and settle — then read the element's actual position.
-        setTimeout(() => {
-          previewRef.current?.play();
-          setIsPlaying(true);
-        }, 400);
-      },
-    });
+    if (isExporting) return;
+    void startExport({ script: template.script, filename: template.name });
   }
-
-  const isExportingRef = useRef(false);
-  const isExporting = exportStatus === "capturing" || exportStatus === "encoding" || exportStatus === "requesting";
-
-  // Keep ref in sync so the onEnd closure always reads the live value
-  useEffect(() => {
-    isExportingRef.current = exportStatus === "capturing";
-  }, [exportStatus]);
 
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
       <div className="mx-auto max-w-7xl">
         <OpsBackLink />
 
-        {/* Page header */}
+        {/* Header */}
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -369,8 +258,6 @@ export default function VideoGeneratorPage() {
               Export as MP4.
             </p>
           </div>
-
-          {/* Template name */}
           <input
             type="text"
             value={template.name}
@@ -380,32 +267,22 @@ export default function VideoGeneratorPage() {
           />
         </div>
 
-        {/* Main layout */}
+        {/* Layout */}
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
 
-          {/* ── Left: Editor panel ── */}
+          {/* ── Left: editor ── */}
           <div className="flex flex-col gap-4">
-
-            {/* Timeline summary */}
             <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
               <Clock className="h-4 w-4 shrink-0 text-navy-500" />
               <span className="text-xs text-navy-400">
                 Total duration:{" "}
-                <strong className="font-semibold text-navy-200">
-                  {fmtMs(totalMs)}
-                </strong>
+                <strong className="font-semibold text-navy-200">{fmtMs(totalMs)}</strong>
               </span>
             </div>
 
-            {/* 1. Stranger messages */}
-            <Section
-              title="1 · Stranger messages"
-              badge={String(template.script.strangerMessages.length)}
-              defaultOpen
-            >
+            <Section title="1 · Stranger messages" badge={String(template.script.strangerMessages.length)} defaultOpen>
               <p className="mb-4 text-xs leading-relaxed text-navy-500">
-                The opening conversation from the anonymous stranger. Each message appears at
-                its configured delay from the video start. Use timing to build suspense.
+                The opening conversation. Each message appears at its delay from video start.
               </p>
               <MessageEditor
                 messages={template.script.strangerMessages}
@@ -414,11 +291,9 @@ export default function VideoGeneratorPage() {
               />
             </Section>
 
-            {/* 2. Choices */}
             <Section title="2 · Choice interaction" defaultOpen>
               <p className="mb-4 text-xs leading-relaxed text-navy-500">
-                Two options presented to the viewer. Both pulse in sequence before the winner
-                is revealed. Keep labels short and punchy — max ~30 chars each.
+                Two options that pulse before the winner is revealed.
               </p>
               <ChoicesEditor
                 config={template.script.choiceConfig}
@@ -426,15 +301,9 @@ export default function VideoGeneratorPage() {
               />
             </Section>
 
-            {/* 3. Response messages */}
-            <Section
-              title="3 · User response"
-              badge={String(template.script.responseMessages.length)}
-              defaultOpen
-            >
+            <Section title="3 · User response" badge={String(template.script.responseMessages.length)} defaultOpen>
               <p className="mb-4 text-xs leading-relaxed text-navy-500">
-                The BanterBird user&apos;s reply after the choice is made. End with a cliffhanger
-                — leave something unresolved to drive curiosity.
+                The user&apos;s reply after the choice. End with a cliffhanger.
               </p>
               <MessageEditor
                 messages={template.script.responseMessages}
@@ -443,7 +312,6 @@ export default function VideoGeneratorPage() {
               />
             </Section>
 
-            {/* 4. CTA */}
             <Section title="4 · End CTA" defaultOpen>
               <p className="mb-4 text-xs leading-relaxed text-navy-500">
                 The final screen. Keep the headline direct and the subline short.
@@ -455,77 +323,36 @@ export default function VideoGeneratorPage() {
             </Section>
           </div>
 
-          {/* ── Right: Preview + export ── */}
+          {/* ── Right: preview + export ── */}
           <div className="flex flex-col gap-4">
-            {/* Sticky preview column */}
             <div className="lg:sticky lg:top-8 flex flex-col gap-4">
 
-              {/* 9:16 preview frame */}
+              {/* Preview */}
               <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-navy-500">
                   Live preview · 9:16
                 </p>
-
-                {/* Outer aspect-ratio shell — scales to available width */}
                 <div className="relative w-full" style={{ aspectRatio: "9/16" }}>
-                  {/*
-                   * During recording the preview teleports to a fixed position
-                   * at the top-left of the viewport so the crop rect is always
-                   * {x:0, y:0} — no coordinate math needed.
-                   */}
-                  {exportStatus === "capturing" && (
-                    <div
-                      className="fixed inset-0 z-[9998] bg-black"
-                      aria-hidden
-                    />
-                  )}
                   <div
-                    ref={frameElRef}
-                    data-video-export-root
-                    className="overflow-hidden rounded-xl"
-                    style={
-                      exportStatus === "capturing"
-                        ? {
-                            position: "fixed",
-                            bottom: 0,
-                            left: 0,
-                            width: EXPORT_PREVIEW_W,
-                            height: EXPORT_PREVIEW_H,
-                            zIndex: 9999,
-                            borderRadius: 0,
-                            background: "#0c121c",
-                          }
-                        : {
-                            position: "absolute",
-                            inset: 0,
-                            background: "#0c121c",
-                          }
-                    }
+                    className="absolute inset-0 overflow-hidden rounded-xl"
+                    style={{ background: "#0c121c" }}
                   >
-                    <div ref={innerFrameRef} className="absolute inset-0">
-                      <VideoPreview
-                        ref={setPreviewRef}
-                        script={template.script}
-                        playbackRate={exportStatus === "capturing" ? 0.5 : 1}
-                        onEnd={() => {
-                          setIsPlaying(false);
-                          setProgress(1);
-                          if (isExportingRef.current) {
-                            finishCapture();
-                          }
-                        }}
-                      />
-                    </div>
+                    <VideoPreview
+                      ref={setPreviewRef}
+                      script={template.script}
+                      onEnd={() => { setIsPlaying(false); setProgress(1); }}
+                    />
                   </div>
 
-                  {/* Recording indicator — intentionally omitted during export */}
-
-                  {/* Encoding overlay */}
-                  {(exportStatus === "encoding" || exportStatus === "requesting") && (
-                    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/70">
+                  {/* Rendering overlay */}
+                  {isExporting && (
+                    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/75">
                       <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
                       <p className="text-sm font-semibold text-white">
-                        {exportStatus === "requesting" ? "Allow screen sharing…" : "Encoding…"}
+                        {exportStatus === "rendering" ? "Rendering…" : "Encoding…"}
+                      </p>
+                      <p className="text-xs text-navy-400">
+                        {Math.round(exportProgress * 100)}%
                       </p>
                     </div>
                   )}
@@ -553,8 +380,7 @@ export default function VideoGeneratorPage() {
 
                 {!canExport && (
                   <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
-                    Your browser doesn&apos;t support video export. Use Chrome or Edge for best
-                    results.
+                    Your browser doesn&apos;t support video export. Use Chrome or Edge.
                   </p>
                 )}
 
@@ -564,37 +390,29 @@ export default function VideoGeneratorPage() {
                   onClick={handleExport}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50 transition"
                 >
-                  {isExporting ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" />
-                      {exportStatus === "requesting" ? "Requesting…" : "Exporting…"}
-                    </>
-                  ) : (
-                    <><Download className="h-4 w-4" /> Export MP4</>
-                  )}
+                  {isExporting
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Exporting…</>
+                    : <><Download className="h-4 w-4" /> Export MP4</>}
                 </button>
 
-                <ExportStatus
+                <ExportStatusBar
                   status={exportStatus}
                   progress={exportProgress}
                   errorMessage={errorMessage}
                 />
 
                 <p className="mt-3 text-[11px] leading-relaxed text-navy-600">
-                  Expands the preview fullscreen, records your screen at native
-                  quality, then crops and encodes to MP4 (H.264, 8 Mbps).
-                  Chrome will ask you to share this tab — just click Share.
+                  Renders every frame off-screen at 1080×1920 then encodes to
+                  MP4 (H.264, 8 Mbps). Export takes longer than the video duration.
+                  Keep the tab visible while exporting.
                 </p>
               </div>
 
-              {/* Save / reset */}
+              {/* Save / reset / import */}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    const fresh = createDefaultTemplate();
-                    setTemplate(fresh);
-                    saveTemplate(fresh);
-                  }}
+                  onClick={() => { const f = createDefaultTemplate(); setTemplate(f); saveTemplate(f); }}
                   className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-navy-400 hover:bg-white/10 hover:text-white transition"
                 >
                   Reset to default
@@ -602,12 +420,10 @@ export default function VideoGeneratorPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const blob = new Blob([JSON.stringify(template, null, 2)], {
-                      type: "application/json",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
+                    const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement("a");
+                    a.href     = url;
                     a.download = `${template.name.replace(/\s+/g, "-")}.json`;
                     a.click();
                     setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -618,23 +434,17 @@ export default function VideoGeneratorPage() {
                 </button>
               </div>
 
-              {/* Import JSON */}
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-2.5 text-xs text-navy-500 hover:border-violet-500/30 hover:text-navy-300 transition">
                 <input
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
+                  type="file" accept="application/json,.json" className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (!f) return;
                     const reader = new FileReader();
                     reader.onload = (ev) => {
                       try {
-                        const parsed = JSON.parse(ev.target?.result as string) as VideoTemplate;
-                        setTemplate(parsed);
-                      } catch {
-                        // invalid JSON — ignore
-                      }
+                        setTemplate(JSON.parse(ev.target?.result as string) as VideoTemplate);
+                      } catch {}
                     };
                     reader.readAsText(f);
                     e.target.value = "";

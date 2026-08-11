@@ -1,70 +1,95 @@
 "use client";
 
-"use client";
-
 /**
- * useVideoExport — getDisplayMedia screen-capture, crop to preview
+ * useVideoExport — off-screen render + html2canvas-pro
  *
- * Flow
- * ────
- * 1. startExport() calls getDisplayMedia({ preferCurrentTab }) — user clicks
- *    "Share tab" in Chrome's one-click prompt.
- * 2. MediaRecorder starts. onReady() fires — caller starts VideoPreview
- *    playback. The preview stays at its NORMAL small size (no fullscreen).
- *    This keeps all proportions identical to what the user sees.
- * 3. finishCapture() is called when VideoPreview fires onEnd.
- *    We wait for the recorder's final ondataavailable then process.
- * 4. The raw WebM is decoded frame-by-frame via a hidden <video> element,
- *    each frame is cropped to the preview element's exact screen position
- *    and scaled to 1080×1920.
- * 5. Cropped frames are encoded to H.264 MP4 via WebCodecs + mp4-muxer.
+ * Strategy
+ * ────────
+ * 1. Mount a second VideoPreview React root into a hidden 380×677 px div
+ *    (left: -9999 px — fully rendered by the browser but off-screen).
+ *    380 px is the same logical width as the live preview, so every CSS
+ *    value, font size, padding and border-radius looks identical.
  *
- * Why no fullscreen
- * ─────────────────
- * The preview component uses fixed pixel values (text-[15px], px-4, etc.)
- * designed for a ~380 px wide container. When expanded to fullscreen that
- * container becomes ~800+ px wide and the text stays the same size,
- * making everything look proportionally tiny. Keeping the preview at its
- * normal size means the recording looks exactly like the live preview.
+ * 2. Drive its timeline by writing `data-export-elapsed` on the wrapper,
+ *    which VideoPreview's MutationObserver picks up as elapsed-ms state.
+ *
+ * 3. At each frame step, wait 2 rAFs + SETTLE_MS for React and Framer
+ *    Motion to finish rendering, then call html2canvas-pro with
+ *    scale = 1080 / 380 ≈ 2.842.  This rasterises the 380 px element
+ *    at native 1080×1920 — no upscaling artefacts.
+ *
+ * 4. Encode ImageData[] → H.264 MP4 via WebCodecs + mp4-muxer
+ *    (MediaRecorder WebM fallback if WebCodecs unavailable).
+ *
+ * Why this looks identical to the preview
+ * ────────────────────────────────────────
+ * The off-screen element uses the exact same component, same CSS, same
+ * fonts and same logical width as the live preview.  html2canvas-pro
+ * supports all modern CSS color functions (oklch, lab, etc.) used by
+ * Tailwind v4.  The only difference is resolution.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import type { VideoScript } from "./video-generator-types";
 import { buildTimeline } from "./video-generator-types";
+import { VideoPreview } from "@/components/ops/video-gen/VideoPreview";
 
 export type ExportStatus =
   | "idle"
-  | "requesting"
-  | "capturing"
-  | "encoding"
+  | "rendering"   // scrubbing timeline + capturing frames
+  | "encoding"    // WebCodecs / MediaRecorder encode pass
   | "done"
   | "error";
 
 export interface UseVideoExportReturn {
   startExport: (params: {
-    frameEl: HTMLElement;
-    script: VideoScript;
-    onReady: () => void;
+    script:   VideoScript;
     filename?: string;
   }) => Promise<void>;
-  finishCapture: () => void;
-  status: ExportStatus;
-  progress: number;
+  status:       ExportStatus;
+  progress:     number;
   errorMessage: string | null;
-  canExport: boolean;
+  canExport:    boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const OUT_W      = 1080;
-const OUT_H      = 1920;
+/** Logical width of the off-screen render container — matches live preview */
+const RENDER_W = 380;
+const RENDER_H = Math.round(RENDER_W * (16 / 9)); // 677
+
+/** Output resolution */
+const OUT_W = 1080;
+const OUT_H = 1920;
+
+/** Scale factor passed to html2canvas: renders at OUT_W physical pixels */
+const CAPTURE_SCALE = OUT_W / RENDER_W; // ≈ 2.842
+
 const TARGET_FPS = 30;
+const MS_PER_FRAME = 1000 / TARGET_FPS;
+
+/**
+ * ms to wait after advancing the clock before capturing.
+ * Framer Motion springs at stiffness=380 settle in ~150 ms.
+ * We give 200 ms to be safe across all animation phases.
+ */
+const SETTLE_MS = 200;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function toEven(n: number) { return n % 2 === 0 ? n : n + 1; }
 
-function sleep(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)); }
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+function waitRaf() {
+  return new Promise<void>((r) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => r()))
+  );
+}
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -77,170 +102,104 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-// ─── Crop helpers ─────────────────────────────────────────────────────────────
+// ─── Off-screen React root ────────────────────────────────────────────────────
 
-interface CropRect { x: number; y: number; w: number; h: number; }
-
-/**
- * Get the element's position in CSS pixels relative to the viewport.
- * We re-read this at finishCapture time (not startExport time) so we
- * always have the correct position regardless of scroll or layout shifts.
- */
-function getCropRect(el: HTMLElement): CropRect {
-  const r = el.getBoundingClientRect();
-  return {
-    x: Math.round(r.left),
-    y: Math.round(r.top),
-    w: Math.round(r.width),
-    h: Math.round(r.height),
-  };
+interface OffscreenRoot {
+  /** Set this to drive the VideoPreview timeline */
+  setElapsed: (ms: number) => void;
+  /** The element html2canvas should capture */
+  frameEl: HTMLDivElement;
+  unmount: () => void;
 }
 
-// ─── Decode recorded blob → cropped ImageData[] via hidden <video> ───────────
+function createOffscreenRoot(script: VideoScript): Promise<OffscreenRoot> {
+  return new Promise((resolve) => {
+    // Shell — off-screen but fully rendered by the browser
+    const shell = document.createElement("div");
+    shell.style.cssText = [
+      "position:fixed",
+      `left:-${RENDER_W + 100}px`,
+      "top:0",
+      `width:${RENDER_W}px`,
+      `height:${RENDER_H}px`,
+      "overflow:hidden",
+      "z-index:-1",
+      "pointer-events:none",
+    ].join(";");
 
-function canvasScrubFrames(
-  blob: Blob,
-  crop: CropRect,
-  viewport: { w: number; h: number },
-  outW: number,
-  outH: number,
-  onProgress: (p: number) => void,
-): Promise<ImageData[]> {
-  return new Promise((resolve, reject) => {
-    const url   = URL.createObjectURL(blob);
-    const video = document.createElement("video");
-    video.src         = url;
-    video.muted       = true;
-    video.playsInline = true;
-    video.style.cssText =
-      "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;";
-    document.body.appendChild(video);
+    // Wrapper carries data-export-elapsed (VideoPreview's MutationObserver watches it)
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-video-export-root", "");
+    wrapper.style.cssText =
+      `width:${RENDER_W}px;height:${RENDER_H}px;position:relative;overflow:hidden;background:#0c121c;`;
 
-    const cleanup = () => {
-      document.body.removeChild(video);
-      URL.revokeObjectURL(url);
+    // Frame element — this is what html2canvas captures
+    const frameEl = document.createElement("div");
+    frameEl.style.cssText =
+      `width:${RENDER_W}px;height:${RENDER_H}px;position:relative;overflow:hidden;`;
+
+    wrapper.appendChild(frameEl);
+    shell.appendChild(wrapper);
+    document.body.appendChild(shell);
+
+    let root: Root | null = null;
+
+    const setElapsed = (ms: number) => {
+      wrapper.dataset.exportElapsed = String(ms);
     };
 
-    video.onerror = () => { cleanup(); reject(new Error("Failed to decode recording.")); };
+    const unmount = () => {
+      root?.unmount();
+      if (document.body.contains(shell)) document.body.removeChild(shell);
+    };
 
-    video.addEventListener("loadedmetadata", async () => {
-      try {
-        const vidW = video.videoWidth;
-        const vidH = video.videoHeight;
+    // Mount VideoPreview — same component as the live preview
+    root = createRoot(frameEl);
+    root.render(<VideoPreview script={script} />);
 
-        // Both crop rect and viewport were measured at the same instant
-        // (450ms after recording started, after Chrome's recording bar
-        // appeared). Using the same-instant viewport as reference means
-        // the scale factors correctly account for the bar shrinking innerHeight.
-        const sx = vidW / viewport.w;
-        const sy = vidH / viewport.h;
-
-        const adjCrop: CropRect = {
-          x: Math.max(0, Math.round(crop.x * sx)),
-          y: Math.max(0, Math.round(crop.y * sy)),
-          w: Math.round(crop.w * sx),
-          h: Math.round(crop.h * sy),
-        };
-        // Clamp to video bounds — but don't shrink h aggressively
-        adjCrop.x = Math.min(adjCrop.x, vidW - 1);
-        adjCrop.y = Math.min(adjCrop.y, vidH - 1);
-        adjCrop.w = Math.min(adjCrop.w, vidW - adjCrop.x);
-        adjCrop.h = Math.min(adjCrop.h, vidH - adjCrop.y);
-
-        console.log("[export] video:", vidW, "×", vidH,
-          "| viewport used:", viewport.w, "×", viewport.h,
-          "| sx:", sx.toFixed(3), "sy:", sy.toFixed(3),
-          "| crop CSS: x", crop.x, "y", crop.y, "w", crop.w, "h", crop.h,
-          "| adjCrop: x", adjCrop.x, "y", adjCrop.y, "w", adjCrop.w, "h", adjCrop.h,
-          "| bottom:", adjCrop.y + adjCrop.h, "/", vidH);
-
-        const rawCanvas  = document.createElement("canvas");
-        rawCanvas.width  = vidW;
-        rawCanvas.height = vidH;
-        const rawCtx = rawCanvas.getContext("2d", { alpha: false })!;
-
-        const extractFrame = (): ImageData => {
-          rawCtx.drawImage(video, 0, 0, vidW, vidH);
-          const out = document.createElement("canvas");
-          out.width  = outW;
-          out.height = outH;
-          const ctx  = out.getContext("2d", { alpha: false })!;
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "high";
-          ctx.drawImage(rawCanvas, adjCrop.x, adjCrop.y, adjCrop.w, adjCrop.h, 0, 0, outW, outH);
-          return ctx.getImageData(0, 0, outW, outH);
-        };
-
-        const frames: ImageData[] = [];
-        const duration = video.duration;
-        const hasValidDuration = isFinite(duration) && duration > 0;
-
-        if (hasValidDuration) {
-          // ── Strategy A: seekable — scrub frame by frame ─────────────────
-          const frameCount = Math.ceil(duration * TARGET_FPS);
-          for (let f = 0; f < frameCount; f++) {
-            video.currentTime = f / TARGET_FPS;
-            await new Promise<void>((res) => {
-              const fn = () => { video.removeEventListener("seeked", fn); res(); };
-              video.addEventListener("seeked", fn);
-            });
-            frames.push(extractFrame());
-            onProgress((f + 1) / frameCount);
-          }
-          cleanup();
-          resolve(frames);
-        } else {
-          // ── Strategy B: no duration (MediaRecorder WebM) — play + capture
-          // Use requestVideoFrameCallback if available (Chrome 83+), else rAF.
-          if ("requestVideoFrameCallback" in video) {
-            type RVFC = (now: DOMHighResTimeStamp, meta: { mediaTime: number }) => void;
-            const rvfc = video as HTMLVideoElement & { requestVideoFrameCallback: (cb: RVFC) => void };
-            let lastMediaTime = -1;
-            const frameDuration = 1 / TARGET_FPS;
-            const onFrame: RVFC = (_now, meta) => {
-              // Only capture if at least one frame-interval has elapsed since
-              // the last capture — prevents 2× speed when the WebM was
-              // encoded at a higher rate than TARGET_FPS.
-              if (meta.mediaTime - lastMediaTime >= frameDuration - 0.001) {
-                frames.push(extractFrame());
-                onProgress(Math.min(meta.mediaTime / 60, 0.99));
-                lastMediaTime = meta.mediaTime;
-              }
-              if (!video.ended) rvfc.requestVideoFrameCallback(onFrame);
-            };
-            rvfc.requestVideoFrameCallback(onFrame);
-          } else {
-            // rAF fallback — throttle to TARGET_FPS
-            const vid = video as HTMLVideoElement;
-            let lastFrame = -1;
-            const loop = () => {
-              if (vid.ended || vid.paused) return;
-              const f = Math.floor(vid.currentTime * TARGET_FPS);
-              if (f > lastFrame) { frames.push(extractFrame()); lastFrame = f; }
-              requestAnimationFrame(loop);
-            };
-            requestAnimationFrame(loop);
-          }
-
-          video.addEventListener("ended", () => {
-            cleanup();
-            onProgress(1);
-            resolve(frames);
-          });
-
-          await video.play();
-        }
-      } catch (e) {
-        cleanup();
-        reject(e);
-      }
+    // One rAF to let React finish the initial render
+    requestAnimationFrame(() => {
+      resolve({ setElapsed, frameEl, unmount });
     });
-
-    video.load();
   });
 }
 
-// ─── Encode ImageData[] → MP4 ────────────────────────────────────────────────
+// ─── Frame capture ────────────────────────────────────────────────────────────
+
+async function captureFrame(el: HTMLElement): Promise<ImageData> {
+  const html2canvas = (await import("html2canvas-pro")).default;
+
+  const raw = await html2canvas(el, {
+    useCORS:         true,
+    allowTaint:      true,
+    backgroundColor: "#0c121c",
+    scale:           CAPTURE_SCALE,
+    logging:         false,
+    width:           RENDER_W,
+    height:          RENDER_H,
+    windowWidth:     RENDER_W,
+    windowHeight:    RENDER_H,
+  });
+
+  // Ensure output is exactly OUT_W × OUT_H (handles sub-pixel rounding)
+  const w = toEven(OUT_W);
+  const h = toEven(OUT_H);
+
+  if (raw.width === w && raw.height === h) {
+    return raw.getContext("2d")!.getImageData(0, 0, w, h);
+  }
+
+  const out   = document.createElement("canvas");
+  out.width   = w;
+  out.height  = h;
+  const ctx   = out.getContext("2d", { alpha: false })!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(raw, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+
+// ─── WebCodecs encoder ────────────────────────────────────────────────────────
 
 type EncodedChunkWithMeta = {
   chunk: EncodedVideoChunk;
@@ -248,13 +207,14 @@ type EncodedChunkWithMeta = {
 };
 
 async function encodeWithWebCodecs(
-  frames: ImageData[],
-  fps:    number,
-  width:  number,
-  height: number,
+  frames:     ImageData[],
+  fps:        number,
+  width:      number,
+  height:     number,
   onProgress: (p: number) => void,
 ): Promise<Blob> {
   const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
+
   const target = new ArrayBufferTarget();
   const muxer  = new Muxer({
     target,
@@ -272,7 +232,7 @@ async function encodeWithWebCodecs(
   });
 
   encoder.configure({
-    codec:       "avc1.640032",
+    codec:       "avc1.640032", // H.264 High Profile 5.0
     width, height,
     bitrate:     8_000_000,
     framerate:   fps,
@@ -281,13 +241,16 @@ async function encodeWithWebCodecs(
 
   for (let i = 0; i < frames.length; i++) {
     if (encErr) throw encErr;
+
     const timestamp = Math.round((i / fps) * 1_000_000);
     const duration  = Math.round((1 / fps) * 1_000_000);
+
     const oc = new OffscreenCanvas(width, height);
     oc.getContext("2d")!.putImageData(frames[i], 0, 0);
     const vf = new VideoFrame(oc, { timestamp, duration });
     encoder.encode(vf, { keyFrame: i === 0 || i % (fps * 2) === 0 });
     vf.close();
+
     if (i % 5 === 4) await sleep(0);
     onProgress((i + 1) / frames.length);
   }
@@ -295,16 +258,18 @@ async function encodeWithWebCodecs(
   await encoder.flush();
   if (encErr) throw encErr;
   encoder.close();
+
   for (const { chunk, meta } of chunks) muxer.addVideoChunk(chunk, meta);
   muxer.finalize();
+
   return new Blob([target.buffer], { type: "video/mp4" });
 }
 
 async function encodeWithMediaRecorder(
-  frames: ImageData[],
-  fps:    number,
-  width:  number,
-  height: number,
+  frames:     ImageData[],
+  fps:        number,
+  width:      number,
+  height:     number,
   onProgress: (p: number) => void,
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -312,15 +277,19 @@ async function encodeWithMediaRecorder(
     canvas.width  = width;
     canvas.height = height;
     const ctx     = canvas.getContext("2d")!;
-    const mime    = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+
+    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9" : "video/webm";
+
     const recorder = new MediaRecorder(canvas.captureStream(fps),
       { mimeType: mime, videoBitsPerSecond: 8_000_000 });
     const parts: Blob[] = [];
+
     recorder.ondataavailable = (e) => { if (e.data.size > 0) parts.push(e.data); };
     recorder.onstop  = () => resolve(new Blob(parts, { type: mime }));
     recorder.onerror = reject;
     recorder.start();
+
     let i = 0;
     const draw = () => {
       if (i >= frames.length) { recorder.stop(); return; }
@@ -338,192 +307,93 @@ export function useVideoExport(): UseVideoExportReturn {
   const [status,       setStatus]       = useState<ExportStatus>("idle");
   const [progress,     setProgress]     = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const abortRef = useRef(false);
 
   const [canExport, setCanExport] = useState(true);
   useEffect(() => {
     if (typeof MediaRecorder === "undefined") setCanExport(false);
   }, []);
 
-  const sessionRef = useRef<{
-    recorder:      MediaRecorder;
-    chunks:        Blob[];
-    frameEl:       HTMLElement;
-    cropRect:      CropRect | null;
-    viewportAtCrop: { w: number; h: number } | null;
-    filename:      string;
-    mimeType:      string;
-    stopPromise:   Promise<Blob>;
-    resolveStop:   (b: Blob) => void;
-  } | null>(null);
-
-  const setProgressRef = useRef(setProgress);
-  setProgressRef.current = setProgress;
-
   const startExport = useCallback(async ({
-    frameEl,
     script,
-    onReady,
     filename = "banterbird-reel",
   }: {
-    frameEl:   HTMLElement;
     script:    VideoScript;
-    onReady:   () => void;
     filename?: string;
   }) => {
-    if (status === "capturing" || status === "encoding") return;
+    if (status === "rendering" || status === "encoding") return;
 
-    setStatus("requesting");
+    setStatus("rendering");
     setProgress(0);
     setErrorMessage(null);
+    abortRef.current = false;
 
-    // ── 1. Request tab capture ────────────────────────────────────────────
-    let stream: MediaStream;
+    const timeline    = buildTimeline(script);
+    const totalMs     = timeline.totalDuration;
+    const totalFrames = Math.ceil(totalMs / MS_PER_FRAME);
+
+    const offscreen = await createOffscreenRoot(script);
+    const frames: ImageData[] = [];
+
     try {
-      stream = await (navigator.mediaDevices as MediaDevices & {
-        getDisplayMedia(opts?: object): Promise<MediaStream>;
-      }).getDisplayMedia({
-        video: {
-          preferCurrentTab: true,
-          frameRate: TARGET_FPS,
-          width:  { ideal: window.screen.width },
-          height: { ideal: window.screen.height },
-        },
-        audio: false,
-        preferCurrentTab:    true,
-        selfBrowserSurface:  "include",
-        systemAudio:         "exclude",
-      });
-    } catch {
-      setStatus("idle");
-      return;
-    }
+      // ── Phase 1: Render + capture each frame ──────────────────────────
+      for (let f = 0; f < totalFrames; f++) {
+        if (abortRef.current) break;
 
-    void buildTimeline(script); // ensure timeline is valid
+        const elapsedMs = Math.min(f * MS_PER_FRAME, totalMs);
+        offscreen.setElapsed(elapsedMs);
 
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
-      ? "video/webm;codecs=vp8"
-      : "video/webm";
+        // Wait for React + Framer Motion to settle at this timestamp
+        await waitRaf();
+        await sleep(SETTLE_MS);
 
-    const chunks: Blob[] = [];
-
-    // Create a promise that resolves with the final blob when onstop fires
-    let resolveStop!: (b: Blob) => void;
-    const stopPromise = new Promise<Blob>((res) => { resolveStop = res; });
-
-    const recorder = new MediaRecorder(stream, {
-      mimeType,
-      videoBitsPerSecond: 40_000_000,
-    });
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop = () => {
-      resolveStop(new Blob(chunks, { type: mimeType }));
-    };
-
-    sessionRef.current = {
-      recorder,
-      chunks,
-      frameEl,
-      cropRect: null,
-      viewportAtCrop: null,
-      filename,
-      mimeType,
-      stopPromise,
-      resolveStop,
-    };
-
-    // ── 2. Start recording ────────────────────────────────────────────────
-    recorder.start(200);
-    setStatus("capturing");
-
-    onReady();
-
-    // At 450ms the Chrome recording bar has appeared and shifted the layout.
-    // Lock both the crop rect AND the viewport size at this exact moment —
-    // both must be measured together so the scale factors are consistent.
-    setTimeout(() => {
-      if (sessionRef.current) {
-        sessionRef.current.cropRect      = getCropRect(frameEl);
-        sessionRef.current.viewportAtCrop = {
-          w: window.innerWidth,
-          h: window.innerHeight,
-        };
-        console.log("[export] locked at 450ms — crop:", sessionRef.current.cropRect,
-          "viewport:", sessionRef.current.viewportAtCrop);
+        frames.push(await captureFrame(offscreen.frameEl));
+        setProgress(((f + 1) / totalFrames) * 0.7);
       }
-    }, 450);
+
+      offscreen.unmount();
+
+      if (abortRef.current || frames.length === 0) {
+        setStatus("idle");
+        return;
+      }
+
+      // ── Phase 2: Encode ───────────────────────────────────────────────
+      setStatus("encoding");
+
+      const w = toEven(OUT_W);
+      const h = toEven(OUT_H);
+
+      const hasWebCodecs =
+        typeof VideoEncoder    !== "undefined" &&
+        typeof VideoFrame      !== "undefined" &&
+        typeof OffscreenCanvas !== "undefined";
+
+      let blob: Blob;
+      let ext: string;
+
+      if (hasWebCodecs) {
+        blob = await encodeWithWebCodecs(frames, TARGET_FPS, w, h,
+          (p) => setProgress(0.7 + p * 0.3));
+        ext = "mp4";
+      } else {
+        blob = await encodeWithMediaRecorder(frames, TARGET_FPS, w, h,
+          (p) => setProgress(0.7 + p * 0.3));
+        ext = "webm";
+      }
+
+      downloadBlob(blob, `${filename.replace(/\s+/g, "-")}.${ext}`);
+      setStatus("done");
+      setProgress(1);
+    } catch (err) {
+      offscreen.unmount();
+      console.error("[useVideoExport]", err);
+      setStatus("error");
+      setErrorMessage(
+        err instanceof Error ? err.message : "Export failed. See console for details.",
+      );
+    }
   }, [status]);
 
-  const finishCapture = useCallback(() => {
-    const s = sessionRef.current;
-    if (!s) return;
-    sessionRef.current = null;
-
-    // Stop the recorder — triggers final ondataavailable + onstop
-    s.recorder.stop();
-    s.recorder.stream.getTracks().forEach((t) => t.stop());
-
-    const { stopPromise, frameEl, cropRect: lockedCropRect, viewportAtCrop, filename } = s;
-
-    const cropRect: CropRect  = lockedCropRect  ?? getCropRect(frameEl);
-    const viewport = viewportAtCrop ?? { w: window.innerWidth, h: window.innerHeight };
-    void (async () => {
-      try {
-        setStatus("encoding");
-        setProgressRef.current(0.2);
-
-        // Wait for ALL chunks to be delivered (onstop fires after last chunk)
-        const rawBlob = await stopPromise;
-
-        if (rawBlob.size < 1000) {
-          throw new Error("Recording was too short or empty. Make sure the video played fully.");
-        }
-
-        const outW = toEven(OUT_W);
-        const outH = toEven(OUT_H);
-
-        // ── Decode + crop ─────────────────────────────────────────────────
-        const frames = await canvasScrubFrames(
-          rawBlob, cropRect, viewport, outW, outH,
-          (p) => setProgressRef.current(0.2 + p * 0.55),
-        );
-
-        if (frames.length === 0) {
-          throw new Error("No frames could be decoded from the recording.");
-        }
-
-        // ── Encode → H.264 MP4 ────────────────────────────────────────────
-        const hasWebCodecs =
-          typeof VideoEncoder    !== "undefined" &&
-          typeof VideoFrame      !== "undefined" &&
-          typeof OffscreenCanvas !== "undefined";
-
-        let blob: Blob;
-        let ext: string;
-
-        if (hasWebCodecs) {
-          blob = await encodeWithWebCodecs(frames, TARGET_FPS, outW, outH,
-            (p) => setProgressRef.current(0.75 + p * 0.25));
-          ext = "mp4";
-        } else {
-          blob = await encodeWithMediaRecorder(frames, TARGET_FPS, outW, outH,
-            (p) => setProgressRef.current(0.75 + p * 0.25));
-          ext = "webm";
-        }
-
-        downloadBlob(blob, `${filename.replace(/\s+/g, "-")}.${ext}`);
-        setStatus("done");
-        setProgressRef.current(1);
-      } catch (err) {
-        console.error("[useVideoExport]", err);
-        setStatus("error");
-        setErrorMessage(
-          err instanceof Error ? err.message : "Export failed. See console for details.",
-        );
-      }
-    })();
-  }, []);
-
-  return { startExport, finishCapture, status, progress, errorMessage, canExport };
+  return { startExport, status, progress, errorMessage, canExport };
 }
