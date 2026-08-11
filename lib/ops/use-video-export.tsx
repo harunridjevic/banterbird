@@ -1,5 +1,7 @@
 "use client";
 
+"use client";
+
 /**
  * useVideoExport — getDisplayMedia screen-capture, crop to preview
  *
