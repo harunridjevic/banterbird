@@ -70,12 +70,18 @@ const CAPTURE_SCALE = OUT_W / RENDER_W; // ≈ 2.842
 const TARGET_FPS = 30;
 const MS_PER_FRAME = 1000 / TARGET_FPS;
 
+/** How many times to slow down animations during export */
+const EXPORT_SLOW_FACTOR = 3;
+
 /**
- * ms to wait after advancing the clock before capturing.
- * Framer Motion springs at stiffness=380 settle in ~150 ms.
- * We give 200 ms to be safe across all animation phases.
+ * Video time advanced per captured frame = 1/30s = 33ms.
+ * This controls video duration — keep it at MS_PER_FRAME.
+ * Animation speed is controlled separately via slowFactor prop.
  */
-const SETTLE_MS = 200;
+const VIDEO_MS_PER_STEP = MS_PER_FRAME; // 33ms — keeps video duration correct
+
+/** ms to wait after setting elapsed before capturing */
+const SETTLE_MS = 50;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -153,9 +159,10 @@ function createOffscreenRoot(script: VideoScript): Promise<OffscreenRoot> {
       if (document.body.contains(shell)) document.body.removeChild(shell);
     };
 
-    // Mount VideoPreview — same component as the live preview
+    // Mount VideoPreview with 3x slowed animations so each captured frame
+    // shows the animation at the correct position for its video timestamp.
     root = createRoot(frameEl);
-    root.render(<VideoPreview script={script} />);
+    root.render(<VideoPreview script={script} slowFactor={EXPORT_SLOW_FACTOR} />);
 
     // One rAF to let React finish the initial render
     requestAnimationFrame(() => {
@@ -328,27 +335,28 @@ export function useVideoExport(): UseVideoExportReturn {
     setErrorMessage(null);
     abortRef.current = false;
 
-    const timeline    = buildTimeline(script);
-    const totalMs     = timeline.totalDuration;
-    const totalFrames = Math.ceil(totalMs / MS_PER_FRAME);
+    const timeline = buildTimeline(script);
+    const totalMs  = timeline.totalDuration;
 
     const offscreen = await createOffscreenRoot(script);
     const frames: ImageData[] = [];
 
     try {
       // ── Phase 1: Render + capture each frame ──────────────────────────
-      for (let f = 0; f < totalFrames; f++) {
+      // Advance VIDEO_MS_PER_STEP of video time per frame, with SETTLE_MS
+      // of real wall time between captures. Because Framer Motion springs
+      // run against real time, VIDEO_MS_PER_STEP ≈ SETTLE_MS means
+      // animations play at 1:1 speed in the output.
+      for (let elapsedMs = 0; elapsedMs <= totalMs; elapsedMs += VIDEO_MS_PER_STEP) {
         if (abortRef.current) break;
 
-        const elapsedMs = Math.min(f * MS_PER_FRAME, totalMs);
-        offscreen.setElapsed(elapsedMs);
+        offscreen.setElapsed(Math.min(elapsedMs, totalMs));
 
-        // Wait for React + Framer Motion to settle at this timestamp
         await waitRaf();
         await sleep(SETTLE_MS);
 
         frames.push(await captureFrame(offscreen.frameEl));
-        setProgress(((f + 1) / totalFrames) * 0.7);
+        setProgress((Math.min(elapsedMs, totalMs) / totalMs) * 0.7);
       }
 
       offscreen.unmount();

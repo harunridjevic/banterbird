@@ -44,19 +44,15 @@ export interface VideoPreviewHandle {
 
 interface Props {
   script: VideoScript;
-  /** Called when playback reaches the end */
   onEnd?: () => void;
-  /**
-   * Speed multiplier for the internal clock. Default 1.0 (real time).
-   * Pass 0.5 during screen-capture export so the recording plays at half
-   * speed — the captured frames, when encoded at TARGET_FPS, will play
-   * back at normal speed.
-   */
   playbackRate?: number;
+  instantTransitions?: boolean;
+  /** Multiplies all animation durations — use >1 to slow down for export */
+  slowFactor?: number;
 }
 
 export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
-  function VideoPreview({ script, onEnd, playbackRate = 1 }, ref) {
+  function VideoPreview({ script, onEnd, playbackRate = 1, instantTransitions = false, slowFactor = 1 }, ref) {
     const timeline = buildTimeline(script);
     const [elapsedMs, setElapsedMs] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -112,6 +108,17 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
 
     // CTA visible
     const ctaVisible = elapsedMs >= timeline.ctaAppearTime;
+
+    // During export (slowFactor > 1), compute CTA opacity directly from
+    // elapsed time so html2canvas captures the correct fade-in value
+    // instead of relying on a Framer Motion tween running against wall clock.
+    const ctaFadeDuration = 550 * slowFactor; // matches CTAScreen tween duration
+    const ctaElapsed = elapsedMs - timeline.ctaAppearTime;
+    const ctaExportOpacity = slowFactor > 1
+      ? ctaVisible
+        ? Math.min(1, Math.max(0, ctaElapsed / ctaFadeDuration))
+        : 0
+      : undefined;
 
     // ── Playback loop ─────────────────────────────────────────────────────
 
@@ -247,17 +254,24 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           visibleMessages={allMessages}
           strangerTyping={strangerTyping}
           choicesVisible={choicePhase !== "hidden" && choicePhase !== "exit"}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
         />
 
         <ChoicesOverlay
           choices={script.choiceConfig.choices}
           phase={choicePhase}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
         />
 
         <CTAScreen
           headline={script.ctaConfig.headline}
           subline={script.ctaConfig.subline}
           visible={ctaVisible}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
+          exportOpacity={ctaExportOpacity}
         />
       </div>
     );
