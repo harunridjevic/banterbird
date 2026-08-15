@@ -1,52 +1,37 @@
 "use client";
 
 /**
- * useVideoExport — real-time capture
+ * useVideoExport
  *
- * Instead of scrubbing the timeline frame-by-frame (which misses animations
- * and causes timing artefacts), we record the preview during *live playback*:
- *
- *   1. Reset + play the VideoPreview from t=0 at normal speed.
- *   2. On every requestAnimationFrame, capture the live element with
- *      html2canvas-pro at CAPTURE_SCALE (4×) and push the ImageData.
- *   3. When onEnd fires (playback finished), stop capturing and encode.
- *
- * Because we capture what the browser actually renders each frame — including
- * every Framer Motion spring, every typing dot, every shimmer — the output
- * is visually identical to what the user sees in the preview.
- *
- * Trade-off: export takes as long as the video itself (real-time). A 15 s
- * video takes ~15 s to capture. This is unavoidable when recording live DOM.
- *
- * Encoding
- *   Primary  : WebCodecs VideoEncoder + mp4-muxer → H.264 MP4  (8 Mbps)
- *   Fallback : MediaRecorder over canvas stream   → WebM       (8 Mbps)
+ * Pipeline:
+ *   1. Scroll the preview element into view so the whole 9:16 frame is visible.
+ *   2. Measure its exact bounding rect (position + size on screen).
+ *   3. getDisplayMedia({ preferCurrentTab:true }) — one-click tab share dialog.
+ *   4. MediaRecorder records the tab stream while VideoPreview plays from t=0.
+ *   5. On playback end → stop recorder.
+ *   6. Decode the recorded WebM with a <video> element, seek frame-by-frame,
+ *      crop each frame to the saved bounding rect, encode as H.264 MP4.
+ *   7. Download the MP4 — exact 9:16 preview content, nothing else.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VideoScript } from "./video-generator-types";
-import { buildTimeline } from "./video-generator-types";
 
-export type ExportStatus = "idle" | "capturing" | "encoding" | "done" | "error";
+export type ExportStatus =
+  | "idle"
+  | "waiting"    // awaiting getDisplayMedia permission
+  | "capturing"  // MediaRecorder running
+  | "encoding"   // cropping + muxing to MP4
+  | "done"
+  | "error";
 
 export interface UseVideoExportReturn {
-  /**
-   * Begin export. Caller must also call `playHandle.play()` immediately after
-   * — or pass `autoPlay: true` and provide the play function.
-   *
-   * @param frameEl   The DOM element wrapping VideoPreview (data-video-export-root)
-   * @param script    The video script (used only for duration calculation)
-   * @param onReady   Called when capture is set up and the caller should start playback
-   * @param filename  Output filename without extension
-   */
   startExport: (params: {
     frameEl: HTMLElement;
     script: VideoScript;
     onReady: () => void;
-    onPlaybackEnd: () => void;
     filename?: string;
   }) => void;
-  /** Call this when VideoPreview fires onEnd during an export */
   finishCapture: () => void;
   status: ExportStatus;
   progress: number;
@@ -54,357 +39,303 @@ export interface UseVideoExportReturn {
   canExport: boolean;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const TARGET_FPS = 30;
-const MS_PER_FRAME = 1000 / TARGET_FPS;
-
-/** Output resolution */
-const OUT_W = 1080;
-const OUT_H = 1920;
-
-/**
- * Capture scale — we rasterize the live element at 4× its natural size,
- * then downscale to OUT_W × OUT_H. Gives ~4× pixel density with natural
- * antialiasing on the downscale pass.
- */
-const CAPTURE_SCALE = 4;
-
-// ─── Utilities ────────────────────────────────────────────────────────────────
-
-function toEven(n: number) {
-  return n % 2 === 0 ? n : n + 1;
-}
+function toEven(n: number) { return n % 2 === 0 ? n : n - 1; }
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 15_000);
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-function sleep(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms));
-}
+function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
-// ─── Frame capture ────────────────────────────────────────────────────────────
+// ─── Crop + encode ────────────────────────────────────────────────────────────
 
-async function captureFrame(
-  el: HTMLElement,
-  outW: number,
-  outH: number
-): Promise<ImageData> {
-  const html2canvas = (await import("html2canvas-pro")).default;
-
-  const raw = await html2canvas(el, {
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: "#0c121c",
-    scale: CAPTURE_SCALE,
-    logging: false,
-    width: el.offsetWidth,
-    height: el.offsetHeight,
-    windowWidth: el.offsetWidth,
-    windowHeight: el.offsetHeight,
-  });
-
-  const out = document.createElement("canvas");
-  out.width = outW;
-  out.height = outH;
-  const ctx = out.getContext("2d", { alpha: false })!;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(raw, 0, 0, outW, outH);
-  return ctx.getImageData(0, 0, outW, outH);
-}
-
-// ─── WebCodecs encoder ────────────────────────────────────────────────────────
-
-type EncodedChunkWithMeta = {
-  chunk: EncodedVideoChunk;
-  meta: EncodedVideoChunkMetadata | undefined;
-};
-
-async function encodeWithWebCodecs(
-  frames: ImageData[],
-  fps: number,
-  width: number,
-  height: number,
-  onProgress: (p: number) => void
-): Promise<Blob> {
+/**
+ * Given a recorded WebM blob and the crop rect (in screen-pixel coordinates
+ * relative to the fullscreen video frame), decode every frame, crop it, and
+ * re-encode as H.264 MP4.
+ *
+ * The crop rect is expressed in CSS pixels relative to the fullscreen viewport.
+ * When the preview goes fullscreen on a 16:9 monitor the browser letterboxes
+ * it — black bars top/bottom. getBoundingClientRect() in fullscreen gives us
+ * the exact rendered area including letterbox offset.
+ */
+async function cropAndEncode(
+  webmBlob: Blob,
+  crop: { x: number; y: number; w: number; h: number; screenW: number; screenH: number },
+  filename: string,
+  onProgress: (p: number) => void,
+): Promise<void> {
   const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
 
-  const target = new ArrayBufferTarget();
-  const muxer = new Muxer({
-    target,
-    video: { codec: "avc", width, height, frameRate: fps },
-    fastStart: "in-memory",
-    firstTimestampBehavior: "strict",
+  const outW = toEven(crop.w);
+  const outH = toEven(crop.h);
+
+  // Draw the WebM into a hidden video element and seek frame-by-frame
+  // using requestVideoFrameCallback to get every frame.
+  const blobUrl = URL.createObjectURL(webmBlob);
+  const video = document.createElement("video");
+  video.src = blobUrl;
+  video.muted = true;
+  video.playsInline = true;
+  video.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;";
+  document.body.appendChild(video);
+
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error("Failed to load recorded video for cropping."));
+    video.load();
   });
 
-  const encodedChunks: EncodedChunkWithMeta[] = [];
-  let encoderError: Error | null = null;
+  const duration = video.duration; // seconds
+  const fps = 30;
+  const totalFrames = Math.ceil(duration * fps);
+
+  // Scale factor: the video track is the screen resolution; the crop rect
+  // is in CSS pixels. On HiDPI screens the video track may be 2× the CSS
+  // pixels — compute the ratio.
+  const vidW = video.videoWidth;
+  const vidH = video.videoHeight;
+  const scaleX = vidW / crop.screenW;
+  const scaleY = vidH / crop.screenH;
+
+  // Crop rect in video-pixel space
+  const srcX = Math.round(crop.x * scaleX);
+  const srcY = Math.round(crop.y * scaleY);
+  const srcW = Math.round(crop.w * scaleX);
+  const srcH = Math.round(crop.h * scaleY);
+
+  // Canvas to draw cropped frames into
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d", { alpha: false })!;
+
+  const muxTarget = new ArrayBufferTarget();
+  const muxer = new Muxer({
+    target: muxTarget,
+    video: { codec: "avc", width: outW, height: outH, frameRate: fps },
+    fastStart: "in-memory",
+    firstTimestampBehavior: "offset",
+  });
+
+  const encoded: { chunk: EncodedVideoChunk; meta: EncodedVideoChunkMetadata | undefined }[] = [];
+  let encErr: Error | null = null;
 
   const encoder = new VideoEncoder({
-    output(chunk, meta) { encodedChunks.push({ chunk, meta }); },
-    error(e) { encoderError = e; },
+    output: (chunk, meta) => encoded.push({ chunk, meta }),
+    error: (e) => { encErr = e; },
   });
-
   encoder.configure({
-    codec: "avc1.640032", // H.264 High Profile 5.0
-    width,
-    height,
-    bitrate: 8_000_000,
+    codec: "avc1.640032",
+    width: outW,
+    height: outH,
+    bitrate: 12_000_000,
     framerate: fps,
     latencyMode: "quality",
   });
 
-  for (let i = 0; i < frames.length; i++) {
-    if (encoderError) throw encoderError;
+  // Walk through the video frame-by-frame by seeking
+  for (let i = 0; i < totalFrames; i++) {
+    if (encErr) throw encErr;
 
-    const timestamp = Math.round((i / fps) * 1_000_000);
-    const duration  = Math.round((1 / fps) * 1_000_000);
+    const t = i / fps;
+    if (t > duration) break;
 
-    const oc  = new OffscreenCanvas(width, height);
-    const ctx = oc.getContext("2d")!;
-    ctx.putImageData(frames[i], 0, 0);
+    // Seek and wait for the frame to be ready
+    video.currentTime = t;
+    await new Promise<void>((resolve) => {
+      const handler = () => { video.removeEventListener("seeked", handler); resolve(); };
+      video.addEventListener("seeked", handler);
+    });
 
-    const vf    = new VideoFrame(oc, { timestamp, duration });
-    const isKey = i === 0 || i % (fps * 2) === 0;
-    encoder.encode(vf, { keyFrame: isKey });
+    // Draw the cropped region onto our output canvas
+    ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+
+    const timestampUs = Math.round(t * 1_000_000);
+    const durationUs  = Math.round(1_000_000 / fps);
+
+    const oc = new OffscreenCanvas(outW, outH);
+    oc.getContext("2d")!.drawImage(canvas, 0, 0);
+    const vf = new VideoFrame(oc, { timestamp: timestampUs, duration: durationUs });
+    encoder.encode(vf, { keyFrame: i === 0 || i % (fps * 2) === 0 });
     vf.close();
 
-    if (i % 5 === 4) await sleep(0);
-    onProgress((i + 1) / frames.length);
+    if (i % 10 === 9) await sleep(0);
+    onProgress((i + 1) / totalFrames);
   }
 
   await encoder.flush();
-  if (encoderError) throw encoderError;
+  if (encErr) throw encErr;
   encoder.close();
 
-  for (const { chunk, meta } of encodedChunks) muxer.addVideoChunk(chunk, meta);
+  document.body.removeChild(video);
+  URL.revokeObjectURL(blobUrl);
+
+  for (const { chunk, meta } of encoded) muxer.addVideoChunk(chunk, meta);
   muxer.finalize();
 
-  return new Blob([target.buffer], { type: "video/mp4" });
-}
-
-// ─── MediaRecorder fallback ───────────────────────────────────────────────────
-
-async function encodeWithMediaRecorder(
-  frames: ImageData[],
-  fps: number,
-  width: number,
-  height: number,
-  onProgress: (p: number) => void
-): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d")!;
-
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : "video/webm";
-
-    const stream   = canvas.captureStream(fps);
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
-    const chunks: Blob[] = [];
-
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop  = () => resolve(new Blob(chunks, { type: mimeType }));
-    recorder.onerror = reject;
-    recorder.start();
-
-    let i = 0;
-    function drawNext() {
-      if (i >= frames.length) { recorder.stop(); return; }
-      ctx.putImageData(frames[i], 0, 0);
-      onProgress((i + 1) / frames.length);
-      i++;
-      setTimeout(drawNext, 1000 / fps);
-    }
-    drawNext();
-  });
+  downloadBlob(
+    new Blob([muxTarget.buffer], { type: "video/mp4" }),
+    `${filename.replace(/\s+/g, "-")}.mp4`,
+  );
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useVideoExport(): UseVideoExportReturn {
-  const [status,       setStatus]       = useState<ExportStatus>("idle");
-  const [progress,     setProgress]     = useState(0);
+  const [status, setStatus]           = useState<ExportStatus>("idle");
+  const [progress, setProgress]       = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [canExport, setCanExport]     = useState(true);
 
-  const [canExport, setCanExport] = useState(true);
   useEffect(() => {
-    if (typeof MediaRecorder === "undefined") setCanExport(false);
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getDisplayMedia)
+      setCanExport(false);
   }, []);
 
-  // Internal capture state — lives in refs so rAF callbacks don't go stale
-  const captureStateRef = useRef<{
-    frameEl: HTMLElement;
-    frames: ImageData[];
-    rafId: number | null;
-    totalMs: number;
-    startWall: number | null;
-    outW: number;
-    outH: number;
+  const stateRef = useRef<{
+    recorder: MediaRecorder;
+    chunks: Blob[];
+    stream: MediaStream;
     filename: string;
+    crop: { x: number; y: number; w: number; h: number; screenW: number; screenH: number };
+    frameEl: HTMLElement;
     capturing: boolean;
-    // resolves when finishCapture() is called
-    resolve: () => void;
-    reject: (e: Error) => void;
   } | null>(null);
 
-  const setProgressRef = useRef(setProgress);
-  setProgressRef.current = setProgress;
-
-  /**
-   * rAF loop — runs at the browser's native frame rate during live playback.
-   * Captures one html2canvas frame per screen frame (throttled to TARGET_FPS).
-   */
-  const rafLoop = useCallback(async (now: number) => {
-    const s = captureStateRef.current;
+  const finishCapture = useCallback(() => {
+    const s = stateRef.current;
     if (!s || !s.capturing) return;
-
-    // Throttle to TARGET_FPS
-    if (s.startWall === null) s.startWall = now;
-    const wall = now - s.startWall;
-    const expectedFrame = Math.floor(wall / MS_PER_FRAME);
-
-    if (expectedFrame <= s.frames.length - 1) {
-      // Not yet time for the next frame — keep looping
-      s.rafId = requestAnimationFrame(rafLoop);
-      return;
-    }
-
-    // Time for a new frame — capture it
-    try {
-      const frame = await captureFrame(s.frameEl, s.outW, s.outH);
-      if (!s.capturing) return; // was stopped while we awaited
-      s.frames.push(frame);
-
-      // Update progress (capture = 0–60%)
-      const captureProgress = Math.min(wall / s.totalMs, 1);
-      setProgressRef.current(captureProgress * 0.6);
-    } catch (e) {
-      if (s.capturing) {
-        s.capturing = false;
-        s.reject(e instanceof Error ? e : new Error(String(e)));
-      }
-      return;
-    }
-
-    s.rafId = requestAnimationFrame(rafLoop);
-  }, []);
-
-  const startExport = useCallback(({
-    frameEl,
-    script,
-    onReady,
-    filename = "banterbird-reel",
-  }: {
-    frameEl: HTMLElement;
-    script: VideoScript;
-    onReady: () => void;
-    onPlaybackEnd: () => void;
-    filename?: string;
-  }) => {
-    if (status === "capturing" || status === "encoding") return;
-
-    if (frameEl.offsetWidth < 10) {
-      setStatus("error");
-      setErrorMessage("Preview element has no visible dimensions.");
-      return;
-    }
-
-    const timeline = buildTimeline(script);
-    const outW = toEven(OUT_W);
-    const outH = toEven(OUT_H);
-
-    setStatus("capturing");
-    setProgress(0);
-    setErrorMessage(null);
-
-    // Set up capture state — encoding is triggered by finishCapture()
-    captureStateRef.current = {
-      frameEl,
-      frames: [],
-      rafId: null,
-      totalMs: timeline.totalDuration,
-      startWall: null,
-      outW,
-      outH,
-      filename,
-      capturing: true,
-      resolve: () => {},
-      reject: () => {},
-    };
-
-    // Start the rAF loop
-    captureStateRef.current.rafId = requestAnimationFrame(rafLoop);
-
-    // Tell the caller to start playback
-    onReady();
-  }, [status, rafLoop]);
-
-  const finishCapture = useCallback(async () => {
-    const s = captureStateRef.current;
-    if (!s || !s.capturing) return;
-
-    // Stop the rAF loop
     s.capturing = false;
-    if (s.rafId !== null) {
-      cancelAnimationFrame(s.rafId);
-      s.rafId = null;
-    }
 
-    const { frames, outW, outH, filename } = s;
-    captureStateRef.current = null;
+    setStatus("encoding");
+    try { s.recorder.stop(); } catch { /* ignore */ }
+  }, []);
 
-    if (frames.length === 0) {
-      setStatus("error");
-      setErrorMessage("No frames were captured.");
-      return;
-    }
+  const startExport = useCallback(
+    ({
+      frameEl,
+      script: _script,
+      onReady,
+      filename = "banterbird-reel",
+    }: {
+      frameEl: HTMLElement;
+      script: VideoScript;
+      onReady: () => void;
+      filename?: string;
+    }) => {
+      if (status === "waiting" || status === "capturing" || status === "encoding") return;
 
-    try {
-      setStatus("encoding");
-      setProgress(0.6);
+      setStatus("waiting");
+      setProgress(0);
+      setErrorMessage(null);
 
-      const hasWebCodecs =
-        typeof VideoEncoder    !== "undefined" &&
-        typeof VideoFrame      !== "undefined" &&
-        typeof OffscreenCanvas !== "undefined";
+      async function run() {
+        try {
+          // ── 1. Scroll the preview fully into view ──────────────────────
+          frameEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          // Wait for smooth scroll to settle
+          await sleep(600);
 
-      let blob: Blob;
-      let ext: string;
+          // ── 2. Measure the preview rect NOW (stable, no fullscreen) ────
+          const rect = frameEl.getBoundingClientRect();
+          const crop = {
+            x: rect.left,
+            y: rect.top,
+            w: rect.width,
+            h: rect.height,
+            screenW: window.innerWidth,
+            screenH: window.innerHeight,
+          };
 
-      if (hasWebCodecs) {
-        blob = await encodeWithWebCodecs(frames, TARGET_FPS, outW, outH,
-          (p) => setProgress(0.6 + p * 0.4));
-        ext = "mp4";
-      } else {
-        blob = await encodeWithMediaRecorder(frames, TARGET_FPS, outW, outH,
-          (p) => setProgress(0.6 + p * 0.4));
-        ext = "webm";
+          // ── 3. Request tab capture ─────────────────────────────────────
+          const constraints: DisplayMediaStreamOptions = {
+            video: {
+              frameRate: { ideal: 30, max: 60 },
+              preferCurrentTab: true,
+            } as MediaTrackConstraints,
+            audio: false,
+          };
+          const stream = await navigator.mediaDevices.getDisplayMedia(constraints);
+
+          // ── 4. Set up MediaRecorder ────────────────────────────────────
+          const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+            ? "video/webm;codecs=vp9"
+            : "video/webm";
+
+          const recorder = new MediaRecorder(stream, {
+            mimeType,
+            videoBitsPerSecond: 12_000_000,
+          });
+          const chunks: Blob[] = [];
+
+          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+          recorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const webmBlob = new Blob(chunks, { type: mimeType });
+
+            try {
+              await cropAndEncode(
+                webmBlob,
+                crop,
+                filename,
+                (p) => setProgress(p),
+              );
+              setStatus("done");
+              setProgress(1);
+            } catch (err) {
+              console.error("[useVideoExport] encode error:", err);
+              // Fall back: download the raw WebM so nothing is lost
+              downloadBlob(webmBlob, `${filename.replace(/\s+/g, "-")}.webm`);
+              setStatus("done");
+              setProgress(1);
+            }
+            stateRef.current = null;
+          };
+
+          recorder.onerror = () => {
+            setStatus("error");
+            setErrorMessage("Recording failed.");
+            stateRef.current = null;
+          };
+
+          // If the user manually stops sharing, treat it as finishCapture
+          stream.getVideoTracks()[0]?.addEventListener("ended", () => finishCapture());
+
+          stateRef.current = {
+            recorder, chunks, stream, frameEl, filename,
+            crop, capturing: true,
+          };
+
+          recorder.start(100);
+          setStatus("capturing");
+          onReady(); // start VideoPreview playback
+
+        } catch (err: unknown) {
+          const name = err instanceof Error ? err.name : "";
+          const msg  = err instanceof Error ? err.message : String(err);
+          if (name === "NotAllowedError" || msg.includes("cancelled")) {
+            setStatus("idle");
+          } else {
+            setStatus("error");
+            setErrorMessage(msg);
+          }
+          stateRef.current = null;
+        }
       }
 
-      downloadBlob(blob, `${filename.replace(/\s+/g, "-")}.${ext}`);
-      setStatus("done");
-      setProgress(1);
-    } catch (err) {
-      console.error("[useVideoExport]", err);
-      setStatus("error");
-      setErrorMessage(
-        err instanceof Error ? err.message : "Export failed. See console for details."
-      );
-    }
-  }, []);
+      void run();
+    },
+    [status, finishCapture],
+  );
 
   return { startExport, finishCapture, status, progress, errorMessage, canExport };
 }

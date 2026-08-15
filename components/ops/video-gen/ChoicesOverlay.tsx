@@ -33,14 +33,14 @@ interface Props {
 
 const SLOT_COLORS = {
   A: {
-    base: "rgba(124,58,237,0.18)",
-    border: "rgba(124,58,237,0.35)",
+    base: "#1a0f35",
+    border: "rgba(124,58,237,0.5)",
     glow: "rgba(124,58,237,0.55)",
     label: "#a78bfa",
   },
   B: {
-    base: "rgba(20,184,166,0.15)",
-    border: "rgba(20,184,166,0.32)",
+    base: "#0a2026",
+    border: "rgba(20,184,166,0.45)",
     glow: "rgba(20,184,166,0.52)",
     label: "#2dd4bf",
   },
@@ -48,14 +48,14 @@ const SLOT_COLORS = {
 
 const WINNER_COLORS = {
   A: {
-    bg: "rgba(124,58,237,0.32)",
+    bg: "#2a1250",
     border: "rgba(167,139,250,0.8)",
     glow: "0 0 32px 6px rgba(124,58,237,0.55)",
     text: "#ede9fe",
     label: "#a78bfa",
   },
   B: {
-    bg: "rgba(20,184,166,0.28)",
+    bg: "#0d2e2a",
     border: "rgba(45,212,191,0.75)",
     glow: "0 0 32px 6px rgba(20,184,166,0.5)",
     text: "#ccfbf1",
@@ -177,17 +177,23 @@ export function ChoicesOverlay({ choices, phase }: Props) {
           ? { duration: 0.38, ease: [0.4, 0, 1, 1] }
           : { type: "spring", stiffness: 280, damping: 28 }
       }
-      className="absolute inset-x-0 bottom-0 z-20 px-4 pb-24 pt-4"
+      className="absolute z-20 px-4 pb-4 pt-3"
       style={{
-        background:
-          "linear-gradient(to top, rgba(12,18,28,0.98) 65%, rgba(12,18,28,0) 100%)",
+        left: "8%",
+        right: "8%",
+        bottom: "22%",
+        /* Solid base so nothing from behind bleeds through */
+        background: "#0a1020",
+        /* Soft fade only at the very top edge so it blends into the chat */
+        borderTop: "1px solid rgba(255,255,255,0.06)",
+        boxShadow: "0 -24px 48px 16px #0a1020", /* kills any bleed above the panel */
       }}
     >
       {/* Header */}
       <div className="mb-3 text-center">
         <span
           className="text-[11px] font-black uppercase tracking-[0.2em]"
-          style={{ color: "#5c6d8f" }}
+          style={{ color: "#8a9bbf" }}
         >
           What would you do?
         </span>
@@ -202,11 +208,11 @@ export function ChoicesOverlay({ choices, phase }: Props) {
 
       {/* Decorative vs divider */}
       <div className="mt-2 flex items-center justify-center gap-3">
-        <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-        <span className="text-[11px] font-bold" style={{ color: "#3f4f6f" }}>
+        <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.10)" }} />
+        <span className="text-[11px] font-bold" style={{ color: "#6b7fa8" }}>
           VS
         </span>
-        <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+        <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.10)" }} />
       </div>
     </motion.div>
   );

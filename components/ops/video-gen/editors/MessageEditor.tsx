@@ -20,6 +20,9 @@ interface Props {
   messages: ChatMessage[];
   sender: MessageSender;
   onChange: (messages: ChatMessage[]) => void;
+  /** When true each message shows a stranger/you toggle so the section can
+   *  contain a mixed back-and-forth conversation (e.g. post-choice exchange). */
+  allowSenderToggle?: boolean;
 }
 
 function uid() {
@@ -38,16 +41,21 @@ function readFileAsDataUrl(file: File): Promise<string> {
 const FIELD =
   "w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-navy-500 outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 transition";
 
-export function MessageEditor({ messages, sender, onChange }: Props) {
+export function MessageEditor({ messages, sender, onChange, allowSenderToggle = false }: Props) {
   const fileRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   function addMessage() {
     const last = messages.at(-1);
+    // In toggle mode, default new messages to the opposite of the last one
+    // so it naturally continues a back-and-forth exchange.
+    const newSender: MessageSender = allowSenderToggle && last
+      ? (last.sender === "me" ? "stranger" : "me")
+      : sender;
     onChange([
       ...messages,
       {
         id: uid(),
-        sender,
+        sender: newSender,
         text: "",
         delayMs: last ? last.delayMs + 1200 : 800,
       },
@@ -88,17 +96,47 @@ export function MessageEditor({ messages, sender, onChange }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      {messages.map((msg, idx) => (
+      {messages.map((msg, idx) => {
+        const msgSender = allowSenderToggle ? msg.sender : sender;
+        const msgLabel = msgSender === "stranger" ? "Stranger" : "You";
+        const msgAccent = msgSender === "stranger"
+          ? "border-teal-500/20 bg-teal-950/10"
+          : "border-violet-500/20 bg-violet-950/10";
+
+        return (
         <div
           key={msg.id}
-          className={`rounded-xl border p-4 ${accentClass}`}
+          className={`rounded-xl border p-4 ${msgAccent}`}
         >
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4 text-navy-600 cursor-grab" aria-hidden />
-              <span className="text-xs font-semibold uppercase tracking-wide text-navy-400">
-                {label} · msg {idx + 1}
-              </span>
+              {allowSenderToggle ? (
+                /* Sender toggle: click to flip between Stranger / You */
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateField(
+                      msg.id,
+                      "sender",
+                      msg.sender === "stranger" ? "me" : "stranger"
+                    )
+                  }
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                    msg.sender === "stranger"
+                      ? "border-teal-500/40 bg-teal-950/30 text-teal-400 hover:bg-teal-950/60"
+                      : "border-violet-500/40 bg-violet-950/30 text-violet-400 hover:bg-violet-950/60"
+                  }`}
+                  title="Click to toggle Stranger / You"
+                >
+                  {msgLabel} · msg {idx + 1}
+                  <span className="opacity-50">⇄</span>
+                </button>
+              ) : (
+                <span className="text-xs font-semibold uppercase tracking-wide text-navy-400">
+                  {label} · msg {idx + 1}
+                </span>
+              )}
             </div>
             <button
               type="button"
@@ -115,7 +153,7 @@ export function MessageEditor({ messages, sender, onChange }: Props) {
             rows={2}
             value={msg.text}
             onChange={(e) => updateField(msg.id, "text", e.target.value)}
-            placeholder={`${label}'s message…`}
+            placeholder={`${msgLabel}'s message…`}
             className={`${FIELD} resize-none`}
           />
 
@@ -187,7 +225,8 @@ export function MessageEditor({ messages, sender, onChange }: Props) {
             <span className="text-[11px] text-navy-600">from video start</span>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       <button
         type="button"
@@ -195,7 +234,7 @@ export function MessageEditor({ messages, sender, onChange }: Props) {
         className="flex items-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/3 px-4 py-3 text-sm text-navy-400 hover:border-violet-500/40 hover:text-white transition"
       >
         <Plus className="h-4 w-4" />
-        Add {label} message
+        Add {allowSenderToggle ? "message" : `${label} message`}
       </button>
     </div>
   );

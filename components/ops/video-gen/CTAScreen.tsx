@@ -26,8 +26,14 @@ export function CTAScreen({ headline, subline, visible }: Props) {
       animate={{ opacity: visible ? 1 : 0 }}
       transition={{ duration: 0.55, ease: "easeInOut" }}
       aria-hidden={!visible}
-      className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center px-8"
+      className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center"
       style={{
+        /*
+         * Match the VideoTemplate safe-zone so the CTA content centres
+         * within the inner card frame, not across the full 9:16 frame.
+         * padding shorthand: top right bottom left
+         */
+        padding: "8% 8% 22% 8%",
         background:
           "linear-gradient(160deg, #0c121c 0%, #141f2e 50%, #0c121c 100%)",
       }}

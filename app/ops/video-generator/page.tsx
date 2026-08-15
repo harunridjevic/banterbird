@@ -10,8 +10,8 @@
  *   Right — 9:16 live preview + playback controls + export
  *
  * The preview is driven by the VideoPreview component via a ref handle.
- * Export is handled by useVideoExport which captures frames from the
- * rendered preview element and encodes them to MP4/WebM.
+ * Export is handled by useVideoExport which scrubs an off-screen
+ * ExportRenderer (1080×1920) frame-by-frame and encodes to MP4/WebM.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -39,7 +39,7 @@ import {
   type VideoScript,
   type VideoTemplate,
 } from "@/lib/ops/video-generator-types";
-import { useVideoExport } from "@/lib/ops/use-video-export";
+import { useVideoExport, type ExportStatus } from "@/lib/ops/use-video-export";
 // ─── Local storage persistence ────────────────────────────────────────────────
 
 const LS_KEY = "banterbird:ops:videoTemplate";
@@ -119,17 +119,19 @@ function ExportStatus({
   progress,
   errorMessage,
 }: {
-  status: string;
+  status: ExportStatus;
   progress: number;
   errorMessage: string | null;
 }) {
   if (status === "idle") return null;
 
   const label =
-    status === "capturing"
-      ? "Capturing frames…"
+    status === "waiting"
+      ? `Pick "This Tab" in the share dialog…`
+      : status === "capturing"
+      ? "Recording — keep this tab visible…"
       : status === "encoding"
-      ? "Encoding video…"
+      ? "Encoding to MP4…"
       : status === "done"
       ? "Export complete — check your Downloads"
       : status === "error"
@@ -139,7 +141,7 @@ function ExportStatus({
   return (
     <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4">
       <div className="flex items-center gap-2 mb-2.5">
-        {status === "capturing" || status === "encoding" ? (
+        {status === "waiting" || status === "capturing" || status === "encoding" ? (
           <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
         ) : status === "done" ? (
           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -232,6 +234,7 @@ function PlaybackControls({
 export default function VideoGeneratorPage() {
   const [template, setTemplate] = useState<VideoTemplate>(createDefaultTemplate);
   const previewRef = useRef<VideoPreviewHandle | null>(null);
+  // The live preview DOM element — captured directly during export
   const frameElRef = useRef<HTMLDivElement | null>(null);
 
   // Playback state — kept in React state so controls always re-render correctly
@@ -306,12 +309,12 @@ export default function VideoGeneratorPage() {
 
   function handleExport() {
     if (!frameElRef.current) return;
+    // Reset to t=0 and play — the rAF capture loop starts simultaneously
     previewRef.current?.pause();
     setIsPlaying(false);
     setProgress(0);
     setElapsedMs(0);
-    // Reset preview to t=0 then startExport triggers play via onReady
-    setTemplate((t) => ({ ...t }));
+    setTemplate((t) => ({ ...t })); // nudge to reset VideoPreview state
     setTimeout(() => {
       startExport({
         frameEl: frameElRef.current!,
@@ -321,18 +324,17 @@ export default function VideoGeneratorPage() {
           previewRef.current?.play();
           setIsPlaying(true);
         },
-        onPlaybackEnd: () => {},
       });
-    }, 100);
+    }, 80); // brief delay so the reset render flushes before capture starts
   }
 
-  const isExportingRef = useRef(false);
-  const isExporting = exportStatus === "capturing" || exportStatus === "encoding";
-
-  // Keep ref in sync so onEnd closure always reads the live value
+  // Stable ref so the onEnd closure always reads the live export status
+  const isCapturingRef = useRef(false);
   useEffect(() => {
-    isExportingRef.current = exportStatus === "capturing";
+    isCapturingRef.current = exportStatus === "capturing";
   }, [exportStatus]);
+
+  const isExporting = exportStatus === "waiting" || exportStatus === "capturing" || exportStatus === "encoding";
 
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
@@ -414,17 +416,19 @@ export default function VideoGeneratorPage() {
 
             {/* 3. Response messages */}
             <Section
-              title="3 · User response"
+              title="3 · Post-choice conversation"
               badge={String(template.script.responseMessages.length)}
               defaultOpen
             >
               <p className="mb-4 text-xs leading-relaxed text-navy-500">
-                The BanterBird user&apos;s reply after the choice is made. End with a cliffhanger
-                — leave something unresolved to drive curiosity.
+                The back-and-forth after the choice is made. Each message can be from
+                either the user or the stranger — click the pill label to toggle.
+                End with a cliffhanger to drive curiosity.
               </p>
               <MessageEditor
                 messages={template.script.responseMessages}
                 sender="me"
+                allowSenderToggle
                 onChange={(responseMessages) => updateScript({ responseMessages })}
               />
             </Section>
@@ -466,27 +470,23 @@ export default function VideoGeneratorPage() {
                       onEnd={() => {
                         setIsPlaying(false);
                         setProgress(1);
-                        // Use ref — exportStatus in closure would be stale
-                        if (isExportingRef.current) {
+                        if (isCapturingRef.current) {
                           void finishCapture();
                         }
                       }}
                     />
                   </div>
 
-                  {/* Export overlay: dims preview while exporting */}
-                  {isExporting && (
-                    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/60">
+                  {/* Export overlay — waiting for share dialog or encoding after recording.
+                      NOT shown during capture so the recording isn't obscured. */}
+                  {(exportStatus === "waiting" || exportStatus === "encoding") && (
+                    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-xl bg-black/70">
                       <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
                       <p className="text-sm font-semibold text-white">
-                        {exportStatus === "capturing" ? "Recording…" : "Encoding…"}
+                        {exportStatus === "waiting" ? `Pick "This Tab" to share…` : "Cropping & encoding…"}
                       </p>
-                      {exportStatus === "capturing" && (
-                        <p className="text-xs text-navy-400">Playing through at normal speed</p>
-                      )}
                     </div>
-                  )}
-                </div>
+                  )}                </div>
               </div>
 
               {/* Playback controls */}
@@ -535,9 +535,10 @@ export default function VideoGeneratorPage() {
                 />
 
                 <p className="mt-3 text-[11px] leading-relaxed text-navy-600">
-                  Records the live preview in real time at 30 fps, then encodes to
-                  MP4 (H.264 8 Mbps). Export takes as long as the video itself. Keep the
-                  browser tab visible during recording.
+                  Scrolls the preview into view, records this tab, then crops
+                  the output to exactly the preview frame. When prompted, pick{" "}
+                  <strong className="text-navy-400">"This Tab"</strong>.
+                  Export takes as long as the video itself.
                 </p>
               </div>
 
