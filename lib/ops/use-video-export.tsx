@@ -1,341 +1,457 @@
 "use client";
 
 /**
- * useVideoExport
+ * useVideoExport — off-screen render + html2canvas-pro
  *
- * Pipeline:
- *   1. Scroll the preview element into view so the whole 9:16 frame is visible.
- *   2. Measure its exact bounding rect (position + size on screen).
- *   3. getDisplayMedia({ preferCurrentTab:true }) — one-click tab share dialog.
- *   4. MediaRecorder records the tab stream while VideoPreview plays from t=0.
- *   5. On playback end → stop recorder.
- *   6. Decode the recorded WebM with a <video> element, seek frame-by-frame,
- *      crop each frame to the saved bounding rect, encode as H.264 MP4.
- *   7. Download the MP4 — exact 9:16 preview content, nothing else.
+ * Strategy
+ * ────────
+ * 1. Mount a second VideoPreview React root into a hidden 380×677 px div
+ *    (left: -9999 px — fully rendered by the browser but off-screen).
+ *    380 px is the same logical width as the live preview, so every CSS
+ *    value, font size, padding and border-radius looks identical.
+ *
+ * 2. Drive its timeline by writing `data-export-elapsed` on the wrapper,
+ *    which VideoPreview's MutationObserver picks up as elapsed-ms state.
+ *
+ * 3. At each frame step, wait 2 rAFs + SETTLE_MS for React and Framer
+ *    Motion to finish rendering, then call html2canvas-pro with
+ *    scale = 1080 / 380 ≈ 2.842.  This rasterises the 380 px element
+ *    at native 1080×1920 — no upscaling artefacts.
+ *
+ * 4. Encode ImageData[] → H.264 MP4 via WebCodecs + mp4-muxer
+ *    (MediaRecorder WebM fallback if WebCodecs unavailable).
+ *
+ * Why this looks identical to the preview
+ * ────────────────────────────────────────
+ * The off-screen element uses the exact same component, same CSS, same
+ * fonts and same logical width as the live preview.  html2canvas-pro
+ * supports all modern CSS color functions (oklch, lab, etc.) used by
+ * Tailwind v4.  The only difference is resolution.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import type { VideoScript } from "./video-generator-types";
+import { buildTimeline } from "./video-generator-types";
+import { VideoPreview } from "@/components/ops/video-gen/VideoPreview";
+import { renderSFXBuffer, type SFXEvent } from "./sfx";
 
 export type ExportStatus =
   | "idle"
-  | "waiting"    // awaiting getDisplayMedia permission
-  | "capturing"  // MediaRecorder running
-  | "encoding"   // cropping + muxing to MP4
+  | "rendering"   // scrubbing timeline + capturing frames
+  | "encoding"    // WebCodecs / MediaRecorder encode pass
   | "done"
   | "error";
 
 export interface UseVideoExportReturn {
   startExport: (params: {
-    frameEl: HTMLElement;
-    script: VideoScript;
-    onReady: () => void;
+    script:    VideoScript;
     filename?: string;
-  }) => void;
-  finishCapture: () => void;
-  status: ExportStatus;
-  progress: number;
+  }) => Promise<void>;
+  status:       ExportStatus;
+  progress:     number;
   errorMessage: string | null;
-  canExport: boolean;
+  canExport:    boolean;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-function toEven(n: number) { return n % 2 === 0 ? n : n - 1; }
+/** Logical width of the off-screen render container — matches live preview */
+const RENDER_W = 380;
+const RENDER_H = Math.round(RENDER_W * (16 / 9)); // 677
+
+/** Output resolution */
+const OUT_W = 1080;
+const OUT_H = 1920;
+
+/** Scale factor passed to html2canvas: renders at OUT_W physical pixels */
+const CAPTURE_SCALE = OUT_W / RENDER_W; // ≈ 2.842
+
+const TARGET_FPS = 30;
+const MS_PER_FRAME = 1000 / TARGET_FPS;
+
+/** How many times to slow down animations during export */
+const EXPORT_SLOW_FACTOR = 3;
+
+/** Video time advanced per captured frame */
+const VIDEO_MS_PER_STEP = MS_PER_FRAME;
+
+/** ms to wait after setting elapsed before capturing */
+const SETTLE_MS = 50;
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function toEven(n: number) { return n % 2 === 0 ? n : n + 1; }
+
+function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
+
+function waitRaf() {
+  return new Promise<void>((r) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => r()))
+  );
+}
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
+  const a   = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
+// ─── Off-screen React root ────────────────────────────────────────────────────
 
-// ─── Crop + encode ────────────────────────────────────────────────────────────
+interface OffscreenRoot {
+  setElapsed: (ms: number) => void;
+  frameEl: HTMLDivElement;
+  unmount: () => void;
+}
 
-/**
- * Given a recorded WebM blob and the crop rect (in screen-pixel coordinates
- * relative to the fullscreen video frame), decode every frame, crop it, and
- * re-encode as H.264 MP4.
- *
- * The crop rect is expressed in CSS pixels relative to the fullscreen viewport.
- * When the preview goes fullscreen on a 16:9 monitor the browser letterboxes
- * it — black bars top/bottom. getBoundingClientRect() in fullscreen gives us
- * the exact rendered area including letterbox offset.
- */
-async function cropAndEncode(
-  webmBlob: Blob,
-  crop: { x: number; y: number; w: number; h: number; screenW: number; screenH: number },
-  filename: string,
+function createOffscreenRoot(script: VideoScript): Promise<OffscreenRoot> {
+  return new Promise((resolve) => {
+    const shell = document.createElement("div");
+    shell.style.cssText = [
+      "position:fixed",
+      `left:-${RENDER_W + 100}px`,
+      "top:0",
+      `width:${RENDER_W}px`,
+      `height:${RENDER_H}px`,
+      "overflow:hidden",
+      "z-index:-1",
+      "pointer-events:none",
+    ].join(";");
+
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-video-export-root", "");
+    wrapper.style.cssText =
+      `width:${RENDER_W}px;height:${RENDER_H}px;position:relative;overflow:hidden;background:#0c121c;`;
+
+    const frameEl = document.createElement("div");
+    frameEl.style.cssText =
+      `width:${RENDER_W}px;height:${RENDER_H}px;position:relative;overflow:hidden;`;
+
+    wrapper.appendChild(frameEl);
+    shell.appendChild(wrapper);
+    document.body.appendChild(shell);
+
+    let root: Root | null = null;
+
+    const setElapsed = (ms: number) => {
+      wrapper.dataset.exportElapsed = String(ms);
+    };
+
+    const unmount = () => {
+      root?.unmount();
+      if (document.body.contains(shell)) document.body.removeChild(shell);
+    };
+
+    root = createRoot(frameEl);
+    root.render(<VideoPreview script={script} slowFactor={EXPORT_SLOW_FACTOR} />);
+
+    requestAnimationFrame(() => {
+      resolve({ setElapsed, frameEl, unmount });
+    });
+  });
+}
+
+// ─── Frame capture ────────────────────────────────────────────────────────────
+
+async function captureFrame(el: HTMLElement): Promise<ImageData> {
+  const html2canvas = (await import("html2canvas-pro")).default;
+
+  const raw = await html2canvas(el, {
+    useCORS:         true,
+    allowTaint:      true,
+    backgroundColor: "#0c121c",
+    scale:           CAPTURE_SCALE,
+    logging:         false,
+    width:           RENDER_W,
+    height:          RENDER_H,
+    windowWidth:     RENDER_W,
+    windowHeight:    RENDER_H,
+  });
+
+  const w = toEven(OUT_W);
+  const h = toEven(OUT_H);
+
+  if (raw.width === w && raw.height === h) {
+    return raw.getContext("2d")!.getImageData(0, 0, w, h);
+  }
+
+  const out   = document.createElement("canvas");
+  out.width   = w;
+  out.height  = h;
+  const ctx   = out.getContext("2d", { alpha: false })!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(raw, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+
+// ─── WebCodecs encoder ────────────────────────────────────────────────────────
+
+type EncodedChunkWithMeta = {
+  chunk: EncodedVideoChunk;
+  meta:  EncodedVideoChunkMetadata | undefined;
+};
+
+async function encodeWithWebCodecs(
+  frames:     ImageData[],
+  fps:        number,
+  width:      number,
+  height:     number,
+  audioPcm:   Float32Array,
+  sampleRate: number,
   onProgress: (p: number) => void,
-): Promise<void> {
+): Promise<Blob> {
   const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
 
-  const outW = toEven(crop.w);
-  const outH = toEven(crop.h);
-
-  // Draw the WebM into a hidden video element and seek frame-by-frame
-  // using requestVideoFrameCallback to get every frame.
-  const blobUrl = URL.createObjectURL(webmBlob);
-  const video = document.createElement("video");
-  video.src = blobUrl;
-  video.muted = true;
-  video.playsInline = true;
-  video.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;";
-  document.body.appendChild(video);
-
-  await new Promise<void>((resolve, reject) => {
-    video.onloadedmetadata = () => resolve();
-    video.onerror = () => reject(new Error("Failed to load recorded video for cropping."));
-    video.load();
-  });
-
-  const duration = video.duration; // seconds
-  const fps = 30;
-  const totalFrames = Math.ceil(duration * fps);
-
-  // Scale factor: the video track is the screen resolution; the crop rect
-  // is in CSS pixels. On HiDPI screens the video track may be 2× the CSS
-  // pixels — compute the ratio.
-  const vidW = video.videoWidth;
-  const vidH = video.videoHeight;
-  const scaleX = vidW / crop.screenW;
-  const scaleY = vidH / crop.screenH;
-
-  // Crop rect in video-pixel space
-  const srcX = Math.round(crop.x * scaleX);
-  const srcY = Math.round(crop.y * scaleY);
-  const srcW = Math.round(crop.w * scaleX);
-  const srcH = Math.round(crop.h * scaleY);
-
-  // Canvas to draw cropped frames into
-  const canvas = document.createElement("canvas");
-  canvas.width = outW;
-  canvas.height = outH;
-  const ctx = canvas.getContext("2d", { alpha: false })!;
-
-  const muxTarget = new ArrayBufferTarget();
-  const muxer = new Muxer({
-    target: muxTarget,
-    video: { codec: "avc", width: outW, height: outH, frameRate: fps },
+  const hasAudio = audioPcm.length > 0;
+  const target = new ArrayBufferTarget();
+  const muxer  = new Muxer({
+    target,
+    video: { codec: "avc", width, height, frameRate: fps },
+    ...(hasAudio ? { audio: { codec: "aac", numberOfChannels: 1, sampleRate } } : {}),
     fastStart: "in-memory",
-    firstTimestampBehavior: "offset",
+    firstTimestampBehavior: "strict",
   });
 
-  const encoded: { chunk: EncodedVideoChunk; meta: EncodedVideoChunkMetadata | undefined }[] = [];
+  const videoChunks: EncodedChunkWithMeta[] = [];
   let encErr: Error | null = null;
 
   const encoder = new VideoEncoder({
-    output: (chunk, meta) => encoded.push({ chunk, meta }),
-    error: (e) => { encErr = e; },
+    output: (chunk, meta) => videoChunks.push({ chunk, meta }),
+    error:  (e) => { encErr = e; },
   });
   encoder.configure({
-    codec: "avc1.640032",
-    width: outW,
-    height: outH,
-    bitrate: 12_000_000,
-    framerate: fps,
+    codec:       "avc1.640032",
+    width, height,
+    bitrate:     8_000_000,
+    framerate:   fps,
     latencyMode: "quality",
   });
 
-  // Walk through the video frame-by-frame by seeking
-  for (let i = 0; i < totalFrames; i++) {
+  for (let i = 0; i < frames.length; i++) {
     if (encErr) throw encErr;
-
-    const t = i / fps;
-    if (t > duration) break;
-
-    // Seek and wait for the frame to be ready
-    video.currentTime = t;
-    await new Promise<void>((resolve) => {
-      const handler = () => { video.removeEventListener("seeked", handler); resolve(); };
-      video.addEventListener("seeked", handler);
-    });
-
-    // Draw the cropped region onto our output canvas
-    ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
-
-    const timestampUs = Math.round(t * 1_000_000);
-    const durationUs  = Math.round(1_000_000 / fps);
-
-    const oc = new OffscreenCanvas(outW, outH);
-    oc.getContext("2d")!.drawImage(canvas, 0, 0);
-    const vf = new VideoFrame(oc, { timestamp: timestampUs, duration: durationUs });
+    const timestamp = Math.round((i / fps) * 1_000_000);
+    const duration  = Math.round((1 / fps) * 1_000_000);
+    const oc = new OffscreenCanvas(width, height);
+    oc.getContext("2d")!.putImageData(frames[i], 0, 0);
+    const vf = new VideoFrame(oc, { timestamp, duration });
     encoder.encode(vf, { keyFrame: i === 0 || i % (fps * 2) === 0 });
     vf.close();
-
-    if (i % 10 === 9) await sleep(0);
-    onProgress((i + 1) / totalFrames);
+    if (i % 5 === 4) await sleep(0);
+    onProgress((i + 1) / frames.length);
   }
 
   await encoder.flush();
   if (encErr) throw encErr;
   encoder.close();
 
-  document.body.removeChild(video);
-  URL.revokeObjectURL(blobUrl);
+  for (const { chunk, meta } of videoChunks) muxer.addVideoChunk(chunk, meta);
 
-  for (const { chunk, meta } of encoded) muxer.addVideoChunk(chunk, meta);
+  if (hasAudio && typeof AudioEncoder !== "undefined") {
+    const AUDIO_CHUNK = 1024;
+    const audioChunks: { chunk: EncodedAudioChunk; meta?: EncodedAudioChunkMetadata }[] = [];
+    let audioErr: Error | null = null;
+
+    const audioEncoder = new AudioEncoder({
+      output: (chunk, meta) => audioChunks.push({ chunk, meta }),
+      error:  (e) => { audioErr = e; },
+    });
+    audioEncoder.configure({
+      codec:            "mp4a.40.2",
+      sampleRate,
+      numberOfChannels: 1,
+      bitrate:          128_000,
+    });
+
+    for (let offset = 0; offset < audioPcm.length; offset += AUDIO_CHUNK) {
+      if (audioErr) break;
+      const slice = audioPcm.slice(offset, offset + AUDIO_CHUNK);
+      const timestamp = Math.round((offset / sampleRate) * 1_000_000);
+      const buf = new AudioData({
+        format:           "f32",
+        sampleRate,
+        numberOfFrames:   slice.length,
+        numberOfChannels: 1,
+        timestamp,
+        data:             slice,
+      });
+      audioEncoder.encode(buf);
+      buf.close();
+    }
+
+    await audioEncoder.flush();
+    if (!audioErr) {
+      audioEncoder.close();
+      for (const { chunk, meta } of audioChunks) muxer.addAudioChunk(chunk, meta);
+    }
+  }
+
   muxer.finalize();
+  return new Blob([target.buffer], { type: "video/mp4" });
+}
 
-  downloadBlob(
-    new Blob([muxTarget.buffer], { type: "video/mp4" }),
-    `${filename.replace(/\s+/g, "-")}.mp4`,
-  );
+async function encodeWithMediaRecorder(
+  frames:     ImageData[],
+  fps:        number,
+  width:      number,
+  height:     number,
+  onProgress: (p: number) => void,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const canvas  = document.createElement("canvas");
+    canvas.width  = width;
+    canvas.height = height;
+    const ctx     = canvas.getContext("2d")!;
+
+    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9" : "video/webm";
+
+    const recorder = new MediaRecorder(canvas.captureStream(fps),
+      { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+    const parts: Blob[] = [];
+
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) parts.push(e.data); };
+    recorder.onstop  = () => resolve(new Blob(parts, { type: mime }));
+    recorder.onerror = reject;
+    recorder.start();
+
+    let i = 0;
+    const draw = () => {
+      if (i >= frames.length) { recorder.stop(); return; }
+      ctx.putImageData(frames[i++], 0, 0);
+      onProgress(i / frames.length);
+      setTimeout(draw, 1000 / fps);
+    };
+    draw();
+  });
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useVideoExport(): UseVideoExportReturn {
-  const [status, setStatus]           = useState<ExportStatus>("idle");
-  const [progress, setProgress]       = useState(0);
+  const [status,       setStatus]       = useState<ExportStatus>("idle");
+  const [progress,     setProgress]     = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [canExport, setCanExport]     = useState(true);
+  const [canExport,    setCanExport]    = useState(true);
+  const abortRef = useRef(false);
 
   useEffect(() => {
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getDisplayMedia)
-      setCanExport(false);
+    if (typeof VideoEncoder === "undefined") setCanExport(false);
   }, []);
 
-  const stateRef = useRef<{
-    recorder: MediaRecorder;
-    chunks: Blob[];
-    stream: MediaStream;
-    filename: string;
-    crop: { x: number; y: number; w: number; h: number; screenW: number; screenH: number };
-    frameEl: HTMLElement;
-    capturing: boolean;
-  } | null>(null);
+  const startExport = useCallback(async ({
+    script,
+    filename = "banterbird-reel",
+  }: {
+    script:    VideoScript;
+    filename?: string;
+  }) => {
+    if (status === "rendering" || status === "encoding") return;
 
-  const finishCapture = useCallback(() => {
-    const s = stateRef.current;
-    if (!s || !s.capturing) return;
-    s.capturing = false;
+    setStatus("rendering");
+    setProgress(0);
+    setErrorMessage(null);
+    abortRef.current = false;
 
-    setStatus("encoding");
-    try { s.recorder.stop(); } catch { /* ignore */ }
-  }, []);
+    const timeline = buildTimeline(script);
+    const totalMs  = timeline.totalDuration;
 
-  const startExport = useCallback(
-    ({
-      frameEl,
-      script: _script,
-      onReady,
-      filename = "banterbird-reel",
-    }: {
-      frameEl: HTMLElement;
-      script: VideoScript;
-      onReady: () => void;
-      filename?: string;
-    }) => {
-      if (status === "waiting" || status === "capturing" || status === "encoding") return;
+    const offscreen = await createOffscreenRoot(script);
+    const frames: ImageData[] = [];
 
-      setStatus("waiting");
-      setProgress(0);
-      setErrorMessage(null);
+    try {
+      // ── Phase 1: Render + capture each frame ──────────────────────────
+      for (let elapsedMs = 0; elapsedMs <= totalMs; elapsedMs += VIDEO_MS_PER_STEP) {
+        if (abortRef.current) break;
 
-      async function run() {
-        try {
-          // ── 1. Scroll the preview fully into view ──────────────────────
-          frameEl.scrollIntoView({ behavior: "smooth", block: "center" });
-          // Wait for smooth scroll to settle
-          await sleep(600);
+        offscreen.setElapsed(Math.min(elapsedMs, totalMs));
 
-          // ── 2. Measure the preview rect NOW (stable, no fullscreen) ────
-          const rect = frameEl.getBoundingClientRect();
-          const crop = {
-            x: rect.left,
-            y: rect.top,
-            w: rect.width,
-            h: rect.height,
-            screenW: window.innerWidth,
-            screenH: window.innerHeight,
-          };
+        await waitRaf();
+        await sleep(SETTLE_MS);
 
-          // ── 3. Request tab capture ─────────────────────────────────────
-          const constraints: DisplayMediaStreamOptions = {
-            video: {
-              frameRate: { ideal: 30, max: 60 },
-              preferCurrentTab: true,
-            } as MediaTrackConstraints,
-            audio: false,
-          };
-          const stream = await navigator.mediaDevices.getDisplayMedia(constraints);
-
-          // ── 4. Set up MediaRecorder ────────────────────────────────────
-          const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-            ? "video/webm;codecs=vp9"
-            : "video/webm";
-
-          const recorder = new MediaRecorder(stream, {
-            mimeType,
-            videoBitsPerSecond: 12_000_000,
-          });
-          const chunks: Blob[] = [];
-
-          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-
-          recorder.onstop = async () => {
-            stream.getTracks().forEach(t => t.stop());
-            const webmBlob = new Blob(chunks, { type: mimeType });
-
-            try {
-              await cropAndEncode(
-                webmBlob,
-                crop,
-                filename,
-                (p) => setProgress(p),
-              );
-              setStatus("done");
-              setProgress(1);
-            } catch (err) {
-              console.error("[useVideoExport] encode error:", err);
-              // Fall back: download the raw WebM so nothing is lost
-              downloadBlob(webmBlob, `${filename.replace(/\s+/g, "-")}.webm`);
-              setStatus("done");
-              setProgress(1);
-            }
-            stateRef.current = null;
-          };
-
-          recorder.onerror = () => {
-            setStatus("error");
-            setErrorMessage("Recording failed.");
-            stateRef.current = null;
-          };
-
-          // If the user manually stops sharing, treat it as finishCapture
-          stream.getVideoTracks()[0]?.addEventListener("ended", () => finishCapture());
-
-          stateRef.current = {
-            recorder, chunks, stream, frameEl, filename,
-            crop, capturing: true,
-          };
-
-          recorder.start(100);
-          setStatus("capturing");
-          onReady(); // start VideoPreview playback
-
-        } catch (err: unknown) {
-          const name = err instanceof Error ? err.name : "";
-          const msg  = err instanceof Error ? err.message : String(err);
-          if (name === "NotAllowedError" || msg.includes("cancelled")) {
-            setStatus("idle");
-          } else {
-            setStatus("error");
-            setErrorMessage(msg);
-          }
-          stateRef.current = null;
-        }
+        frames.push(await captureFrame(offscreen.frameEl));
+        setProgress((Math.min(elapsedMs, totalMs) / totalMs) * 0.7);
       }
 
-      void run();
-    },
-    [status, finishCapture],
-  );
+      offscreen.unmount();
 
-  return { startExport, finishCapture, status, progress, errorMessage, canExport };
+      if (abortRef.current || frames.length === 0) {
+        setStatus("idle");
+        return;
+      }
+
+      // ── Phase 2: Audio + encode ───────────────────────────────────────
+      setStatus("encoding");
+
+      const w = toEven(OUT_W);
+      const h = toEven(OUT_H);
+
+      const sfxEvents: SFXEvent[] = [
+        ...script.strangerMessages.flatMap((_, i) => {
+          const msgTime = timeline.strangerMessageTimes[i];
+          const typingStart = Math.max(0, msgTime - 900);
+          const typingDuration = msgTime - typingStart;
+          const typingSounds: SFXEvent[] = [];
+          for (let offset = 0; offset < typingDuration; offset += 150) {
+            typingSounds.push({ timeMs: typingStart + offset, sfx: "typing" as const });
+          }
+          return typingSounds;
+        }),
+        ...script.strangerMessages.map((_, i) => ({
+          timeMs: timeline.strangerMessageTimes[i],
+          sfx: "messagePop" as const,
+        })),
+        ...script.responseMessages.map((_, i) => ({
+          timeMs: timeline.responseMessageTimes[i],
+          sfx: "messageWhoosh" as const,
+        })),
+        { timeMs: timeline.choicesAppearTime,     sfx: "choicesWhoosh" as const },
+        { timeMs: timeline.aHighlightTime,         sfx: "pulseHit"      as const },
+        { timeMs: timeline.bHighlightTime,         sfx: "pulseHit"      as const },
+        { timeMs: timeline.winnerRevealTime,       sfx: "winnerReveal"  as const },
+        { timeMs: timeline.winnerRevealTime + 200, sfx: "confettiBurst" as const },
+        { timeMs: timeline.ctaAppearTime,          sfx: "ctaRise"       as const },
+      ].filter(e => e.timeMs >= 0 && e.timeMs < totalMs);
+
+      const AUDIO_SAMPLE_RATE = 44100;
+      const audioPcm = await renderSFXBuffer(sfxEvents, totalMs, AUDIO_SAMPLE_RATE);
+
+      const hasWebCodecs =
+        typeof VideoEncoder !== "undefined" &&
+        typeof OffscreenCanvas !== "undefined";
+
+      let blob: Blob;
+      let ext: string;
+
+      if (hasWebCodecs) {
+        blob = await encodeWithWebCodecs(frames, TARGET_FPS, w, h, audioPcm, AUDIO_SAMPLE_RATE,
+          (p) => setProgress(0.7 + p * 0.3));
+        ext = "mp4";
+      } else {
+        blob = await encodeWithMediaRecorder(frames, TARGET_FPS, w, h,
+          (p) => setProgress(0.7 + p * 0.3));
+        ext = "webm";
+      }
+
+      downloadBlob(blob, `${filename.replace(/\s+/g, "-")}.${ext}`);
+      setStatus("done");
+      setProgress(1);
+    } catch (err) {
+      offscreen.unmount();
+      console.error("[useVideoExport]", err);
+      setStatus("error");
+      setErrorMessage(
+        err instanceof Error ? err.message : "Export failed. See console for details.",
+      );
+    }
+  }, [status]);
+
+  return { startExport, status, progress, errorMessage, canExport };
 }

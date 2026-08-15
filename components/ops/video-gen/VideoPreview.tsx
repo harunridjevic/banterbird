@@ -1,4 +1,5 @@
 "use client";
+"use client";
 
 /**
  * VideoPreview
@@ -25,6 +26,8 @@ import { buildTimeline } from "@/lib/ops/video-generator-types";
 import { VideoTemplate } from "./VideoTemplate";
 import { ChoicesOverlay, type ChoicePhase } from "./ChoicesOverlay";
 import { CTAScreen } from "./CTAScreen";
+import { VFXLayer } from "./VFXLayer";
+import { useSFX } from "@/lib/ops/use-sfx";
 import type { ChatMessage } from "@/lib/ops/video-generator-types";
 
 export interface VideoPreviewHandle {
@@ -44,12 +47,15 @@ export interface VideoPreviewHandle {
 
 interface Props {
   script: VideoScript;
-  /** Called when playback reaches the end */
   onEnd?: () => void;
+  playbackRate?: number;
+  instantTransitions?: boolean;
+  /** Multiplies all animation durations — use >1 to slow down for export */
+  slowFactor?: number;
 }
 
 export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
-  function VideoPreview({ script, onEnd }, ref) {
+  function VideoPreview({ script, onEnd, playbackRate = 1, instantTransitions = false, slowFactor = 1 }, ref) {
     const timeline = buildTimeline(script);
     const [elapsedMs, setElapsedMs] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -70,10 +76,12 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
     const nextStrangerIdx = script.strangerMessages.findIndex(
       (_, i) => elapsedMs < timeline.strangerMessageTimes[i]
     );
+    const nextStrangerTime = timeline.strangerMessageTimes[nextStrangerIdx] ?? 0;
+    const typingStart = Math.max(0, nextStrangerTime - 900);
     const strangerTyping =
       nextStrangerIdx !== -1 &&
-      elapsedMs >= (timeline.strangerMessageTimes[nextStrangerIdx] ?? 0) - 900 &&
-      elapsedMs < (timeline.strangerMessageTimes[nextStrangerIdx] ?? 0);
+      elapsedMs >= typingStart &&
+      elapsedMs < nextStrangerTime;
 
     // Which response messages are visible
     const visibleResponse: ChatMessage[] = script.responseMessages.filter(
@@ -106,14 +114,31 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
     // CTA visible
     const ctaVisible = elapsedMs >= timeline.ctaAppearTime;
 
+    // Play SFX during live preview (not during export — slowFactor > 1)
+    useSFX(script, elapsedMs, isPlaying && slowFactor === 1, choicePhase);
+
+    // During export (slowFactor > 1), compute CTA opacity directly from
+    // elapsed time so html2canvas captures the correct fade-in value
+    // instead of relying on a Framer Motion tween running against wall clock.
+    const ctaFadeDuration = 550 * slowFactor; // matches CTAScreen tween duration
+    const ctaElapsed = elapsedMs - timeline.ctaAppearTime;
+    const ctaExportOpacity = slowFactor > 1
+      ? ctaVisible
+        ? Math.min(1, Math.max(0, ctaElapsed / ctaFadeDuration))
+        : 0
+      : undefined;
+
     // ── Playback loop ─────────────────────────────────────────────────────
+
+    const playbackRateRef = useRef(playbackRate);
+    playbackRateRef.current = playbackRate;
 
     const tick = useCallback(
       (now: number) => {
         if (startWallRef.current === null) {
           startWallRef.current = now;
         }
-        const wall = now - startWallRef.current;
+        const wall = (now - startWallRef.current) * playbackRateRef.current;
         const next = startElapsedRef.current + wall;
 
         if (next >= timeline.totalDuration) {
@@ -237,17 +262,34 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           visibleMessages={allMessages}
           strangerTyping={strangerTyping}
           choicesVisible={choicePhase !== "hidden" && choicePhase !== "exit"}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
+          typingKey={`typing-${nextStrangerIdx}`}
+        />
+
+        <VFXLayer
+          elapsedMs={elapsedMs}
+          timeline={timeline}
+          choicePhase={choicePhase}
+          messageCount={allMessages.length}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
         />
 
         <ChoicesOverlay
           choices={script.choiceConfig.choices}
           phase={choicePhase}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
         />
 
         <CTAScreen
           headline={script.ctaConfig.headline}
           subline={script.ctaConfig.subline}
           visible={ctaVisible}
+          instantTransitions={instantTransitions}
+          slowFactor={slowFactor}
+          exportOpacity={ctaExportOpacity}
         />
       </div>
     );
