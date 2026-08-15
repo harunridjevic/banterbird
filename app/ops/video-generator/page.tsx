@@ -178,6 +178,105 @@ function PlaybackControls({
   );
 }
 
+// ─── Import JSON (file or paste) ─────────────────────────────────────────────
+
+function ImportJSON({ onImport }: { onImport: (t: VideoTemplate) => void }) {
+  const [tab, setTab] = useState<"file" | "paste">("file");
+  const [raw, setRaw] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function tryParse(json: string): VideoTemplate | null {
+    try {
+      const parsed = JSON.parse(json);
+      // basic shape check
+      if (!parsed || typeof parsed !== "object" || !parsed.script) {
+        setError("JSON doesn't look like a VideoTemplate — missing .script");
+        return null;
+      }
+      setError(null);
+      return parsed as VideoTemplate;
+    } catch (e) {
+      setError("Invalid JSON — " + (e instanceof Error ? e.message : String(e)));
+      return null;
+    }
+  }
+
+  function handleApplyPaste() {
+    const t = tryParse(raw);
+    if (t) { onImport(t); setRaw(""); }
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-white/10 overflow-hidden">
+      {/* Tabs */}
+      <div className="flex border-b border-white/10">
+        {(["file", "paste"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => { setTab(t); setError(null); }}
+            className={`flex-1 py-2 text-xs font-medium transition ${
+              tab === t
+                ? "bg-white/8 text-white"
+                : "text-navy-500 hover:text-navy-300 hover:bg-white/4"
+            }`}
+          >
+            {t === "file" ? "Import file" : "Paste JSON"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "file" && (
+        <label className="flex cursor-pointer items-center justify-center gap-2 px-3 py-3 text-xs text-navy-500 hover:text-navy-300 transition">
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                const t = tryParse(ev.target?.result as string);
+                if (t) onImport(t);
+              };
+              reader.readAsText(f);
+              e.target.value = "";
+            }}
+          />
+          Click to choose a .json file
+        </label>
+      )}
+
+      {tab === "paste" && (
+        <div className="flex flex-col gap-2 p-3">
+          <textarea
+            value={raw}
+            onChange={(e) => { setRaw(e.target.value); setError(null); }}
+            placeholder='Paste your template JSON here…'
+            rows={6}
+            className="w-full resize-y rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-[11px] text-navy-200 placeholder-navy-600 outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 transition"
+          />
+          {error && (
+            <p className="flex items-start gap-1.5 text-[11px] text-rose-400">
+              <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={!raw.trim()}
+            onClick={handleApplyPaste}
+            className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40 transition"
+          >
+            Apply
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function VideoGeneratorPage() {
@@ -442,22 +541,7 @@ export default function VideoGeneratorPage() {
                 </button>
               </div>
 
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-2.5 text-xs text-navy-500 hover:border-violet-500/30 hover:text-navy-300 transition">
-                <input
-                  type="file" accept="application/json,.json" className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      try { setTemplate(JSON.parse(ev.target?.result as string) as VideoTemplate); } catch {}
-                    };
-                    reader.readAsText(f);
-                    e.target.value = "";
-                  }}
-                />
-                Import template JSON
-              </label>
+              <ImportJSON onImport={(t) => { setTemplate(t); saveTemplate(t); }} />
             </div>
           </div>
         </div>
