@@ -815,7 +815,6 @@ export function ChatRoom({ roomId }: Props) {
 
       const clientSkip = shouldClientSkipChat(
         transcript,
-        botPersonaRef.current ?? undefined,
         botSettingsRef.current,
       );
       if (clientSkip.skip) {

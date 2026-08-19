@@ -1,6 +1,5 @@
 import type {
   MessageStyle,
-  SexualDisposition,
   TypoRate,
   WritingStyle,
 } from "@/lib/ai-practice-bot/persona";
@@ -37,12 +36,6 @@ export type BotSettings = {
    */
   botFemaleWeight: number;
 
-  /** Sexual vibe: random uses weights below; otherwise forces every bot. */
-  sexualDisposition: "random" | SexualDisposition;
-  strictWeight: number;
-  persuadableWeight: number;
-  hornyWeight: number;
-
   writingStyle: "random" | WritingStyle;
   messageStyle: "random" | MessageStyle;
   typoRate: "random" | TypoRate;
@@ -64,7 +57,7 @@ export type BotSettings = {
 
   maxUserTurnsBeforeSkip: number;
   drySkipMinUserTurns: number;
-  strictSexualSkipAt: number;
+  inappropriateContentSkipAt: number;
   longChatSkipAt: number;
   longChatSkipChance: number;
   excuseSkipChance: number;
@@ -72,7 +65,6 @@ export type BotSettings = {
 
   llmTemperature: number;
   maxOutputTokens: number;
-  maxOutputTokensSexual: number;
   llmHistoryTurns: number;
   maxOutputTokensOpener: number;
 
@@ -91,11 +83,6 @@ export type BotSettings = {
 export const DEFAULT_BOT_SETTINGS: BotSettings = {
   matchMode: "user_choice",
   hideGenderFilters: false,
-
-  sexualDisposition: "random",
-  strictWeight: 50,
-  persuadableWeight: 30,
-  hornyWeight: 20,
 
   botFemaleWeight: 50,
 
@@ -118,7 +105,7 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
 
   maxUserTurnsBeforeSkip: 10,
   drySkipMinUserTurns: 3,
-  strictSexualSkipAt: 2,
+  inappropriateContentSkipAt: 2,
   longChatSkipAt: 12,
   longChatSkipChance: 12,
   excuseSkipChance: 50,
@@ -126,7 +113,6 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
 
   llmTemperature: 1.08,
   maxOutputTokens: 160,
-  maxOutputTokensSexual: 256,
   /** Max chat turns sent to the LLM per request. */
   llmHistoryTurns: 50,
   maxOutputTokensOpener: 96,
@@ -142,7 +128,7 @@ export type SessionPolicy = Pick<
   BotSettings,
   | "maxUserTurnsBeforeSkip"
   | "drySkipMinUserTurns"
-  | "strictSexualSkipAt"
+  | "inappropriateContentSkipAt"
   | "longChatSkipAt"
   | "longChatSkipChance"
   | "excuseSkipChance"
@@ -154,7 +140,7 @@ export function sessionPolicyFromSettings(settings?: BotSettings | null): Sessio
   return {
     maxUserTurnsBeforeSkip: s.maxUserTurnsBeforeSkip,
     drySkipMinUserTurns: s.drySkipMinUserTurns,
-    strictSexualSkipAt: s.strictSexualSkipAt,
+    inappropriateContentSkipAt: s.inappropriateContentSkipAt,
     longChatSkipAt: s.longChatSkipAt,
     longChatSkipChance: s.longChatSkipChance,
     excuseSkipChance: s.excuseSkipChance,
@@ -173,13 +159,6 @@ function normalizeMatchMode(v: unknown): MatchMode {
 }
 
 const OPENER_DELAY_MODES = ["fixed", "random"] as const;
-const SEXUAL_DISPOSITION_MODES = ["random", "strict", "persuadable", "horny"] as const;
-
-function normalizeSexualDisposition(v: unknown): BotSettings["sexualDisposition"] {
-  return SEXUAL_DISPOSITION_MODES.includes(v as BotSettings["sexualDisposition"])
-    ? (v as BotSettings["sexualDisposition"])
-    : DEFAULT_BOT_SETTINGS.sexualDisposition;
-}
 
 function normalizeOpenerDelayMode(v: unknown): BotSettings["openerDelayMode"] {
   return OPENER_DELAY_MODES.includes(v as BotSettings["openerDelayMode"])
@@ -195,11 +174,7 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     ...merged,
     matchMode: normalizeMatchMode(merged.matchMode),
     hideGenderFilters: Boolean(merged.hideGenderFilters),
-    sexualDisposition: normalizeSexualDisposition(merged.sexualDisposition),
     openerDelayMode: normalizeOpenerDelayMode(merged.openerDelayMode),
-    strictWeight: clamp(merged.strictWeight, 0, 100),
-    persuadableWeight: clamp(merged.persuadableWeight, 0, 100),
-    hornyWeight: clamp(merged.hornyWeight, 0, 100),
     botFemaleWeight: clamp(merged.botFemaleWeight, 0, 100),
     replySpeed: clamp(merged.replySpeed, 0.55, 1.65),
     ghostPingMs: clamp(merged.ghostPingMs, 1000, 120_000),
@@ -212,14 +187,21 @@ function mergeWithDefaults(partial: Partial<BotSettings>): BotSettings {
     aiMatchDelayMaxMs: clamp(Math.max(merged.aiMatchDelayMaxMs, merged.aiMatchDelayMinMs), 0, 60_000),
     maxUserTurnsBeforeSkip: clamp(Math.round(merged.maxUserTurnsBeforeSkip), 1, 50),
     drySkipMinUserTurns: clamp(Math.round(merged.drySkipMinUserTurns), 1, 20),
-    strictSexualSkipAt: clamp(Math.round(merged.strictSexualSkipAt), 1, 10),
+    inappropriateContentSkipAt: clamp(
+      Math.round(
+        merged.inappropriateContentSkipAt ??
+          (merged as { strictSexualSkipAt?: number }).strictSexualSkipAt ??
+          DEFAULT_BOT_SETTINGS.inappropriateContentSkipAt,
+      ),
+      1,
+      10,
+    ),
     longChatSkipAt: clamp(Math.round(merged.longChatSkipAt), 1, 50),
     longChatSkipChance: clamp(merged.longChatSkipChance, 0, 100),
     excuseSkipChance: clamp(merged.excuseSkipChance, 0, 100),
     sessionHintAt: clamp(Math.round(merged.sessionHintAt), 1, 30),
     llmTemperature: clamp(merged.llmTemperature, 0, 2),
     maxOutputTokens: clamp(Math.round(merged.maxOutputTokens), 64, 4096),
-    maxOutputTokensSexual: clamp(Math.round(merged.maxOutputTokensSexual), 64, 4096),
     llmHistoryTurns: clamp(Math.round(merged.llmHistoryTurns), 4, 80),
     maxOutputTokensOpener: clamp(Math.round(merged.maxOutputTokensOpener), 32, 512),
     displayOnlineCountOverride: Boolean(merged.displayOnlineCountOverride),
@@ -324,15 +306,3 @@ export function parseBotSettings(raw: unknown): BotSettings | null {
   return mergeWithDefaults(raw as Partial<BotSettings>);
 }
 
-export function rollSexualDisposition(roll: number, settings?: BotSettings | null): SexualDisposition {
-  const s = settings ?? DEFAULT_BOT_SETTINGS;
-  if (s.sexualDisposition !== "random") return s.sexualDisposition;
-
-  const total = s.strictWeight + s.persuadableWeight + s.hornyWeight;
-  if (total <= 0) return "strict";
-
-  const r = roll % total;
-  if (r < s.strictWeight) return "strict";
-  if (r < s.strictWeight + s.persuadableWeight) return "persuadable";
-  return "horny";
-}

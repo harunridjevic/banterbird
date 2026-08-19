@@ -33,16 +33,15 @@ export default function CommunityPage() {
         Bullying, hate speech, unwanted advances, and targeted abuse are not allowed. Use the report
         button if someone crosses the line.
       </p>
-      <h2>No inappropriate sexual content</h2>
+      <h2>No explicit content</h2>
       <p>
-        Sending unsolicited sexual messages or images, soliciting sexual content, or engaging in
-        sexual conversations with anyone who has not consented is prohibited and may result in a
-        permanent ban.
+        Sending unsolicited explicit messages or images, or engaging in unwanted explicit
+        conversations is prohibited and may result in a permanent ban.
       </p>
       <h2>No illegal content</h2>
       <p>
-        Do not share or solicit illegal material of any kind. Content that sexually exploits or
-        endangers minors is strictly forbidden and will be reported to relevant authorities.
+        Do not share or solicit illegal material of any kind. Content that exploits or endangers
+        minors is strictly forbidden and will be reported to relevant authorities.
       </p>
       <h2>Protect your privacy</h2>
       <p>

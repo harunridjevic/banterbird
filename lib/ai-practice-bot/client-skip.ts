@@ -1,22 +1,19 @@
 import type { ChatTurn } from "@/lib/ai-practice-bot/turn";
-import type { BotPersona } from "@/lib/ai-practice-bot/persona";
-import { personaAllowsSexualChat } from "@/lib/ai-practice-bot/persona";
 import {
-  countSexualUserTurns,
+  countInappropriateUserTurns,
   isAggressiveConversation,
   isAnnoyingConversation,
   isDryConversation,
   pickBoringSkipParting,
   pickExcuseSkipParting,
+  pickInappropriateSkipParting,
   pickSkipParting,
-  pickStrictSexualSkipParting,
 } from "@/lib/ai-practice-bot/memory";
 import { sessionPolicyFromSettings, type BotSettings } from "@/lib/ops/bot-settings";
 
 /** Client-side skip before calling the LLM - boring / long / hostile / leaving. */
 export function shouldClientSkipChat(
   history: ChatTurn[],
-  persona?: BotPersona,
   settings?: BotSettings | null,
 ): { skip: boolean; parting: string | null } {
   const policy = sessionPolicyFromSettings(settings);
@@ -28,11 +25,8 @@ export function shouldClientSkipChat(
     return { skip: true, parting: pickBoringSkipParting(seed) };
   }
 
-  if (
-    persona?.sexualDisposition === "strict" &&
-    countSexualUserTurns(history) >= policy.strictSexualSkipAt
-  ) {
-    return { skip: true, parting: pickStrictSexualSkipParting(seed) };
+  if (countInappropriateUserTurns(history) >= policy.inappropriateContentSkipAt) {
+    return { skip: true, parting: pickInappropriateSkipParting(seed) };
   }
 
   if (n >= policy.maxUserTurnsBeforeSkip) {

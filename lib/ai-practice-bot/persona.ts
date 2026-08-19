@@ -1,4 +1,4 @@
-import { rollSexualDisposition, type BotSettings } from "@/lib/ops/bot-settings";
+import type { BotSettings } from "@/lib/ops/bot-settings";
 
 /** Practice bot persona spec - documented as v0.2 (do not bump app version unless asked). */
 export const PRACTICE_BOT_PERSONA_VERSION = "0.2";
@@ -8,9 +8,6 @@ export type SelfGender = "male" | "female";
 export type WritingStyle = "lowercase" | "mixed" | "casual_proper";
 export type MessageStyle = "single" | "burst" | "split";
 export type TypoRate = "rare" | "sometimes" | "often";
-export type ChatMode = "friendly" | "flirty";
-/** strict 50% - no sexual chat. persuadable 30% - goes there if they flirt first. horny 20% - may open sexual themselves. */
-export type SexualDisposition = "strict" | "persuadable" | "horny";
 
 export type BotPersona = {
   version: typeof PRACTICE_BOT_PERSONA_VERSION;
@@ -25,24 +22,9 @@ export type BotPersona = {
   replySpeed: number;
   typoRate: TypoRate;
   genderTag: string;
-  sexualDisposition: SexualDisposition;
-  /** Derived: friendly when strict, flirty when persuadable/horny. */
-  chatMode: ChatMode;
-  /** Horny bots may open suggestive on the first line. */
-  flirtyStarter: boolean;
   /** ~10% of bots are PRO subscribers — shown with a badge to other users. */
   isPro: boolean;
 };
-
-export function personaAllowsSexualChat(persona: BotPersona, userWentSexual: boolean): boolean {
-  if (persona.sexualDisposition === "horny") return true;
-  if (persona.sexualDisposition === "persuadable") return userWentSexual;
-  return false;
-}
-
-export function personaInitiatesSexual(persona: BotPersona): boolean {
-  return persona.sexualDisposition === "horny";
-}
 
 const COUNTRIES: { name: string; english: boolean; weight: number }[] = [
   { name: "United States", english: true, weight: 28 },
@@ -112,8 +94,6 @@ export function buildBotPersona(
   const country = pickWeighted(COUNTRIES, h);
   const age = rollAge(h >> 3);
   const genderLetter = botGender === "female" ? "f" : "m";
-  const sexualDisposition = rollSexualDisposition(h >> 15, settings);
-  const chatMode: ChatMode = sexualDisposition === "strict" ? "friendly" : "flirty";
 
   const writingStyle =
     settings?.writingStyle && settings.writingStyle !== "random"
@@ -147,9 +127,6 @@ export function buildBotPersona(
     replySpeed,
     typoRate,
     genderTag: `${age}${genderLetter}`,
-    sexualDisposition,
-    chatMode,
-    flirtyStarter: sexualDisposition === "horny",
     // ~10% of bots are PRO — use a separate hash bit so it's independent of other traits
     isPro: ((h >> 20) % 10) === 0,
   };
@@ -195,22 +172,6 @@ export function formatPersonaPrompt(persona: BotPersona): string {
         ? "occasional typos; ~60% of the time follow up with a tiny correction message right after"
         : "frequent small typos; ~75% of the time send a quick correction as the next message in messages[]";
 
-  const modeBlock =
-    persona.sexualDisposition === "strict"
-      ? `Sexual vibe: NOT INTO IT (this session, ~half of people)
-- Normal conversation only, hobbies, music, games, school/work, where you're from, light humor.
-- Do NOT start sexual or dirty talk. If they push sexual stuff: deflect ("idk", "lol idk about that", "i dont wanna talk about that stuff") and change subject.
-- If they keep pushing after 2+ sexual msgs: skip with parting like "i dont wanna talk about that stuff bye".
-- Be curious and warm otherwise.`
-      : persona.sexualDisposition === "persuadable"
-        ? `Sexual vibe: PERSUADABLE (this session, ~30% of people)
-- Start normal/friendly. You can go flirty/sexual IF they flirt first, then explicit dirty text ok in chat.
-- Do NOT open sexual on the first line. Wait for them to escalate.
-- Roleplay, pet names, kinks in text only, no video/voice/meet/socials.`
-        : `Sexual vibe: HORNY (this session, ~20% of people)
-- You may flirt or open suggestive/sexual on the first line if you want.
-- Explicit dirty text ok in chat. Roleplay, pet names, kinks, no video/voice/meet/socials.`;
-
   return `
 Your fixed identity this session (v${persona.version})
 - You are ${persona.genderTag} from ${persona.country}. You know your gender is ${persona.botGender}.
@@ -221,7 +182,11 @@ Your fixed identity this session (v${persona.version})
 - Typing vibe: ${persona.replySpeed < 0.85 ? "pretty fast replier" : persona.replySpeed > 1.25 ? "slower, thinks before typing" : "average speed"}.
 - Typos: ${typoLine}. Corrections look like "*you're" or "wait meant you're", still in messages[].
 
-${modeBlock}
+Conversation style
+- Normal conversation only: hobbies, music, games, school/work, where you're from, light humor.
+- Do NOT start explicit or inappropriate talk. If they push that stuff: deflect ("idk", "lol idk about that", "i dont wanna talk about that stuff") and change subject.
+- If they keep pushing after 2+ inappropriate msgs: skip with parting like "i dont wanna talk about that stuff bye".
+- Be curious and warm otherwise.
 
 Social & small talk
 - Sometimes ask their age (slang ok: "age?", "how old r u", "18f?"). Sometimes ask where they're from / what country.
@@ -245,21 +210,14 @@ Life interrupts
 
 /** Compact persona block for LLM calls (fewer input tokens). */
 export function formatPersonaPromptCompact(persona: BotPersona): string {
-  const vibe =
-    persona.sexualDisposition === "strict"
-      ? "strict: no sexual talk; deflect and skip if they keep pushing"
-      : persona.sexualDisposition === "persuadable"
-      ? "persuadable: normal until they flirt/sexual, then explicit sexting ok"
-        : "horny: flirt/sexual freely; explicit sexting in text ok";
-
   return [
     `You are on BanterBird, private 1-on-1 anonymous chat, not a public room.`,
     `YOUR identity (about you, not the other person): ${persona.genderTag} from ${persona.country}. The other person's gender filter: ${persona.userGender} (they may not match, react naturally).`,
     `Style: ${persona.writingStyle}, ${persona.messageStyle}, typos ${persona.typoRate}. Text like a real person, casual, imperfect, never robotic.`,
-    `Vibe: ${vibe}.`,
+    `Keep conversation friendly and normal. Deflect explicit or inappropriate topics and skip if they keep pushing.`,
     persona.isPro
       ? `You have BanterBird PRO. If they ask what it is: removes ads, anonymous gender matching, image sending in chat. Be casual about it if it comes up, not promotional.`
       : ``,
-    "ALWAYS respond to the last thing they said — if they asked something, answer it. Never echo greetings back. If your opener was a greeting and they reply with just hi/hey, don't greet again, move the chat forward. In a burst never put a standalone greeting (hi/hey/hii) after you already answered. Never repeat YOUR OWN age/location you already shared. NEVER volunteer YOUR age, sex, or location unless they directly ask you for it. No snap/ig/discord/phone/video/meet.",
+    "ALWAYS respond to the last thing they said — if they asked something, answer it. Never echo greetings back. If your opener was a greeting and they reply with just hi/hey, don't greet again, move the chat forward. In a burst never put a standalone greeting (hi/hey/hii) after you already answered. Never repeat YOUR OWN age/location you already shared. NEVER volunteer YOUR age, gender, or location unless they directly ask you for it. No snap/ig/discord/phone/video/meet.",
   ].filter(Boolean).join(" ");
 }

@@ -581,78 +581,6 @@ export default function OpsBotSettingsPage() {
             </p>
           </Section>
 
-          <Section title="Sexual vibe">
-            <SelectField
-              label="Disposition"
-              value={botSettings.sexualDisposition}
-              onChange={(v) => patch({ sexualDisposition: v as BotSettings["sexualDisposition"] })}
-              options={[
-                { value: "random", label: "Random (weighted)" },
-                { value: "strict", label: "Always strict" },
-                { value: "persuadable", label: "Always persuadable" },
-                { value: "horny", label: "Always horny" },
-              ]}
-            />
-            {botSettings.sexualDisposition === "random" ? (
-              <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <SliderField
-                  label="Strict %"
-                  value={botSettings.strictWeight}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onChange={(strictWeight) => {
-                    const remaining = 100 - strictWeight;
-                    const totalOthers = botSettings.persuadableWeight + botSettings.hornyWeight;
-                    if (totalOthers === 0) {
-                      patch({ strictWeight, persuadableWeight: remaining / 2, hornyWeight: remaining / 2 });
-                    } else {
-                      const persuadableWeight = Math.round((botSettings.persuadableWeight / totalOthers) * remaining);
-                      const hornyWeight = remaining - persuadableWeight;
-                      patch({ strictWeight, persuadableWeight, hornyWeight });
-                    }
-                  }}
-                />
-                <SliderField
-                  label="Persuadable %"
-                  value={botSettings.persuadableWeight}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onChange={(persuadableWeight) => {
-                    const remaining = 100 - persuadableWeight;
-                    const totalOthers = botSettings.strictWeight + botSettings.hornyWeight;
-                    if (totalOthers === 0) {
-                      patch({ persuadableWeight, strictWeight: remaining / 2, hornyWeight: remaining / 2 });
-                    } else {
-                      const strictWeight = Math.round((botSettings.strictWeight / totalOthers) * remaining);
-                      const hornyWeight = remaining - strictWeight;
-                      patch({ persuadableWeight, strictWeight, hornyWeight });
-                    }
-                  }}
-                />
-                <SliderField
-                  label="Horny %"
-                  value={botSettings.hornyWeight}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onChange={(hornyWeight) => {
-                    const remaining = 100 - hornyWeight;
-                    const totalOthers = botSettings.strictWeight + botSettings.persuadableWeight;
-                    if (totalOthers === 0) {
-                      patch({ hornyWeight, strictWeight: remaining / 2, persuadableWeight: remaining / 2 });
-                    } else {
-                      const strictWeight = Math.round((botSettings.strictWeight / totalOthers) * remaining);
-                      const persuadableWeight = remaining - strictWeight;
-                      patch({ hornyWeight, strictWeight, persuadableWeight });
-                    }
-                  }}
-                />
-              </div>
-            ) : null}
-          </Section>
-
           <Section title="Writing style">
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectField
@@ -828,11 +756,11 @@ export default function OpsBotSettingsPage() {
                 onChange={(drySkipMinUserTurns) => patch({ drySkipMinUserTurns })}
               />
               <NumberField
-                label="Strict bot sexual msgs before skip"
-                value={botSettings.strictSexualSkipAt}
+                label="Inappropriate msgs before skip"
+                value={botSettings.inappropriateContentSkipAt}
                 min={1}
                 max={10}
-                onChange={(strictSexualSkipAt) => patch({ strictSexualSkipAt })}
+                onChange={(inappropriateContentSkipAt) => patch({ inappropriateContentSkipAt })}
               />
               <NumberField
                 label="Long chat skip at (user turns)"
@@ -886,14 +814,6 @@ export default function OpsBotSettingsPage() {
                 max={4096}
                 step={32}
                 onChange={(maxOutputTokens) => patch({ maxOutputTokens })}
-              />
-              <NumberField
-                label="Max tokens (sexual vibe)"
-                value={botSettings.maxOutputTokensSexual}
-                min={64}
-                max={4096}
-                step={32}
-                onChange={(maxOutputTokensSexual) => patch({ maxOutputTokensSexual })}
               />
               <NumberField
                 label="Max tokens (opener only)"

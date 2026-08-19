@@ -29,7 +29,6 @@ import {
   buildBotPersona,
   formatPersonaPrompt,
   formatPersonaPromptCompact,
-  personaAllowsSexualChat,
   personaTiming,
   type SelfGender,
 } from "@/lib/ai-practice-bot/persona";
@@ -103,18 +102,12 @@ function geminiSystemPrompt(
   memoryBlock: string,
   sessionBlock: string,
   trigger: AiReplyTrigger,
-  flirtyStarter: boolean,
-  chatMode: "friendly" | "flirty",
   settings?: BotSettings | null,
   isOpener?: boolean,
 ): string {
   const base = buildSystemPrompt(personaBlock, memoryBlock, sessionBlock, trigger, settings);
   if (!isOpener) return base;
-  const opener =
-    flirtyStarter && chatMode === "flirty"
-      ? 'Opening turn: use a short flirty/suggestive hi from your persona. Never mirror their greeting. messages array.'
-      : 'Opening turn: use a short casual hi from your persona. Never say "hello back" or mirror their greeting. messages array.';
-  return `${base}\n\n${opener}`;
+  return `${base}\n\nOpening turn: use a short casual hi from your persona. Never say "hello back" or mirror their greeting. messages array.`;
 }
 
 const GEMINI_RESPONSE_SCHEMA = {
@@ -283,9 +276,7 @@ async function callLlm(
   const opener = isOpener ?? !hasUserTurn;
   const maxOutputTokens = opener
     ? (settings?.maxOutputTokensOpener ?? 96)
-    : memory.sexualVibe
-      ? (settings?.maxOutputTokensSexual ?? 256)
-      : (settings?.maxOutputTokens ?? 160);
+    : (settings?.maxOutputTokens ?? 160);
   const temperature = settings?.llmTemperature ?? 1.08;
   const started = Date.now();
 
@@ -315,17 +306,16 @@ async function callLlm(
   };
 
   const softFallback = (): AiPracticeTurnResult => {
-    const allowSexual = personaAllowsSexualChat(persona, memory.sexualVibe);
     if (opener) {
       return {
         action: "reply",
-        messages: contextualFallbackReply(history, memory, allowSexual),
+        messages: contextualFallbackReply(history, memory),
         timing: personaTiming(persona, settings),
       };
     }
     return {
       action: "reply",
-      messages: midChatStubReply(history, allowSexual),
+      messages: midChatStubReply(history),
       timing: personaTiming(persona, settings),
     };
   };
@@ -509,7 +499,6 @@ NEVER say you "can't see", "can't view", "image isn't loading" or anything that 
           version: persona.version,
           genderTag: persona.genderTag,
           country: persona.country,
-          sexualDisposition: persona.sexualDisposition,
         },
       });
     };
@@ -552,8 +541,6 @@ NEVER say you "can't see", "can't view", "image isn't loading" or anything that 
           memoryBlock,
           sessionBlock,
           trigger,
-          persona.flirtyStarter,
-          persona.chatMode,
           botSettings,
           isOpener,
         )
@@ -579,7 +566,6 @@ NEVER say you "can't see", "can't view", "image isn't loading" or anything that 
         version: persona.version,
         genderTag: persona.genderTag,
         country: persona.country,
-        sexualDisposition: persona.sexualDisposition,
       },
     });
   } catch (e) {

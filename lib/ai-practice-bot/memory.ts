@@ -1,5 +1,4 @@
 import type { BotPersona } from "@/lib/ai-practice-bot/persona";
-import { personaAllowsSexualChat } from "@/lib/ai-practice-bot/persona";
 import { pickPredefinedGreeting } from "@/lib/ai-practice-bot/greetings";
 
 type ChatTurn = { role: "user" | "assistant"; content: string };
@@ -9,18 +8,18 @@ export type UserMemory = {
   ageTag?: string;
   country?: string;
   name?: string;
-  sexualVibe: boolean;
+  inappropriateContent: boolean;
   userTurnCount: number;
   assistantTurnCount: number;
 };
 
-const SEXUAL_RE =
+const INAPPROPRIATE_RE =
   /\b(horny|sexy|nude|naked|dick|cock|pussy|fuck|fucking|cum|orgasm|kink|bdsm|daddy|mommy|slut|dirty|sext|sex|nudes|turn me on|roleplay|rp\b|sub\b|dom\b)\b/i;
 
 const BORING_RE = /^(k|ok|okay|yeah|yea|yep|mhm|hm+|lol|haha|idk|sure|nice|cool|same|true|wow|omg|ah+|uh+|\?+)$/i;
 
-export function detectSexualVibe(text: string): boolean {
-  return SEXUAL_RE.test(text);
+export function detectInappropriateContent(text: string): boolean {
+  return INAPPROPRIATE_RE.test(text);
 }
 
 function lastUserLines(history: ChatTurn[]): string[] {
@@ -180,7 +179,7 @@ function extractName(line: string): string | undefined {
 export function buildUserMemory(history: ChatTurn[]): UserMemory {
   const userLines = lastUserLines(history);
   const mem: UserMemory = {
-    sexualVibe: userLines.some((l) => detectSexualVibe(l)),
+    inappropriateContent: userLines.some((l) => detectInappropriateContent(l)),
     userTurnCount: userLines.length,
     assistantTurnCount: history.filter((m) => m.role === "assistant").length,
   };
@@ -193,7 +192,7 @@ export function buildUserMemory(history: ChatTurn[]): UserMemory {
     if (country) mem.country = country;
     const name = extractName(line);
     if (name) mem.name = name;
-    if (detectSexualVibe(line)) mem.sexualVibe = true;
+    if (detectInappropriateContent(line)) mem.inappropriateContent = true;
   }
 
   return mem;
@@ -205,12 +204,8 @@ export function formatUserMemoryBlock(mem: UserMemory, persona?: BotPersona): st
   else if (mem.age) parts.push(`age: ${mem.age}`);
   if (mem.country) parts.push(`from: ${mem.country}`);
   if (mem.name) parts.push(`name/call them: ${mem.name}`);
-  if (mem.sexualVibe) {
-    if (persona && personaAllowsSexualChat(persona, true)) {
-      parts.push("vibe: flirty/sexual, match with explicit dirty text chat");
-    } else {
-      parts.push("vibe: they got sexual, you are NOT into it; deflect or skip");
-    }
+  if (mem.inappropriateContent) {
+    parts.push("vibe: they got inappropriate, you are NOT into it; deflect or skip");
   }
 
   if (parts.length === 0) {
@@ -359,8 +354,8 @@ export function isAnnoyingConversation(history: ChatTurn[]): boolean {
   return false;
 }
 
-export function countSexualUserTurns(history: ChatTurn[]): number {
-  return lastUserLines(history).filter((l) => detectSexualVibe(l)).length;
+export function countInappropriateUserTurns(history: ChatTurn[]): number {
+  return lastUserLines(history).filter((l) => detectInappropriateContent(l)).length;
 }
 
 export const SKIP_PARTINGS = [
@@ -427,7 +422,7 @@ export function pickGoodbyeAckParting(seed = "bye"): string {
   return GOODBYE_ACK_PARTINGS[h % GOODBYE_ACK_PARTINGS.length] ?? GOODBYE_ACK_PARTINGS[0]!;
 }
 
-export const STRICT_SEXUAL_SKIP_PARTINGS = [
+export const INAPPROPRIATE_SKIP_PARTINGS = [
   "i dont wanna talk about that stuff bye",
   "nah not into that bye",
   "idk about that stuff bye",
@@ -470,10 +465,10 @@ export function trimContradictoryReplyLines(lines: string[]): string[] {
   return lines.length > 0 ? [lines[0]!] : lines;
 }
 
-export function pickStrictSexualSkipParting(seed = "sexual"): string {
+export function pickInappropriateSkipParting(seed = "inappropriate"): string {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return STRICT_SEXUAL_SKIP_PARTINGS[h % STRICT_SEXUAL_SKIP_PARTINGS.length] ?? STRICT_SEXUAL_SKIP_PARTINGS[0]!;
+  return INAPPROPRIATE_SKIP_PARTINGS[h % INAPPROPRIATE_SKIP_PARTINGS.length] ?? INAPPROPRIATE_SKIP_PARTINGS[0]!;
 }
 
 export function pickExcuseSkipParting(seed = "excuse"): string {
@@ -482,16 +477,6 @@ export function pickExcuseSkipParting(seed = "excuse"): string {
   return EXCUSE_SKIP_PARTINGS[h % EXCUSE_SKIP_PARTINGS.length] ?? EXCUSE_SKIP_PARTINGS[0]!;
 }
 
-const HEATED_FALLBACKS = [
-  "mm tell me more",
-  "omg yes",
-  "damn ok",
-  "keep going",
-  "u like that?",
-  "lol ur bold",
-  "mhm yes",
-  "dont stop",
-];
 
 export function isGenericCannedLine(text: string): boolean {
   const t = text.trim().toLowerCase();
@@ -553,7 +538,7 @@ export function isNonResponsiveBotReply(botLine: string, lastUser: string): bool
   if (!NON_RESPONSIVE_BOT_LINES.has(bot)) return false;
   if (isUserReactionOrAck(lastUser)) return true;
   const user = lastUser.trim();
-  if (!user.includes("?") && user.split(/\s+/).length <= 4 && !detectSexualVibe(user)) {
+  if (!user.includes("?") && user.split(/\s+/).length <= 4 && !detectInappropriateContent(user)) {
     return true;
   }
   return false;
@@ -562,39 +547,25 @@ export function isNonResponsiveBotReply(botLine: string, lastUser: string): bool
 export function contextualFallbackReply(
   history: ChatTurn[],
   memory: UserMemory,
-  allowSexual: boolean,
-  flirtyStarter = false,
 ): string[] {
   const seed = history.map((m) => m.content).join("|") || "open";
-  const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
-  const heated = allowSexual && (memory.sexualVibe || detectSexualVibe(lastUser));
-
-  if (heated) {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-    return [HEATED_FALLBACKS[h % HEATED_FALLBACKS.length] ?? "mm tell me more"];
-  }
 
   const botHasSpoken = history.some((m) => m.role === "assistant");
   if (!botHasSpoken) {
-    return [pickPredefinedGreeting(seed, flirtyStarter && allowSexual)];
+    return [pickPredefinedGreeting(seed)];
   }
 
   return ["hey"];
 }
 
 /** Last-resort stub when the LLM fails mid-chat, not random one-word vibes. */
-export function midChatStubReply(history: ChatTurn[], allowSexual: boolean): string[] {
+export function midChatStubReply(history: ChatTurn[]): string[] {
   const lastUser = history.filter((m) => m.role === "user").pop()?.content ?? "";
   const t = lastUser.trim();
   const lower = t.toLowerCase();
   let h = 0;
   for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
 
-  if (allowSexual && detectSexualVibe(t)) {
-    const heated = ["lol ur bold", "mm ok", "damn ok tell me more"];
-    return [heated[h % heated.length] ?? "lol ur bold"];
-  }
   if (isUserReactionOrAck(t)) {
     const replies = [
       "lol yeah wbu",

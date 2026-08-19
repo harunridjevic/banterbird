@@ -1,12 +1,12 @@
 import type { BotPersona } from "@/lib/ai-practice-bot/persona";
-import { personaAllowsSexualChat, personaTiming } from "@/lib/ai-practice-bot/persona";
+import { personaTiming } from "@/lib/ai-practice-bot/persona";
 import {
   sessionPolicyFromSettings,
   type BotSettings,
 } from "@/lib/ops/bot-settings";
 import {
   contextualFallbackReply,
-  countSexualUserTurns,
+  countInappropriateUserTurns,
   filterRedundantSelfDisclosure,
   isAggressiveConversation,
   isAnnoyingConversation,
@@ -30,7 +30,7 @@ import {
   pickGoodbyeStayLine,
   pickLeavingSkipParting,
   pickSkipParting,
-  pickStrictSexualSkipParting,
+  pickInappropriateSkipParting,
   trimContradictoryReplyLines,
   type BotSelfMemory,
   type UserMemory,
@@ -190,13 +190,6 @@ export function parseModelTurn(
         if (isNonResponsiveBotReply(first, lastUser)) {
           return null;
         }
-        if (
-          memory.sexualVibe &&
-          personaAllowsSexualChat(persona, true) &&
-          isGenericCannedLine(first)
-        ) {
-          return null;
-        }
         return withTiming(persona, { action: "reply", messages: lines }, settings);
       }
     }
@@ -234,12 +227,7 @@ export function decideFallbackTurn(
   if (users.length === 0 || !history.some((m) => m.role === "assistant")) {
     return withTiming(persona, {
       action: "reply",
-      messages: contextualFallbackReply(
-        history,
-        memory,
-        personaAllowsSexualChat(persona, memory.sexualVibe),
-        persona.flirtyStarter,
-      ),
+      messages: contextualFallbackReply(history, memory),
     }, settings);
   }
 
@@ -296,7 +284,7 @@ export function decideFallbackTurn(
   // Mid-chat should use the LLM - callers must not route here for normal replies.
   return withTiming(persona, {
     action: "reply",
-    messages: midChatStubReply(history, personaAllowsSexualChat(persona, memory.sexualVibe)),
+    messages: midChatStubReply(history),
   }, settings);
 }
 
@@ -407,13 +395,10 @@ export function applySessionPolicy(
     }, settings);
   }
 
-  if (
-    persona.sexualDisposition === "strict" &&
-    countSexualUserTurns(history) >= policy.strictSexualSkipAt
-  ) {
+  if (countInappropriateUserTurns(history) >= policy.inappropriateContentSkipAt) {
     return withTiming(persona, {
       action: "skip",
-      parting: pickStrictSexualSkipParting(seed),
+      parting: pickInappropriateSkipParting(seed),
     }, settings);
   }
 
@@ -469,19 +454,9 @@ export function sessionContextOverlay(
       `Chat length: ${memory.userTurnCount} user messages. If dry/boring/annoying/hostile, skip, parting like "ur boring bye".`,
     );
   }
-  if (persona.sexualDisposition === "horny") {
+  if (memory.inappropriateContent) {
     lines.push(
-      "You are horny this session, flirt and escalate sexually when it fits. Explicit sexting in text is ok. No socials/video/meetup.",
-    );
-  } else if (persona.sexualDisposition === "persuadable" && memory.sexualVibe) {
-    lines.push(
-      "They flirted or got sexual, you are persuadable so explicit dirty text and sexting ok now. Match their energy. No socials/video/meetup.",
-    );
-  } else if (persona.sexualDisposition === "persuadable") {
-    lines.push("Persuadable bot - stay normal until they flirt; then match with flirty/sexual text.");
-  } else if (memory.sexualVibe) {
-    lines.push(
-      'Strict bot (~50%) - deflect sexual stuff ("idk", "i dont wanna talk about that") or skip if they keep pushing.',
+      'They got inappropriate — deflect ("idk", "i dont wanna talk about that") or skip if they keep pushing.',
     );
   }
   return lines.join("\n");

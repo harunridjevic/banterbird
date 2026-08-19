@@ -20,7 +20,7 @@ const cards = [
   {
     href: "/ops/settings",
     title: "Bot settings",
-    description: "Tune AI practice bot timing, personality, sexual vibe, and session policy. Changes apply live.",
+    description: "Tune AI practice bot timing, personality, and session policy. Changes apply live.",
     icon: Settings,
   },
   {
