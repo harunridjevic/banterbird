@@ -104,7 +104,6 @@ export function VideoTemplate({
     <div
       className="relative flex h-full w-full items-center justify-center overflow-hidden"
       style={{
-        padding: isWidescreen ? "1.5% 2%" : "8% 8% 22% 8%",
         background: "#070b14",
         filter: "saturate(1.22) contrast(1.04)",
       }}
@@ -196,25 +195,29 @@ export function VideoTemplate({
 
       {/* ── Inner card (Phone Screen) ─────────────────────────────────── */}
       <div
-        className="relative flex flex-col overflow-hidden"
+        className="relative flex h-full flex-col overflow-hidden"
         style={{
-          aspectRatio: isWidescreen ? "9/16" : undefined,
-          height: "100%",
-          width: isWidescreen ? "auto" : "100%",
-          maxHeight: "100%",
-          borderRadius: isWidescreen ? "20px" : "2.5%",
-          border: "1.5px solid rgba(255,255,255,0.14)",
-          boxShadow: isWidescreen
-            ? "0 0 0 1px rgba(255,255,255,0.06) inset, " +
-              "0 20px 70px rgba(0,0,0,0.9), " +
-              "0 0 60px 15px rgba(139,92,246,0.35), " +
-              "0 0 100px 30px rgba(6,182,212,0.22)"
-            : "0 0 0 1px rgba(255,255,255,0.06) inset, " +
-              "0 8px 80px 0 rgba(0,0,0,0.85), " +
-              "0 0 45px 10px rgba(139,92,246,0.24)",
-          background: "#0c1322",
+          width: isWidescreen ? "380px" : "100%",
+          maxWidth: "100%",
+          padding: "8% 8% 22% 8%",
         }}
       >
+        <div
+          className="relative flex flex-1 flex-col overflow-hidden"
+          style={{
+            borderRadius: "2.5%",
+            border: "1.5px solid rgba(255,255,255,0.12)",
+            boxShadow: isWidescreen
+              ? "0 0 0 1px rgba(255,255,255,0.06) inset, " +
+                "0 20px 70px rgba(0,0,0,0.9), " +
+                "0 0 60px 15px rgba(139,92,246,0.35), " +
+                "0 0 100px 30px rgba(6,182,212,0.22)"
+              : "0 0 0 1px rgba(255,255,255,0.06) inset, " +
+                "0 8px 80px 0 rgba(0,0,0,0.85), " +
+                "0 0 45px 10px rgba(139,92,246,0.24)",
+            background: "#0c1322",
+          }}
+        >
         {/* Dynamic background inside card — shifts when choices active */}
         <motion.div
           className="pointer-events-none absolute inset-0"
