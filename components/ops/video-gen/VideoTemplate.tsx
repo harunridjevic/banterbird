@@ -175,14 +175,7 @@ export function VideoTemplate({
           </motion.div>
         ))}
 
-        {/* 5. Noise texture */}
-        <div
-          className="absolute inset-0 opacity-[0.05]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-            backgroundSize: "180px 180px",
-          }}
-        />
+
 
         {/* 6. Vignette overlay */}
         <div
@@ -308,6 +301,7 @@ export function VideoTemplate({
           <img
             src="/banterbird-logo.png"
             alt="BanterBird"
+            crossOrigin="anonymous"
             style={{
               height: isWidescreen ? 16 : 22,
               width: "auto",
@@ -352,7 +346,7 @@ export function VideoTemplate({
                       style={{ boxShadow: "0 4px 18px rgba(0,0,0,0.5)" }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={msg.imageUrl} alt="Attached" className="block max-h-48 w-full object-cover" />
+                      <img src={msg.imageUrl} alt="Attached" crossOrigin="anonymous" className="block max-h-48 w-full object-cover" />
                     </div>
                   ) : null}
 

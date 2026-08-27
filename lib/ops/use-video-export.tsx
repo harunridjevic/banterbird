@@ -110,6 +110,38 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
+async function toDataUrl(url: string): Promise<string> {
+  if (!url || url.startsWith("data:")) return url;
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) return url;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string) || url);
+      reader.onerror = () => resolve(url);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return url;
+  }
+}
+
+async function prepareScriptForExport(script: VideoScript): Promise<VideoScript> {
+  const cloned = JSON.parse(JSON.stringify(script)) as VideoScript;
+  for (const msg of cloned.strangerMessages) {
+    if (msg.imageUrl) {
+      msg.imageUrl = await toDataUrl(msg.imageUrl);
+    }
+  }
+  for (const msg of cloned.responseMessages) {
+    if (msg.imageUrl) {
+      msg.imageUrl = await toDataUrl(msg.imageUrl);
+    }
+  }
+  return cloned;
+}
+
 // ─── Off-screen React root ────────────────────────────────────────────────────
 
 interface OffscreenRoot {
@@ -177,7 +209,7 @@ async function captureFrame(
 
   const raw = await html2canvas(el, {
     useCORS:         true,
-    allowTaint:      true,
+    allowTaint:      false,
     backgroundColor: "#0c121c",
     scale:           captureScale,
     logging:         false,
@@ -377,7 +409,8 @@ export function useVideoExport(): UseVideoExportReturn {
     const timeline = buildTimeline(script);
     const totalMs  = timeline.totalDuration;
 
-    const offscreen = await createOffscreenRoot(script, aspectRatio);
+    const exportScript = await prepareScriptForExport(script);
+    const offscreen = await createOffscreenRoot(exportScript, aspectRatio);
     const frames: ImageData[] = [];
 
     try {

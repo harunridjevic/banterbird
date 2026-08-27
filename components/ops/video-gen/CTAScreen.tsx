@@ -116,6 +116,7 @@ export function CTAScreen({
           <img
             src="/banterbird-logo.png"
             alt="BanterBird"
+            crossOrigin="anonymous"
             style={{ height: isWidescreen ? 24 : 36, width: "auto", objectFit: "contain" }}
           />
         </motion.div>
