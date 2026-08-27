@@ -322,16 +322,16 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
         <div
           className="pointer-events-none absolute inset-y-0 overflow-hidden flex flex-col items-center justify-center"
           style={{
-            width: isWidescreen ? "min(285px, calc(100% * 9 / 20))" : "100%",
+            width: isWidescreen ? "min(285px, calc(100% * 9 / 16))" : "100%",
             maxWidth: "100%",
             left: "50%",
             transform: "translateX(-50%)",
-            padding: isWidescreen ? "1.5% 0 3.5% 0" : "8% 8% 22% 8%",
+            padding: isWidescreen ? 0 : "8% 8% 22% 8%",
           }}
         >
           <div
             className="relative h-full w-full overflow-hidden"
-            style={{ borderRadius: isWidescreen ? "20px" : "2.5%" }}
+            style={{ borderRadius: isWidescreen ? "0" : "2.5%" }}
           >
             <VFXLayer
               elapsedMs={elapsedMs}

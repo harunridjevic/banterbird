@@ -193,23 +193,26 @@ export function VideoTemplate({
         />
       </div>
 
-      {/* ── Floating App Popup Card (Slim, Tall Mobile Window in 16:9, Full-Frame in 9:16) ── */}
+      {/* ── Floating App Popup Card (Full Height in 16:9, Full-Frame in 9:16) ── */}
       <div
         className="relative flex h-full flex-col overflow-hidden items-center justify-center"
         style={{
-          width: isWidescreen ? "min(285px, calc(100% * 9 / 20))" : "100%",
+          width: isWidescreen ? "min(285px, calc(100% * 9 / 16))" : "100%",
           maxWidth: "100%",
-          padding: isWidescreen ? "1.5% 0 3.5% 0" : "8% 8% 22% 8%",
+          padding: isWidescreen ? 0 : "8% 8% 22% 8%",
         }}
       >
         <div
           className="relative flex h-full w-full flex-col overflow-hidden"
           style={{
-            borderRadius: isWidescreen ? "20px" : "2.5%",
-            border: "1.5px solid rgba(255,255,255,0.12)",
+            borderRadius: isWidescreen ? "0" : "2.5%",
+            borderLeft: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.12)",
+            borderRight: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.12)",
+            borderTop: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.12)",
+            borderBottom: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.12)",
             boxShadow: isWidescreen
               ? "0 0 0 1px rgba(255,255,255,0.06) inset, " +
-                "0 20px 70px rgba(0,0,0,0.9), " +
+                "0 0 80px 20px rgba(0,0,0,0.9), " +
                 "0 0 60px 15px rgba(139,92,246,0.35), " +
                 "0 0 100px 30px rgba(6,182,212,0.22)"
               : "0 0 0 1px rgba(255,255,255,0.06) inset, " +
