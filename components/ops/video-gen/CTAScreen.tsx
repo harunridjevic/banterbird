@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import type { VideoAspectRatio } from "@/lib/ops/video-generator-types";
+import { BANTERBIRD_LOGO_DATA_URL } from "./logo-data";
 
 interface Props {
   headline: string;
@@ -46,11 +47,9 @@ export function CTAScreen({
       animate={{ opacity: outerOpacity }}
       transition={outerTransition}
       aria-hidden={!visible && !isExportMode}
-      className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center"
+      className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center px-6 py-8"
       style={{
-        padding: isWidescreen ? "4% 6%" : "8% 8% 22% 8%",
-        background: "linear-gradient(160deg, rgba(8,14,24,0.94) 0%, rgba(15,26,46,0.96) 50%, rgba(8,14,24,0.94) 100%)",
-        backdropFilter: "blur(8px)",
+        background: "linear-gradient(160deg, rgba(8,14,24,0.95) 0%, rgba(15,26,46,0.97) 50%, rgba(8,14,24,0.95) 100%)",
       }}
     >
       {/* Floating particles */}
@@ -59,8 +58,8 @@ export function CTAScreen({
           key={i}
           className="pointer-events-none absolute rounded-full"
           style={{
-            width: isWidescreen ? 3 + i * 2 : 4 + i * 3,
-            height: isWidescreen ? 3 + i * 2 : 4 + i * 3,
+            width: 4 + i * 3,
+            height: 4 + i * 3,
             background: i % 2 === 0 ? "rgba(167,139,250,0.6)" : "rgba(45,212,191,0.5)",
             left: `${15 + i * 17}%`, top: `${20 + (i % 3) * 20}%`,
           }}
@@ -74,7 +73,7 @@ export function CTAScreen({
         className="pointer-events-none absolute inset-0"
         animate={visible ? { opacity: [0.3, 0.6, 0.3] } : { opacity: 0 }}
         transition={instantTransitions ? T0 : { duration: 2.5 * s, repeat: Infinity, ease: "easeInOut" }}
-        style={{ background: "radial-gradient(ellipse 70% 50% at 50% 50%, rgba(124,58,237,0.28) 0%, transparent 70%)" }}
+        style={{ background: "radial-gradient(circle at 50% 50%, rgba(124,58,237,0.28) 0%, transparent 70%)" }}
       />
 
       {/* Scan line */}
@@ -89,7 +88,7 @@ export function CTAScreen({
       )}
 
       {/* Content */}
-      <div className={`relative flex flex-col items-center text-center ${isWidescreen ? "gap-3" : "gap-5"}`}>
+      <div className="relative flex flex-col items-center gap-5 text-center">
 
         {/* Logo box */}
         <motion.div
@@ -103,9 +102,7 @@ export function CTAScreen({
             stiffness: Math.max(60, 300 / s),
             damping: Math.max(8, 20 / s),
           }}
-          className={`flex items-center justify-center ${
-            isWidescreen ? "rounded-2xl px-3.5 py-2.5" : "rounded-3xl px-5 py-4"
-          }`}
+          className="flex items-center justify-center rounded-3xl px-5 py-4"
           style={{
             background: "#1e1a3d",
             border: "2px solid rgba(167,139,250,0.6)",
@@ -114,10 +111,9 @@ export function CTAScreen({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/banterbird-logo.png"
+            src={BANTERBIRD_LOGO_DATA_URL}
             alt="BanterBird"
-            crossOrigin="anonymous"
-            style={{ height: isWidescreen ? 24 : 36, width: "auto", objectFit: "contain" }}
+            style={{ height: 36, width: "auto", objectFit: "contain" }}
           />
         </motion.div>
 
@@ -129,7 +125,7 @@ export function CTAScreen({
             : visible ? { opacity: 1, scaleX: 1 } : { opacity: 0, scaleX: 0 }
           }
           transition={instantTransitions || isExportMode ? T0 : { type: "tween", duration: 0.4 * s, ease: "easeOut", delay: 0.15 * s }}
-          className={`h-px ${isWidescreen ? "w-14" : "w-20"}`}
+          className="h-px w-20"
           style={{ background: "linear-gradient(to right, transparent, rgba(167,139,250,0.6), rgba(45,212,191,0.4), transparent)" }}
         />
 
@@ -143,7 +139,7 @@ export function CTAScreen({
           transition={instantTransitions || isExportMode ? T0 : {
             type: "spring", stiffness: Math.max(60, 260 / s), damping: Math.max(8, 22 / s), delay: 0.2 * s,
           }}
-          className={`${isWidescreen ? "text-[15px]" : "text-[22px]"} font-black leading-tight tracking-tight`}
+          className="text-[22px] font-black leading-tight tracking-tight"
           style={{ color: "#e8ecf2" }}
         >
           {headline}
@@ -159,7 +155,7 @@ export function CTAScreen({
           transition={instantTransitions || isExportMode ? T0 : {
             type: "spring", stiffness: Math.max(60, 240 / s), damping: Math.max(8, 22 / s), delay: 0.3 * s,
           }}
-          className={`${isWidescreen ? "text-[11px]" : "text-[15px]"} font-medium leading-snug`}
+          className="text-[15px] font-medium leading-snug"
           style={{ color: "#8a9bbf" }}
         >
           {subline}
@@ -175,14 +171,14 @@ export function CTAScreen({
           transition={instantTransitions || isExportMode ? T0 : {
             type: "spring", stiffness: Math.max(60, 320 / s), damping: Math.max(8, 18 / s), delay: 0.4 * s,
           }}
-          className={`mt-1 rounded-full ${isWidescreen ? "px-3.5 py-1" : "px-5 py-2"}`}
+          className="mt-1 rounded-full px-5 py-2"
           style={{
             background: "linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(20,184,166,0.15) 100%)",
             border: "1px solid rgba(167,139,250,0.45)",
             boxShadow: "0 4px 20px rgba(124,58,237,0.25)",
           }}
         >
-          <span className={`${isWidescreen ? "text-[11px]" : "text-[13px]"} font-bold tracking-wide`} style={{ color: "#c4b5fd" }}>
+          <span className="text-[13px] font-bold tracking-wide" style={{ color: "#c4b5fd" }}>
             BanterBird.app
           </span>
         </motion.div>

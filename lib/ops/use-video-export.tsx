@@ -35,6 +35,7 @@ import type { Root } from "react-dom/client";
 import type { VideoScript, VideoAspectRatio } from "@/lib/ops/video-generator-types";
 import { buildTimeline } from "@/lib/ops/video-generator-types";
 import { VideoPreview } from "@/components/ops/video-gen/VideoPreview";
+import { BANTERBIRD_LOGO_DATA_URL } from "@/components/ops/video-gen/logo-data";
 import { renderSFXBuffer, type SFXEvent } from "./sfx";
 
 export type ExportStatus =
@@ -217,6 +218,29 @@ async function captureFrame(
     height:          renderH,
     windowWidth:     renderW,
     windowHeight:    renderH,
+    imageTimeout:    0,
+    onclone: (clonedDoc) => {
+      // 1. Remove external cross-origin font/stylesheet links from cloned iframe
+      const links = clonedDoc.querySelectorAll('link[rel="stylesheet"], link[as="font"], link[as="style"]');
+      links.forEach((l) => {
+        const href = (l as HTMLLinkElement).href;
+        if (
+          href &&
+          (href.startsWith("http://") || href.startsWith("https://")) &&
+          !href.startsWith(window.location.origin)
+        ) {
+          l.remove();
+        }
+      });
+
+      // 2. Ensure all images in the cloned DOM use base64 data URIs
+      const imgs = clonedDoc.querySelectorAll("img");
+      imgs.forEach((img) => {
+        if (!img.src || !img.src.startsWith("data:")) {
+          img.src = BANTERBIRD_LOGO_DATA_URL;
+        }
+      });
+    },
   });
 
   const w = toEven(outW);

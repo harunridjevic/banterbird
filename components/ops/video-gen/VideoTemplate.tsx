@@ -21,6 +21,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef } from "react";
 import type { ChatMessage, VideoAspectRatio } from "@/lib/ops/video-generator-types";
+import { BANTERBIRD_LOGO_DATA_URL } from "./logo-data";
 
 interface Props {
   visibleMessages: ChatMessage[];
@@ -55,14 +56,14 @@ function SparkleStar({ size, color }: { size: number; color: string }) {
   );
 }
 
-function TypingDots({ instant, slow, isWidescreen }: { instant: boolean; slow: number; isWidescreen?: boolean }) {
+function TypingDots({ instant, slow }: { instant: boolean; slow: number }) {
   return (
-    <div className={`flex items-center ${isWidescreen ? "gap-1 px-0.5 py-0.5" : "gap-1.5 px-1 py-0.5"}`}>
+    <div className="flex items-center gap-1.5 px-1 py-0.5">
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
-          className={`${isWidescreen ? "h-1.5 w-1.5" : "h-2.5 w-2.5"} rounded-full bg-[#38bdf8]`}
-          animate={{ y: isWidescreen ? [0, -3.5, 0] : [0, -6, 0], opacity: [0.4, 1, 0.4] }}
+          className="h-2.5 w-2.5 rounded-full bg-[#38bdf8]"
+          animate={{ y: [0, -6, 0], opacity: [0.4, 1, 0.4] }}
           transition={instant ? { duration: 0 } : {
             duration: 0.7 * slow,
             repeat: Infinity,
@@ -96,64 +97,38 @@ export function VideoTemplate({
   }, [visibleMessages.length, strangerTyping, choicesVisible]);
 
   return (
-    /*
-     * ── Outer shell ───────────────────────────────────────────────────
-     * Safe-zone padding for TikTok / Reels / Widescreen:
-     * 8% horizontal, 8% top, 22% bottom (clear for UI overlays)
-     */
     <div
       className="relative flex h-full w-full items-center justify-center overflow-hidden"
-      style={{
-        background: "#070b14",
-        filter: "saturate(1.22) contrast(1.04)",
-      }}
+      style={{ background: "#070b14" }}
     >
-      {/* ── Background layers (stretches across entire 16:9 / 9:16 widescreen) ── */}
+      {/* ── Background layers (Clean single-gradient layers that never artifact) ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         {/* 1. Base Dark Cosmic Gradient */}
         <div className="absolute inset-0" style={{ background: "linear-gradient(145deg, #050811 0%, #090e1a 50%, #060a14 100%)" }} />
 
-        {/* 2. Vivid Aurora / Nebula Glowing Washes */}
+        {/* 2. Top-left Purple Nebula Glow */}
         <motion.div
           className="absolute inset-0"
-          animate={instantTransitions ? {} : {
-            scale: [1, 1.06, 1],
-            opacity: [0.85, 1, 0.85],
-          }}
+          animate={instantTransitions ? {} : { opacity: [0.75, 1, 0.75], scale: [1, 1.05, 1] }}
           transition={{ duration: 6 * s, repeat: Infinity, ease: "easeInOut" }}
-          style={{
-            background: isWidescreen
-              ? "radial-gradient(ellipse 45% 65% at 10% 25%, rgba(139,92,246,0.48) 0%, transparent 65%), " +
-                "radial-gradient(ellipse 45% 65% at 90% 75%, rgba(6,182,212,0.45) 0%, transparent 65%), " +
-                "radial-gradient(ellipse 55% 45% at 50% 0%, rgba(236,72,153,0.30) 0%, transparent 70%), " +
-                "radial-gradient(ellipse 60% 45% at 50% 100%, rgba(59,130,246,0.35) 0%, transparent 70%)"
-              : "radial-gradient(ellipse 75% 55% at 0% 0%, rgba(139,92,246,0.55) 0%, transparent 65%), " +
-                "radial-gradient(ellipse 70% 50% at 100% 100%, rgba(6,182,212,0.48) 0%, transparent 65%), " +
-                "radial-gradient(ellipse 40% 50% at 100% 45%, rgba(236,72,153,0.30) 0%, transparent 70%)",
-          }}
+          style={{ background: "radial-gradient(circle at 15% 25%, rgba(139,92,246,0.48) 0%, transparent 60%)" }}
         />
 
-        {/* 3. Widescreen Shiny Shimmer Light Beams */}
-        {isWidescreen && !instantTransitions && (
-          <motion.div
-            className="absolute inset-0"
-            animate={{
-              backgroundPosition: ["0% 0%", "200% 200%"],
-            }}
-            transition={{
-              duration: 8 * s,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-            style={{
-              backgroundImage:
-                "linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.08) 42%, rgba(167,139,250,0.25) 48%, rgba(56,189,248,0.3) 52%, rgba(244,114,182,0.22) 58%, transparent 75%)",
-              backgroundSize: "200% 200%",
-            }}
-          />
-        )}
+        {/* 3. Bottom-right Cyan Nebula Glow */}
+        <motion.div
+          className="absolute inset-0"
+          animate={instantTransitions ? {} : { opacity: [0.7, 0.95, 0.7], scale: [1.05, 1, 1.05] }}
+          transition={{ duration: 7 * s, repeat: Infinity, ease: "easeInOut" }}
+          style={{ background: "radial-gradient(circle at 85% 75%, rgba(6,182,212,0.42) 0%, transparent 60%)" }}
+        />
 
-        {/* 4. Widescreen Sparkling Glints / Star Bursts */}
+        {/* 4. Top-center Pink Aurora */}
+        <div
+          className="absolute inset-0"
+          style={{ background: "radial-gradient(circle at 50% 0%, rgba(236,72,153,0.22) 0%, transparent 50%)" }}
+        />
+
+        {/* 5. Widescreen Sparkling Glints */}
         {isWidescreen && !instantTransitions && WIDESCREEN_SPARKLES.map((sp) => (
           <motion.div
             key={sp.id}
@@ -175,22 +150,20 @@ export function VideoTemplate({
           </motion.div>
         ))}
 
-
-
         {/* 6. Vignette overlay */}
         <div
           className="absolute inset-0"
           style={{
-            background: "radial-gradient(ellipse 65% 70% at 50% 50%, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.85) 100%)",
+            background: "radial-gradient(circle at 50% 50%, transparent 40%, rgba(0,0,0,0.75) 100%)",
           }}
         />
       </div>
 
-      {/* ── Floating App Popup Card (Full Height in 16:9, Full-Frame in 9:16) ── */}
+      {/* ── App Frame (Centered 380px full-height in 16:9, floating centered card in 9:16) ── */}
       <div
         className="relative flex h-full flex-col overflow-hidden items-center justify-center"
         style={{
-          width: isWidescreen ? "min(285px, calc(100% * 9 / 16))" : "100%",
+          width: isWidescreen ? "380px" : "100%",
           maxWidth: "100%",
           padding: isWidescreen ? 0 : "8% 8% 22% 8%",
         }}
@@ -198,19 +171,15 @@ export function VideoTemplate({
         <div
           className="relative flex h-full w-full flex-col overflow-hidden"
           style={{
-            borderRadius: isWidescreen ? "0" : "2.5%",
-            borderLeft: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.12)",
-            borderRight: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.12)",
-            borderTop: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.12)",
-            borderBottom: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.12)",
+            borderRadius: isWidescreen ? "0px" : "28px",
+            border: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.14)",
+            borderLeft: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.14)",
+            borderRight: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.14)",
+            borderTop: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.14)",
+            borderBottom: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.14)",
             boxShadow: isWidescreen
-              ? "0 0 0 1px rgba(255,255,255,0.06) inset, " +
-                "0 0 80px 20px rgba(0,0,0,0.9), " +
-                "0 0 60px 15px rgba(139,92,246,0.35), " +
-                "0 0 100px 30px rgba(6,182,212,0.22)"
-              : "0 0 0 1px rgba(255,255,255,0.06) inset, " +
-                "0 8px 80px 0 rgba(0,0,0,0.85), " +
-                "0 0 45px 10px rgba(139,92,246,0.24)",
+              ? "0 0 80px 20px rgba(0,0,0,0.9), 0 0 60px 15px rgba(139,92,246,0.35), 0 0 100px 30px rgba(6,182,212,0.22)"
+              : "0 16px 70px rgba(0,0,0,0.85), 0 0 45px 10px rgba(139,92,246,0.25)",
             background: "#0c1322",
           }}
         >
@@ -227,13 +196,13 @@ export function VideoTemplate({
           className="pointer-events-none absolute inset-x-0 top-0 h-44"
           animate={instantTransitions ? {} : { opacity: choicesVisible ? 0.45 : 0.18 }}
           transition={instantTransitions ? { duration: 0 } : { type: "tween", duration: 1 * s, ease: "easeInOut" }}
-          style={{ background: "radial-gradient(ellipse 80% 100% at 50% 0%, rgba(139,92,246,0.38) 0%, transparent 100%)" }}
+          style={{ background: "radial-gradient(circle at 50% 0%, rgba(139,92,246,0.38) 0%, transparent 100%)" }}
         />
 
         {/* ── Status bar ── */}
-        <div className={`relative flex shrink-0 items-center justify-between ${isWidescreen ? "px-3.5 pt-2 pb-0.5" : "px-6 pt-3 pb-1"}`}>
-          <span className={`${isWidescreen ? "text-[9.5px]" : "text-[11px]"} font-bold tabular-nums text-[#cbd5e1]`}>9:41</span>
-          <div className={`flex items-center ${isWidescreen ? "gap-1 scale-85 origin-right" : "gap-1.5"}`}>
+        <div className="relative flex shrink-0 items-center justify-between px-6 pt-3 pb-1">
+          <span className="text-[11px] font-bold tabular-nums text-[#cbd5e1]">9:41</span>
+          <div className="flex items-center gap-1.5">
             <svg width="17" height="12" viewBox="0 0 17 12" fill="none" aria-hidden>
               {[0, 1, 2, 3].map((i) => (
                 <rect key={i} x={i * 4.5} y={12 - (i + 1) * 3} width="3" height={(i + 1) * 3} rx="0.5"
@@ -250,32 +219,26 @@ export function VideoTemplate({
 
         {/* ── Chat header ── */}
         <div
-          className={`relative flex shrink-0 items-center border-b ${
-            isWidescreen ? "gap-2 px-3 py-1.5" : "gap-3 px-5 py-3"
-          }`}
+          className="relative flex shrink-0 items-center gap-3 border-b px-5 py-3"
           style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(15,23,42,0.6)" }}
         >
           {/* Avatar with pulse ring */}
           <div
-            className={`relative flex shrink-0 items-center justify-center rounded-full bg-[#1e293b] ${
-              isWidescreen ? "h-7 w-7" : "h-10 w-10"
-            }`}
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1e293b]"
             style={{ boxShadow: "0 0 15px rgba(139,92,246,0.3)" }}
           >
             <motion.div
               className="absolute inset-0 rounded-full"
-              style={{ border: isWidescreen ? "1.5px solid rgba(167,139,250,0.7)" : "2px solid rgba(167,139,250,0.7)" }}
+              style={{ border: "2px solid rgba(167,139,250,0.7)" }}
               animate={instantTransitions ? {} : { scale: [1, 1.35, 1], opacity: [0.9, 0, 0.9] }}
               transition={instantTransitions ? { duration: 0 } : { duration: 2 * s, repeat: Infinity, ease: "easeOut" }}
             />
-            <svg width={isWidescreen ? "15" : "22"} height={isWidescreen ? "15" : "22"} viewBox="0 0 24 24" fill="none" aria-hidden>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
               <circle cx="12" cy="8" r="4" fill="#94a3b8" />
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
             </svg>
             <motion.span
-              className={`absolute bottom-0 right-0 rounded-full border-2 border-[#0c121c] bg-[#10b981] ${
-                isWidescreen ? "h-2 w-2" : "h-2.5 w-2.5"
-              }`}
+              className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#0c121c] bg-[#10b981]"
               style={{ boxShadow: "0 0 8px #10b981" }}
               animate={instantTransitions ? {} : { scale: [1, 1.4, 1] }}
               transition={instantTransitions ? { duration: 0 } : { duration: 1.5 * s, repeat: Infinity, ease: "easeInOut" }}
@@ -283,30 +246,28 @@ export function VideoTemplate({
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className={`${isWidescreen ? "text-xs" : "text-sm"} font-bold leading-tight text-white`}>Stranger</p>
-            <div className="flex items-center gap-1">
+            <p className="text-sm font-bold leading-tight text-white">Stranger</p>
+            <div className="flex items-center gap-1.5">
               <motion.span
                 className="h-1.5 w-1.5 rounded-full bg-[#10b981]"
                 style={{ boxShadow: "0 0 6px #10b981" }}
                 animate={instantTransitions ? {} : { opacity: [1, 0.3, 1] }}
                 transition={instantTransitions ? { duration: 0 } : { duration: 1.2 * s, repeat: Infinity }}
               />
-              <p className={`${isWidescreen ? "text-[9.5px]" : "text-[11px]"} font-medium text-[#94a3b8]`}>
-                BanterBird · anonymous
+              <p className="text-[11px] font-medium text-[#94a3b8]">
+                BanterBird · anonymous chat
               </p>
             </div>
           </div>
 
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/banterbird-logo.png"
+            src={BANTERBIRD_LOGO_DATA_URL}
             alt="BanterBird"
-            crossOrigin="anonymous"
             style={{
-              height: isWidescreen ? 16 : 22,
+              height: 22,
               width: "auto",
               objectFit: "contain",
-              filter: "drop-shadow(0 2px 8px rgba(139,92,246,0.5))",
             }}
           />
         </div>
@@ -314,9 +275,7 @@ export function VideoTemplate({
         {/* ── Message list ── */}
         <div
           ref={scrollRef}
-          className={`relative flex flex-1 flex-col overflow-y-auto ${
-            isWidescreen ? "gap-2 px-3 pt-2 pb-2" : "gap-3 px-4 pt-3 pb-3"
-          }`}
+          className="relative flex flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-3"
           style={{ scrollbarWidth: "none" }}
         >
           {visibleMessages.map((msg) => {
@@ -333,9 +292,9 @@ export function VideoTemplate({
                 }}
                 className={`flex ${isMe ? "justify-end" : "justify-start"}`}
               >
-                <div className="flex max-w-[84%] flex-col gap-0.5">
+                <div className="flex max-w-[82%] flex-col gap-1">
                   {!isMe && (
-                    <span className={`ml-1 ${isWidescreen ? "text-[8.5px]" : "text-[10px]"} font-bold uppercase tracking-widest text-[#94a3b8]`}>
+                    <span className="ml-1 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]">
                       Stranger
                     </span>
                   )}
@@ -352,10 +311,8 @@ export function VideoTemplate({
 
                   {msg.text ? (
                     <motion.div
-                      className={`relative font-medium leading-snug ${
-                        isWidescreen
-                          ? `px-3 py-1.5 text-[11.5px] rounded-2xl ${isMe ? "rounded-br-sm text-white" : "rounded-bl-sm text-[#f8fafc]"}`
-                          : `px-4 py-2.5 text-[15px] rounded-3xl ${isMe ? "rounded-br-md text-white" : "rounded-bl-md text-[#f8fafc]"}`
+                      className={`relative rounded-3xl px-4 py-2.5 text-[15px] font-medium leading-snug ${
+                        isMe ? "rounded-br-md text-white" : "rounded-bl-md text-[#f8fafc]"
                       }`}
                       style={{
                         background: isMe
@@ -366,13 +323,13 @@ export function VideoTemplate({
                           : "1px solid rgba(148,163,184,0.18)",
                         boxShadow: isMe
                           ? "0 6px 22px rgba(29,78,216,0.55), 0 0 14px rgba(2,132,199,0.35)"
-                          : "0 6px 18px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)",
+                          : "0 6px 18px rgba(0,0,0,0.55)",
                       }}
                     >
                       {/* Brief glow on appear */}
                       {!instantTransitions && (
                         <motion.div
-                          className="pointer-events-none absolute inset-0 rounded-2xl"
+                          className="pointer-events-none absolute inset-0 rounded-3xl"
                           initial={{ opacity: 0.7 }}
                           animate={{ opacity: 0 }}
                           transition={{ duration: 0.7 * s, ease: "easeOut" }}
@@ -403,19 +360,15 @@ export function VideoTemplate({
                 }}
                 className="flex justify-start"
               >
-                <div className="flex flex-col gap-0.5">
-                  <span className={`ml-1 ${isWidescreen ? "text-[8.5px]" : "text-[10px]"} font-bold uppercase tracking-widest text-[#94a3b8]`}>
+                <div className="flex flex-col gap-1">
+                  <span className="ml-1 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]">
                     Stranger
                   </span>
                   <div
-                    className={
-                      isWidescreen
-                        ? "rounded-2xl rounded-bl-sm px-3 py-2"
-                        : "rounded-3xl rounded-bl-md px-4 py-3"
-                    }
+                    className="rounded-3xl rounded-bl-md px-4 py-3"
                     style={{ background: "#1e293b", border: "1px solid rgba(148,163,184,0.18)" }}
                   >
-                    <TypingDots instant={instantTransitions} slow={s} isWidescreen={isWidescreen} />
+                    <TypingDots instant={instantTransitions} slow={s} />
                   </div>
                 </div>
               </motion.div>
@@ -425,7 +378,7 @@ export function VideoTemplate({
           {/* Spacer grows when choices overlay is visible */}
           <motion.div
             aria-hidden
-            animate={{ height: choicesVisible ? (isWidescreen ? 230 : 340) : 0 }}
+            animate={{ height: choicesVisible ? 340 : 0 }}
             transition={instantTransitions ? { duration: 0 } : { type: "spring", stiffness: 180, damping: 28 }}
             className="shrink-0"
           />
@@ -433,32 +386,24 @@ export function VideoTemplate({
 
         {/* ── Composer bar (decorative) ── */}
         <div
-          className={`relative flex shrink-0 items-center border-t ${
-            isWidescreen ? "gap-2 px-3 py-2" : "gap-3 px-4 py-3"
-          }`}
+          className="relative flex shrink-0 items-center gap-3 border-t px-4 py-3"
           style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(15,23,42,0.92)" }}
         >
           <div
-            className={`flex-1 ${
-              isWidescreen
-                ? "rounded-xl px-3 py-1.5 text-[11px]"
-                : "rounded-2xl px-4 py-2.5 text-[14px]"
-            } text-[#64748b]`}
+            className="flex-1 rounded-2xl px-4 py-2.5 text-[14px] text-[#64748b]"
             style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.08)" }}
           >
             Say something nice…
           </div>
           <motion.div
-            className={`flex shrink-0 items-center justify-center ${
-              isWidescreen ? "h-7 w-7 rounded-xl" : "h-10 w-10 rounded-2xl"
-            }`}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
             style={{ background: "linear-gradient(135deg, #2563eb, #06b6d4)", boxShadow: "0 0 16px rgba(37,99,235,0.4)" }}
             animate={instantTransitions ? {} : {
               boxShadow: ["0 0 8px rgba(37,99,235,0.3)", "0 0 20px rgba(6,182,212,0.6)", "0 0 8px rgba(37,99,235,0.3)"],
             }}
             transition={instantTransitions ? { duration: 0 } : { duration: 2 * s, repeat: Infinity, ease: "easeInOut" }}
           >
-            <svg width={isWidescreen ? "13" : "18"} height={isWidescreen ? "13" : "18"} viewBox="0 0 24 24" fill="none" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path d="M22 2L11 13" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
               <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>

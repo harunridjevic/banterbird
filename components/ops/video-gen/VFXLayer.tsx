@@ -76,15 +76,6 @@ export function VFXLayer({
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
 
-      {/* ── Scanline overlay ── */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px)",
-          backgroundSize: "100% 4px",
-        }}
-      />
-
       {/* ── Ambient vignette — deepens during choices ── */}
       <motion.div
         className="absolute inset-0"
@@ -93,7 +84,7 @@ export function VFXLayer({
         }}
         transition={instantTransitions ? T0 : { type: "tween", duration: 0.8 * s, ease: "easeInOut" }}
         style={{
-          background: "radial-gradient(ellipse 85% 75% at 50% 50%, transparent 40%, rgba(4,8,18,0.85) 100%)",
+          background: "radial-gradient(circle at 50% 50%, transparent 40%, rgba(4,8,18,0.85) 100%)",
         }}
       />
 
@@ -102,13 +93,13 @@ export function VFXLayer({
         className="absolute inset-0"
         animate={instantTransitions ? {} : {
           opacity: isWinner ? 0.12 : choicesActive && !isExit ? 0.07 : 0,
-          background: isWinner
-            ? (choicePhase === "winner-a"
-              ? "radial-gradient(ellipse 100% 60% at 50% 85%, rgba(124,58,237,0.5) 0%, transparent 70%)"
-              : "radial-gradient(ellipse 100% 60% at 50% 85%, rgba(20,184,166,0.5) 0%, transparent 70%)")
-            : "radial-gradient(ellipse 100% 50% at 50% 85%, rgba(124,58,237,0.3) 0%, transparent 70%)",
         }}
         transition={instantTransitions ? T0 : { type: "tween", duration: 0.6 * s, ease: "easeInOut" }}
+        style={{
+          background: isWinner && choicePhase === "winner-b"
+            ? "radial-gradient(circle at 50% 85%, rgba(20,184,166,0.5) 0%, transparent 70%)"
+            : "radial-gradient(circle at 50% 85%, rgba(124,58,237,0.5) 0%, transparent 70%)",
+        }}
       />
 
       {/* ── Phase flash — white burst when choices slide in ── */}
