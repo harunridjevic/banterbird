@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import type { VideoAspectRatio } from "@/lib/ops/video-generator-types";
 
 interface Props {
   headline: string;
@@ -9,14 +10,22 @@ interface Props {
   instantTransitions?: boolean;
   slowFactor?: number;
   exportOpacity?: number;
+  aspectRatio?: VideoAspectRatio;
 }
 
 export function CTAScreen({
-  headline, subline, visible, instantTransitions = false, slowFactor = 1, exportOpacity,
+  headline,
+  subline,
+  visible,
+  instantTransitions = false,
+  slowFactor = 1,
+  exportOpacity,
+  aspectRatio = "9:16",
 }: Props) {
   const s = slowFactor;
   const T0 = { duration: 0 };
   const isExportMode = exportOpacity !== undefined;
+  const isWidescreen = aspectRatio === "16:9";
 
   const outerOpacity = isExportMode ? exportOpacity : (visible ? 1 : 0);
   const outerTransition = instantTransitions || isExportMode
@@ -39,9 +48,9 @@ export function CTAScreen({
       aria-hidden={!visible && !isExportMode}
       className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center"
       style={{
-        /* Match safe-zone: equal 8% horizontal, 8% top, 22% bottom */
-        padding: "8% 8% 22% 8%",
-        background: "linear-gradient(160deg, #080e18 0%, #0f1a2e 50%, #080e18 100%)",
+        padding: isWidescreen ? "4% 20%" : "8% 8% 22% 8%",
+        background: "linear-gradient(160deg, rgba(8,14,24,0.94) 0%, rgba(15,26,46,0.96) 50%, rgba(8,14,24,0.94) 100%)",
+        backdropFilter: "blur(8px)",
       }}
     >
       {/* Floating particles */}

@@ -1,66 +1,53 @@
 "use client";
-"use client";
-
-/**
- * VFXLayer
- *
- * Full-screen absolute overlay rendered on top of VideoTemplate but
- * below ChoicesOverlay and CTAScreen. Drives all ambient and reactive
- * visual effects:
- *
- *   • Ambient floating particles — always present, gentle drift
- *   • Background vignette — deepens when choices are active
- *   • Phase flash — white/colour burst when choices first appear
- *   • Winner explosion — confetti-style particle burst on winner reveal
- *   • Message ripple — brief glow ring when a new message pops in
- *   • Scanline texture — subtle CRT-style horizontal lines
- *
- * All timings use the same slowFactor as the rest of the components.
- */
 
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChoicePhase } from "./ChoicesOverlay";
-import type { VideoTimeline } from "@/lib/ops/video-generator-types";
+import type { VideoTimeline, VideoAspectRatio } from "@/lib/ops/video-generator-types";
 
 interface Props {
   elapsedMs: number;
   timeline: VideoTimeline;
   choicePhase: ChoicePhase;
-  messageCount: number;        // total visible messages — triggers ripple
+  messageCount: number;
   instantTransitions?: boolean;
   slowFactor?: number;
+  aspectRatio?: VideoAspectRatio;
 }
 
 // ─── Ambient particles ────────────────────────────────────────────────────────
 
-const AMBIENT = Array.from({ length: 12 }, (_, i) => ({
+const AMBIENT = Array.from({ length: 16 }, (_, i) => ({
   id: i,
-  x: `${8 + (i * 7.5) % 86}%`,
-  y: `${10 + (i * 11) % 78}%`,
-  size: 2 + (i % 4),
-  color: i % 3 === 0
-    ? "rgba(167,139,250,0.35)"
-    : i % 3 === 1
-    ? "rgba(45,212,191,0.28)"
-    : "rgba(100,149,237,0.25)",
+  x: `${6 + (i * 6.2) % 88}%`,
+  y: `${8 + (i * 11) % 82}%`,
+  size: 2.5 + (i % 4),
+  color: i % 4 === 0
+    ? "rgba(167,139,250,0.55)"
+    : i % 4 === 1
+    ? "rgba(56,189,248,0.5)"
+    : i % 4 === 2
+    ? "rgba(244,114,182,0.45)"
+    : "rgba(52,211,153,0.45)",
   duration: 3.5 + (i % 5) * 0.9,
   delay: (i * 0.38) % 3.5,
 }));
 
 // ─── Confetti burst ───────────────────────────────────────────────────────────
 
-const CONFETTI = Array.from({ length: 22 }, (_, i) => ({
+const CONFETTI = Array.from({ length: 28 }, (_, i) => ({
   id: i,
-  angle: (i / 22) * 360,
-  distance: 55 + (i % 6) * 25,
-  size: 5 + (i % 5) * 3,
-  color: i % 4 === 0
+  angle: (i / 28) * 360,
+  distance: 60 + (i % 6) * 30,
+  size: 6 + (i % 5) * 3,
+  color: i % 5 === 0
     ? "#a78bfa"
-    : i % 4 === 1
-    ? "#2dd4bf"
-    : i % 4 === 2
+    : i % 5 === 1
+    ? "#38bdf8"
+    : i % 5 === 2
     ? "#f472b6"
-    : "#fbbf24",
+    : i % 5 === 3
+    ? "#fbbf24"
+    : "#34d399",
   duration: 0.9 + (i % 4) * 0.2,
   delay: (i % 5) * 0.04,
 }));
@@ -74,6 +61,7 @@ export function VFXLayer({
   messageCount,
   instantTransitions = false,
   slowFactor = 1,
+  aspectRatio = "9:16",
 }: Props) {
   const s = slowFactor;
   const T0 = { duration: 0 };

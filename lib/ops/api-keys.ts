@@ -385,7 +385,7 @@ export async function testApiKey(id: string): Promise<{
   const model =
     key.provider === "cerebras"
       ? process.env.CEREBRAS_CHAT_MODEL?.trim() || "gpt-oss-120b"
-      : process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.1-8b-instant";
+      : process.env.GROQ_CHAT_MODEL?.trim() || "openai/gpt-oss-20b";
 
   try {
     const res = await fetch(endpoint, {
@@ -397,7 +397,7 @@ export async function testApiKey(id: string): Promise<{
       body: JSON.stringify({
         model,
         temperature: 0,
-        max_tokens: 8,
+        max_tokens: 128,
         messages: [{ role: "user", content: "ping" }],
       }),
     });

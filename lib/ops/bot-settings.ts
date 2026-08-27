@@ -112,10 +112,10 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   sessionHintAt: 5,
 
   llmTemperature: 1.08,
-  maxOutputTokens: 160,
+  maxOutputTokens: 384,
   /** Max chat turns sent to the LLM per request. */
   llmHistoryTurns: 50,
-  maxOutputTokensOpener: 96,
+  maxOutputTokensOpener: 384,
 
   displayOnlineCountOverride: false,
   displayOnlineCountMin: 42,

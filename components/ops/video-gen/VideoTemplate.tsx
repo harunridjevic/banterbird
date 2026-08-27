@@ -20,7 +20,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef } from "react";
-import type { ChatMessage } from "@/lib/ops/video-generator-types";
+import type { ChatMessage, VideoAspectRatio } from "@/lib/ops/video-generator-types";
 
 interface Props {
   visibleMessages: ChatMessage[];
@@ -29,6 +29,30 @@ interface Props {
   instantTransitions?: boolean;
   slowFactor?: number;
   typingKey?: string;
+  aspectRatio?: VideoAspectRatio;
+}
+
+// Sparkle coordinates for widescreen background
+const WIDESCREEN_SPARKLES = [
+  { id: 1, left: "6%", top: "18%", size: 14, delay: 0, duration: 2.8, color: "#a78bfa" },
+  { id: 2, left: "14%", top: "35%", size: 20, delay: 0.7, duration: 3.4, color: "#38bdf8" },
+  { id: 3, left: "9%", top: "68%", size: 16, delay: 1.4, duration: 2.5, color: "#f472b6" },
+  { id: 4, left: "18%", top: "82%", size: 12, delay: 2.0, duration: 3.0, color: "#fbbf24" },
+  { id: 5, left: "84%", top: "15%", size: 18, delay: 0.3, duration: 3.2, color: "#38bdf8" },
+  { id: 6, left: "91%", top: "42%", size: 15, delay: 1.1, duration: 2.6, color: "#a78bfa" },
+  { id: 7, left: "80%", top: "64%", size: 22, delay: 1.8, duration: 3.6, color: "#f472b6" },
+  { id: 8, left: "88%", top: "85%", size: 14, delay: 0.9, duration: 2.9, color: "#34d399" },
+];
+
+function SparkleStar({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 0C12 6.627 6.627 12 0 12C6.627 12 12 17.373 12 24C12 17.373 17.373 12 24 12C17.373 12 12 6.627 12 0Z"
+        fill={color}
+      />
+    </svg>
+  );
 }
 
 function TypingDots({ instant, slow }: { instant: boolean; slow: number }) {
@@ -37,8 +61,8 @@ function TypingDots({ instant, slow }: { instant: boolean; slow: number }) {
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
-          className="h-2.5 w-2.5 rounded-full bg-[#7a8bad]"
-          animate={{ y: [0, -6, 0], opacity: [0.5, 1, 0.5] }}
+          className="h-2.5 w-2.5 rounded-full bg-[#38bdf8]"
+          animate={{ y: [0, -6, 0], opacity: [0.4, 1, 0.4] }}
           transition={instant ? { duration: 0 } : {
             duration: 0.7 * slow,
             repeat: Infinity,
@@ -58,9 +82,11 @@ export function VideoTemplate({
   instantTransitions = false,
   slowFactor = 1,
   typingKey = "typing",
+  aspectRatio = "9:16",
 }: Props) {
   const s = slowFactor;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isWidescreen = aspectRatio === "16:9";
 
   // Scroll only the message container to the bottom — never the page.
   useEffect(() => {
@@ -71,61 +97,122 @@ export function VideoTemplate({
 
   return (
     /*
-     * ── Outer safe-zone shell ──────────────────────────────────────────
-     * Equal 8 % left/right keeps the card perfectly centred.
-     * The background layers make the padding look like the phone sitting
-     * in a scene lit by its own screen glow, not empty black space.
+     * ── Outer shell ───────────────────────────────────────────────────
+     * If 16:9, renders widescreen shiny background with centered phone card.
+     * If 9:16, renders full-frame card with safe-zone padding.
      */
     <div
-      className="relative flex h-full w-full overflow-hidden"
-      style={{ padding: "8% 8% 22% 8%" }}
+      className="relative flex h-full w-full items-center justify-center overflow-hidden"
+      style={{
+        padding: isWidescreen ? "1.5% 2%" : "8% 8% 22% 8%",
+        background: "#070b14",
+        filter: "saturate(1.22) contrast(1.04)",
+      }}
     >
       {/* ── Background layers ─────────────────────────────────────────── */}
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        {/* 1. Base */}
-        <div className="absolute inset-0" style={{ background: "#090e18" }} />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+        {/* 1. Base Dark Cosmic Gradient */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(145deg, #050811 0%, #090e1a 50%, #060a14 100%)" }} />
 
-        {/* 2a. Violet wash — top-left bleeds in */}
-        <div className="absolute inset-0" style={{
-          background: "radial-gradient(ellipse 75% 55% at 0% 0%, rgba(109,40,217,0.45) 0%, transparent 65%)",
-        }} />
+        {/* 2. Vivid Aurora / Nebula Glowing Washes */}
+        <motion.div
+          className="absolute inset-0"
+          animate={instantTransitions ? {} : {
+            scale: [1, 1.06, 1],
+            opacity: [0.85, 1, 0.85],
+          }}
+          transition={{ duration: 6 * s, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            background: isWidescreen
+              ? "radial-gradient(ellipse 45% 65% at 10% 25%, rgba(139,92,246,0.48) 0%, transparent 65%), " +
+                "radial-gradient(ellipse 45% 65% at 90% 75%, rgba(6,182,212,0.45) 0%, transparent 65%), " +
+                "radial-gradient(ellipse 55% 45% at 50% 0%, rgba(236,72,153,0.30) 0%, transparent 70%), " +
+                "radial-gradient(ellipse 60% 45% at 50% 100%, rgba(59,130,246,0.35) 0%, transparent 70%)"
+              : "radial-gradient(ellipse 75% 55% at 0% 0%, rgba(139,92,246,0.55) 0%, transparent 65%), " +
+                "radial-gradient(ellipse 70% 50% at 100% 100%, rgba(6,182,212,0.48) 0%, transparent 65%), " +
+                "radial-gradient(ellipse 40% 50% at 100% 45%, rgba(236,72,153,0.30) 0%, transparent 70%)",
+          }}
+        />
 
-        {/* 2b. Teal wash — bottom-right bleeds in */}
-        <div className="absolute inset-0" style={{
-          background: "radial-gradient(ellipse 70% 50% at 100% 100%, rgba(13,148,136,0.38) 0%, transparent 65%)",
-        }} />
+        {/* 3. Widescreen Shiny Shimmer Light Beams */}
+        {isWidescreen && !instantTransitions && (
+          <motion.div
+            className="absolute inset-0"
+            animate={{
+              backgroundPosition: ["0% 0%", "200% 200%"],
+            }}
+            transition={{
+              duration: 8 * s,
+              repeat: Infinity,
+              ease: "linear",
+            }}
+            style={{
+              backgroundImage:
+                "linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.08) 42%, rgba(167,139,250,0.25) 48%, rgba(56,189,248,0.3) 52%, rgba(244,114,182,0.22) 58%, transparent 75%)",
+              backgroundSize: "200% 200%",
+            }}
+          />
+        )}
 
-        {/* 2c. Faint violet mid-right — fills right safe-zone gutter */}
-        <div className="absolute inset-0" style={{
-          background: "radial-gradient(ellipse 30% 45% at 100% 45%, rgba(124,58,237,0.22) 0%, transparent 70%)",
-        }} />
+        {/* 4. Widescreen Sparkling Glints / Star Bursts */}
+        {isWidescreen && !instantTransitions && WIDESCREEN_SPARKLES.map((sp) => (
+          <motion.div
+            key={sp.id}
+            className="absolute flex items-center justify-center"
+            style={{ left: sp.left, top: sp.top }}
+            animate={{
+              scale: [0, 1.25, 0],
+              rotate: [0, 90, 180],
+              opacity: [0, 0.95, 0],
+            }}
+            transition={{
+              duration: sp.duration * s,
+              repeat: Infinity,
+              delay: sp.delay * s,
+              ease: "easeInOut",
+            }}
+          >
+            <SparkleStar size={sp.size} color={sp.color} />
+          </motion.div>
+        ))}
 
-        {/* 3. Noise grain */}
+        {/* 5. Noise texture */}
         <div
-          className="absolute inset-0 opacity-[0.06]"
+          className="absolute inset-0 opacity-[0.05]"
           style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
             backgroundSize: "180px 180px",
           }}
         />
 
-        {/* 4. Centre vignette — darkens middle so card pops */}
-        <div className="absolute inset-0" style={{
-          background: "radial-gradient(ellipse 60% 65% at 50% 50%, rgba(0,0,0,0.55) 0%, transparent 100%)",
-        }} />
+        {/* 6. Vignette overlay */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "radial-gradient(ellipse 65% 70% at 50% 50%, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.85) 100%)",
+          }}
+        />
       </div>
 
-      {/* ── Inner card ─────────────────────────────────────────────────── */}
+      {/* ── Inner card (Phone Screen) ─────────────────────────────────── */}
       <div
-        className="relative flex flex-1 flex-col overflow-hidden"
+        className="relative flex flex-col overflow-hidden"
         style={{
-          borderRadius: "2.5%",
-          border: "1px solid rgba(255,255,255,0.10)",
-          boxShadow:
-            "0 0 0 1px rgba(255,255,255,0.04) inset, " +
-            "0 8px 80px 0 rgba(0,0,0,0.8), " +
-            "0 0 40px 8px rgba(109,40,217,0.18)",
-          background: "#0c121c",
+          aspectRatio: isWidescreen ? "9/16" : undefined,
+          height: "100%",
+          width: isWidescreen ? "auto" : "100%",
+          maxHeight: "100%",
+          borderRadius: isWidescreen ? "20px" : "2.5%",
+          border: "1.5px solid rgba(255,255,255,0.14)",
+          boxShadow: isWidescreen
+            ? "0 0 0 1px rgba(255,255,255,0.06) inset, " +
+              "0 20px 70px rgba(0,0,0,0.9), " +
+              "0 0 60px 15px rgba(139,92,246,0.35), " +
+              "0 0 100px 30px rgba(6,182,212,0.22)"
+            : "0 0 0 1px rgba(255,255,255,0.06) inset, " +
+              "0 8px 80px 0 rgba(0,0,0,0.85), " +
+              "0 0 45px 10px rgba(139,92,246,0.24)",
+          background: "#0c1322",
         }}
       >
         {/* Dynamic background inside card — shifts when choices active */}
@@ -133,80 +220,78 @@ export function VideoTemplate({
           className="pointer-events-none absolute inset-0"
           animate={instantTransitions ? {} : { opacity: choicesVisible ? 1 : 0 }}
           transition={instantTransitions ? { duration: 0 } : { type: "tween", duration: 0.8 * s, ease: "easeInOut" }}
-          style={{ background: "linear-gradient(180deg, #0a0f1e 0%, #0c121c 40%, #080d1a 100%)" }}
+          style={{ background: "linear-gradient(180deg, #090e1f 0%, #0d1628 40%, #070c18 100%)" }}
         />
 
         {/* Violet ambient top glow inside card */}
         <motion.div
-          className="pointer-events-none absolute inset-x-0 top-0 h-40"
-          animate={instantTransitions ? {} : { opacity: choicesVisible ? 0.35 : 0.1 }}
+          className="pointer-events-none absolute inset-x-0 top-0 h-44"
+          animate={instantTransitions ? {} : { opacity: choicesVisible ? 0.45 : 0.18 }}
           transition={instantTransitions ? { duration: 0 } : { type: "tween", duration: 1 * s, ease: "easeInOut" }}
-          style={{ background: "radial-gradient(ellipse 80% 100% at 50% 0%, rgba(124,58,237,0.25) 0%, transparent 100%)" }}
+          style={{ background: "radial-gradient(ellipse 80% 100% at 50% 0%, rgba(139,92,246,0.38) 0%, transparent 100%)" }}
         />
 
         {/* ── Status bar ── */}
         <div className="relative flex shrink-0 items-center justify-between px-6 pt-3 pb-1">
-          <span className="text-[11px] font-semibold tabular-nums text-[#a8b5cc]">9:41</span>
+          <span className="text-[11px] font-bold tabular-nums text-[#cbd5e1]">9:41</span>
           <div className="flex items-center gap-1.5">
             <svg width="17" height="12" viewBox="0 0 17 12" fill="none" aria-hidden>
               {[0, 1, 2, 3].map((i) => (
                 <rect key={i} x={i * 4.5} y={12 - (i + 1) * 3} width="3" height={(i + 1) * 3} rx="0.5"
-                  fill={i < 3 ? "#a8b5cc" : "#2d3a52"} />
+                  fill={i < 3 ? "#38bdf8" : "#1e293b"} />
               ))}
             </svg>
             <svg width="22" height="12" viewBox="0 0 22 12" fill="none" aria-hidden>
-              <rect x="0.5" y="0.5" width="18" height="11" rx="2.5" stroke="#a8b5cc" />
-              <rect x="19.5" y="3.5" width="2" height="5" rx="1" fill="#a8b5cc" />
-              <rect x="1.5" y="1.5" width="12" height="9" rx="1.5" fill="#a8b5cc" />
+              <rect x="0.5" y="0.5" width="18" height="11" rx="2.5" stroke="#38bdf8" />
+              <rect x="19.5" y="3.5" width="2" height="5" rx="1" fill="#38bdf8" />
+              <rect x="1.5" y="1.5" width="12" height="9" rx="1.5" fill="#38bdf8" />
             </svg>
           </div>
         </div>
 
         {/* ── Chat header ── */}
         <div className="relative flex shrink-0 items-center gap-3 border-b px-5 py-3"
-          style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+          style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(15,23,42,0.6)" }}>
           {/* Avatar with pulse ring */}
-          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#2d3a52]">
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1e293b]"
+            style={{ boxShadow: "0 0 15px rgba(139,92,246,0.3)" }}>
             <motion.div
               className="absolute inset-0 rounded-full"
-              style={{ border: "2px solid rgba(167,139,250,0.5)" }}
-              animate={instantTransitions ? {} : { scale: [1, 1.35, 1], opacity: [0.7, 0, 0.7] }}
+              style={{ border: "2px solid rgba(167,139,250,0.7)" }}
+              animate={instantTransitions ? {} : { scale: [1, 1.35, 1], opacity: [0.9, 0, 0.9] }}
               transition={instantTransitions ? { duration: 0 } : { duration: 2 * s, repeat: Infinity, ease: "easeOut" }}
             />
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle cx="12" cy="8" r="4" fill="#7a8bad" />
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#7a8bad" strokeWidth="2" strokeLinecap="round" />
+              <circle cx="12" cy="8" r="4" fill="#94a3b8" />
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
             </svg>
             <motion.span
-              className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#0c121c] bg-emerald-400"
+              className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#0c121c] bg-[#10b981]"
+              style={{ boxShadow: "0 0 8px #10b981" }}
               animate={instantTransitions ? {} : { scale: [1, 1.4, 1] }}
               transition={instantTransitions ? { duration: 0 } : { duration: 1.5 * s, repeat: Infinity, ease: "easeInOut" }}
             />
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold leading-tight text-[#e8ecf2]">Stranger</p>
+            <p className="text-sm font-bold leading-tight text-white">Stranger</p>
             <div className="flex items-center gap-1.5">
               <motion.span
-                className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                className="h-1.5 w-1.5 rounded-full bg-[#10b981]"
+                style={{ boxShadow: "0 0 6px #10b981" }}
                 animate={instantTransitions ? {} : { opacity: [1, 0.3, 1] }}
                 transition={instantTransitions ? { duration: 0 } : { duration: 1.2 * s, repeat: Infinity }}
               />
-              <p className="text-[11px] text-[#7a8bad]">BanterBird · anonymous chat</p>
+              <p className="text-[11px] font-medium text-[#94a3b8]">BanterBird · anonymous chat</p>
             </div>
           </div>
 
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/banterbird-logo.png" alt="BanterBird"
-            style={{ height: 20, width: "auto", objectFit: "contain" }} />
+            style={{ height: 22, width: "auto", objectFit: "contain", filter: "drop-shadow(0 2px 8px rgba(139,92,246,0.5))" }} />
         </div>
 
         {/* ── Message list ── */}
-        {/*
-         * overflow-y-auto makes this a real scrollable chat list.
-         * el.scrollTop = el.scrollHeight targets only this container,
-         * never the page — messages scroll up when choices appear.
-         */}
         <div
           ref={scrollRef}
           className="relative flex flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-3"
@@ -228,7 +313,7 @@ export function VideoTemplate({
               >
                 <div className="flex max-w-[82%] flex-col gap-1">
                   {!isMe && (
-                    <span className="ml-1 text-[10px] font-semibold uppercase tracking-widest text-[#5c6d8f]">
+                    <span className="ml-1 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]">
                       Stranger
                     </span>
                   )}
@@ -236,7 +321,7 @@ export function VideoTemplate({
                   {msg.imageUrl ? (
                     <div
                       className={`overflow-hidden rounded-2xl ${isMe ? "rounded-br-md" : "rounded-bl-md"}`}
-                      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.35)" }}
+                      style={{ boxShadow: "0 4px 18px rgba(0,0,0,0.5)" }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={msg.imageUrl} alt="Attached" className="block max-h-48 w-full object-cover" />
@@ -245,27 +330,30 @@ export function VideoTemplate({
 
                   {msg.text ? (
                     <motion.div
-                      className={`relative rounded-3xl px-4 py-2.5 text-[15px] leading-snug ${
-                        isMe ? "rounded-br-md text-white" : "rounded-bl-md text-[#e8ecf2]"
+                      className={`relative rounded-3xl px-4 py-2.5 text-[15px] font-medium leading-snug ${
+                        isMe ? "rounded-br-md text-white" : "rounded-bl-md text-[#f8fafc]"
                       }`}
                       style={{
                         background: isMe
-                          ? "linear-gradient(135deg, #1e3a5f 0%, #1a4a7a 100%)"
-                          : "linear-gradient(135deg, #1e2a3d 0%, #243347 100%)",
+                          ? "linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%)"
+                          : "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+                        border: isMe
+                          ? "1px solid rgba(96,165,250,0.35)"
+                          : "1px solid rgba(148,163,184,0.18)",
                         boxShadow: isMe
-                          ? "0 4px 16px rgba(30,58,95,0.55), 0 0 0 1px rgba(100,149,237,0.12)"
-                          : "0 4px 12px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)",
+                          ? "0 6px 22px rgba(29,78,216,0.55), 0 0 14px rgba(2,132,199,0.35)"
+                          : "0 6px 18px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)",
                       }}
                     >
                       {/* Brief glow on appear */}
                       {!instantTransitions && (
                         <motion.div
                           className="pointer-events-none absolute inset-0 rounded-3xl"
-                          initial={{ opacity: 0.6 }}
+                          initial={{ opacity: 0.7 }}
                           animate={{ opacity: 0 }}
                           transition={{ duration: 0.7 * s, ease: "easeOut" }}
                           style={{
-                            background: isMe ? "rgba(100,149,237,0.2)" : "rgba(167,139,250,0.12)",
+                            background: isMe ? "rgba(56,189,248,0.35)" : "rgba(167,139,250,0.25)",
                           }}
                         />
                       )}
@@ -292,10 +380,10 @@ export function VideoTemplate({
                 className="flex justify-start"
               >
                 <div className="flex flex-col gap-1">
-                  <span className="ml-1 text-[10px] font-semibold uppercase tracking-widest text-[#5c6d8f]">
+                  <span className="ml-1 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]">
                     Stranger
                   </span>
-                  <div className="rounded-3xl rounded-bl-md px-4 py-3" style={{ background: "#1e2a3d" }}>
+                  <div className="rounded-3xl rounded-bl-md px-4 py-3" style={{ background: "#1e293b", border: "1px solid rgba(148,163,184,0.18)" }}>
                     <TypingDots instant={instantTransitions} slow={s} />
                   </div>
                 </div>
@@ -303,11 +391,7 @@ export function VideoTemplate({
             )}
           </AnimatePresence>
 
-          {/*
-           * Spacer grows when choices overlay is visible — combined with
-           * scrollTop = scrollHeight above, pushes older messages north
-           * so the overlay never covers them.
-           */}
+          {/* Spacer grows when choices overlay is visible */}
           <motion.div
             aria-hidden
             animate={{ height: choicesVisible ? 340 : 0 }}
@@ -319,25 +403,25 @@ export function VideoTemplate({
         {/* ── Composer bar (decorative) ── */}
         <div
           className="relative flex shrink-0 items-center gap-3 border-t px-4 py-3"
-          style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(14,20,30,0.9)" }}
+          style={{ borderColor: "rgba(255,255,255,0.10)", background: "rgba(15,23,42,0.92)" }}
         >
           <div
-            className="flex-1 rounded-2xl px-4 py-2.5 text-[14px] text-[#3f4f6f]"
-            style={{ background: "#141f2e", border: "1px solid rgba(255,255,255,0.06)" }}
+            className="flex-1 rounded-2xl px-4 py-2.5 text-[14px] text-[#64748b]"
+            style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.08)" }}
           >
             Say something nice…
           </div>
           <motion.div
             className="flex h-10 w-10 items-center justify-center rounded-2xl"
-            style={{ background: "linear-gradient(135deg, #1e3a5f, #2d4a7a)" }}
+            style={{ background: "linear-gradient(135deg, #2563eb, #06b6d4)", boxShadow: "0 0 16px rgba(37,99,235,0.4)" }}
             animate={instantTransitions ? {} : {
-              boxShadow: ["0 0 0px rgba(100,149,237,0)", "0 0 12px rgba(100,149,237,0.4)", "0 0 0px rgba(100,149,237,0)"],
+              boxShadow: ["0 0 8px rgba(37,99,235,0.3)", "0 0 20px rgba(6,182,212,0.6)", "0 0 8px rgba(37,99,235,0.3)"],
             }}
             transition={instantTransitions ? { duration: 0 } : { duration: 2 * s, repeat: Infinity, ease: "easeInOut" }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M22 2L11 13" stroke="#6495ed" strokeWidth="2" strokeLinecap="round" />
-              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="#6495ed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M22 2L11 13" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </motion.div>
         </div>

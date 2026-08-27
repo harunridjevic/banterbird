@@ -10,7 +10,7 @@ export function estimateLlmCostUsd(
     provider === "cerebras"
       ? parseFloat(process.env.CEREBRAS_INPUT_PRICE_PER_1M ?? "0.60")
       : provider === "groq"
-        ? parseFloat(process.env.GROQ_INPUT_PRICE_PER_1M ?? "0.05")
+        ? parseFloat(process.env.GROQ_INPUT_PRICE_PER_1M ?? "0.075")
         : provider === "gemini"
           ? parseFloat(process.env.GEMINI_INPUT_PRICE_PER_1M ?? "0.15")
           : parseFloat(process.env.OPENAI_INPUT_PRICE_PER_1M ?? "0.15");
@@ -18,7 +18,7 @@ export function estimateLlmCostUsd(
     provider === "cerebras"
       ? parseFloat(process.env.CEREBRAS_OUTPUT_PRICE_PER_1M ?? "0.60")
       : provider === "groq"
-        ? parseFloat(process.env.GROQ_OUTPUT_PRICE_PER_1M ?? "0.08")
+        ? parseFloat(process.env.GROQ_OUTPUT_PRICE_PER_1M ?? "0.30")
         : provider === "gemini"
           ? parseFloat(process.env.GEMINI_OUTPUT_PRICE_PER_1M ?? "0.60")
           : parseFloat(process.env.OPENAI_OUTPUT_PRICE_PER_1M ?? "0.60");

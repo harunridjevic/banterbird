@@ -32,8 +32,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
-import type { VideoScript } from "./video-generator-types";
-import { buildTimeline } from "./video-generator-types";
+import type { VideoScript, VideoAspectRatio } from "@/lib/ops/video-generator-types";
+import { buildTimeline } from "@/lib/ops/video-generator-types";
 import { VideoPreview } from "@/components/ops/video-gen/VideoPreview";
 import { renderSFXBuffer, type SFXEvent } from "./sfx";
 
@@ -46,8 +46,9 @@ export type ExportStatus =
 
 export interface UseVideoExportReturn {
   startExport: (params: {
-    script:    VideoScript;
-    filename?: string;
+    script:       VideoScript;
+    filename?:    string;
+    aspectRatio?: VideoAspectRatio;
   }) => Promise<void>;
   status:       ExportStatus;
   progress:     number;
@@ -55,18 +56,24 @@ export interface UseVideoExportReturn {
   canExport:    boolean;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants & Dimension Helpers ──────────────────────────────────────────
 
-/** Logical width of the off-screen render container — matches live preview */
-const RENDER_W = 380;
-const RENDER_H = Math.round(RENDER_W * (16 / 9)); // 677
-
-/** Output resolution */
-const OUT_W = 1080;
-const OUT_H = 1920;
-
-/** Scale factor passed to html2canvas: renders at OUT_W physical pixels */
-const CAPTURE_SCALE = OUT_W / RENDER_W; // ≈ 2.842
+export function getExportDimensions(aspectRatio: VideoAspectRatio = "9:16") {
+  if (aspectRatio === "16:9") {
+    const renderW = 676;
+    const renderH = 380;
+    const outW = 1920;
+    const outH = 1080;
+    const captureScale = outW / renderW;
+    return { renderW, renderH, outW, outH, captureScale };
+  }
+  const renderW = 380;
+  const renderH = 676;
+  const outW = 1080;
+  const outH = 1920;
+  const captureScale = outW / renderW;
+  return { renderW, renderH, outW, outH, captureScale };
+}
 
 const TARGET_FPS = 30;
 const MS_PER_FRAME = 1000 / TARGET_FPS;
@@ -111,15 +118,16 @@ interface OffscreenRoot {
   unmount: () => void;
 }
 
-function createOffscreenRoot(script: VideoScript): Promise<OffscreenRoot> {
+function createOffscreenRoot(script: VideoScript, aspectRatio: VideoAspectRatio = "9:16"): Promise<OffscreenRoot> {
+  const { renderW, renderH } = getExportDimensions(aspectRatio);
   return new Promise((resolve) => {
     const shell = document.createElement("div");
     shell.style.cssText = [
       "position:fixed",
-      `left:-${RENDER_W + 100}px`,
+      `left:-${renderW + 100}px`,
       "top:0",
-      `width:${RENDER_W}px`,
-      `height:${RENDER_H}px`,
+      `width:${renderW}px`,
+      `height:${renderH}px`,
       "overflow:hidden",
       "z-index:-1",
       "pointer-events:none",
@@ -128,11 +136,11 @@ function createOffscreenRoot(script: VideoScript): Promise<OffscreenRoot> {
     const wrapper = document.createElement("div");
     wrapper.setAttribute("data-video-export-root", "");
     wrapper.style.cssText =
-      `width:${RENDER_W}px;height:${RENDER_H}px;position:relative;overflow:hidden;background:#0c121c;`;
+      `width:${renderW}px;height:${renderH}px;position:relative;overflow:hidden;background:#0c121c;`;
 
     const frameEl = document.createElement("div");
     frameEl.style.cssText =
-      `width:${RENDER_W}px;height:${RENDER_H}px;position:relative;overflow:hidden;`;
+      `width:${renderW}px;height:${renderH}px;position:relative;overflow:hidden;`;
 
     wrapper.appendChild(frameEl);
     shell.appendChild(wrapper);
@@ -150,7 +158,7 @@ function createOffscreenRoot(script: VideoScript): Promise<OffscreenRoot> {
     };
 
     root = createRoot(frameEl);
-    root.render(<VideoPreview script={script} slowFactor={EXPORT_SLOW_FACTOR} />);
+    root.render(<VideoPreview script={script} slowFactor={EXPORT_SLOW_FACTOR} aspectRatio={aspectRatio} />);
 
     requestAnimationFrame(() => {
       resolve({ setElapsed, frameEl, unmount });
@@ -160,23 +168,27 @@ function createOffscreenRoot(script: VideoScript): Promise<OffscreenRoot> {
 
 // ─── Frame capture ────────────────────────────────────────────────────────────
 
-async function captureFrame(el: HTMLElement): Promise<ImageData> {
+async function captureFrame(
+  el: HTMLElement,
+  aspectRatio: VideoAspectRatio = "9:16",
+): Promise<ImageData> {
   const html2canvas = (await import("html2canvas-pro")).default;
+  const { renderW, renderH, outW, outH, captureScale } = getExportDimensions(aspectRatio);
 
   const raw = await html2canvas(el, {
     useCORS:         true,
     allowTaint:      true,
     backgroundColor: "#0c121c",
-    scale:           CAPTURE_SCALE,
+    scale:           captureScale,
     logging:         false,
-    width:           RENDER_W,
-    height:          RENDER_H,
-    windowWidth:     RENDER_W,
-    windowHeight:    RENDER_H,
+    width:           renderW,
+    height:          renderH,
+    windowWidth:     renderW,
+    windowHeight:    renderH,
   });
 
-  const w = toEven(OUT_W);
-  const h = toEven(OUT_H);
+  const w = toEven(outW);
+  const h = toEven(outH);
 
   if (raw.width === w && raw.height === h) {
     return raw.getContext("2d")!.getImageData(0, 0, w, h);
@@ -349,9 +361,11 @@ export function useVideoExport(): UseVideoExportReturn {
   const startExport = useCallback(async ({
     script,
     filename = "banterbird-reel",
+    aspectRatio = "9:16",
   }: {
-    script:    VideoScript;
-    filename?: string;
+    script:       VideoScript;
+    filename?:    string;
+    aspectRatio?: VideoAspectRatio;
   }) => {
     if (status === "rendering" || status === "encoding") return;
 
@@ -363,7 +377,7 @@ export function useVideoExport(): UseVideoExportReturn {
     const timeline = buildTimeline(script);
     const totalMs  = timeline.totalDuration;
 
-    const offscreen = await createOffscreenRoot(script);
+    const offscreen = await createOffscreenRoot(script, aspectRatio);
     const frames: ImageData[] = [];
 
     try {
@@ -376,7 +390,7 @@ export function useVideoExport(): UseVideoExportReturn {
         await waitRaf();
         await sleep(SETTLE_MS);
 
-        frames.push(await captureFrame(offscreen.frameEl));
+        frames.push(await captureFrame(offscreen.frameEl, aspectRatio));
         setProgress((Math.min(elapsedMs, totalMs) / totalMs) * 0.7);
       }
 
@@ -390,8 +404,9 @@ export function useVideoExport(): UseVideoExportReturn {
       // ── Phase 2: Audio + encode ───────────────────────────────────────
       setStatus("encoding");
 
-      const w = toEven(OUT_W);
-      const h = toEven(OUT_H);
+      const { outW, outH } = getExportDimensions(aspectRatio);
+      const w = toEven(outW);
+      const h = toEven(outH);
 
       const sfxEvents: SFXEvent[] = [
         ...script.strangerMessages.flatMap((_, i) => {

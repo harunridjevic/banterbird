@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import type { Choice } from "@/lib/ops/video-generator-types";
+import type { Choice, VideoAspectRatio } from "@/lib/ops/video-generator-types";
 
 export type ChoicePhase =
   | "hidden"
@@ -17,17 +17,18 @@ interface Props {
   phase: ChoicePhase;
   instantTransitions?: boolean;
   slowFactor?: number;
+  aspectRatio?: VideoAspectRatio;
 }
 
-// Opaque backgrounds so text is always readable regardless of what's behind
+// Saturated opaque backgrounds & rich glowing borders
 const SLOT = {
   A: {
-    idle:   { bg: "#1a0f35", border: "rgba(124,58,237,0.5)",  label: "#a78bfa", glow: "rgba(124,58,237,0.55)" },
-    winner: { bg: "#2a1250", border: "rgba(167,139,250,0.9)", label: "#c4b5fd", text: "#ede9fe", shadow: "0 0 40px 12px rgba(124,58,237,0.45)" },
+    idle:   { bg: "#1f103d", border: "rgba(139,92,246,0.65)",  label: "#c4b5fd", glow: "rgba(139,92,246,0.7)" },
+    winner: { bg: "#2e105e", border: "rgba(167,139,250,1)", label: "#ede9fe", text: "#ffffff", shadow: "0 0 50px 16px rgba(139,92,246,0.65)" },
   },
   B: {
-    idle:   { bg: "#0a2026", border: "rgba(20,184,166,0.45)",  label: "#2dd4bf", glow: "rgba(20,184,166,0.5)" },
-    winner: { bg: "#0d2e2a", border: "rgba(45,212,191,0.85)",  label: "#5eead4", text: "#ccfbf1", shadow: "0 0 40px 12px rgba(20,184,166,0.4)" },
+    idle:   { bg: "#06262d", border: "rgba(6,182,212,0.65)",  label: "#38bdf8", glow: "rgba(6,182,212,0.7)" },
+    winner: { bg: "#083e38", border: "rgba(45,212,191,1)",  label: "#ccfbf1", text: "#ffffff", shadow: "0 0 50px 16px rgba(20,184,166,0.65)" },
   },
 } as const;
 
@@ -166,9 +167,16 @@ function ChoiceButton({ choice, phase, instant, slow, index }: {
   );
 }
 
-export function ChoicesOverlay({ choices, phase, instantTransitions = false, slowFactor = 1 }: Props) {
+export function ChoicesOverlay({
+  choices,
+  phase,
+  instantTransitions = false,
+  slowFactor = 1,
+  aspectRatio = "9:16",
+}: Props) {
   if (phase === "hidden") return null;
   const s  = slowFactor;
+  const isWidescreen = aspectRatio === "16:9";
   const sp = (k: number, d: number) => ({ type: "spring" as const, stiffness: Math.max(40, k / s), damping: Math.max(6, d / s) });
 
   return (
@@ -181,12 +189,15 @@ export function ChoicesOverlay({ choices, phase, instantTransitions = false, slo
       )}
       className="absolute z-20 px-4 pb-4 pt-3"
       style={{
-        left: "8%",
-        right: "8%",
-        bottom: "22%",
+        left: isWidescreen ? "50%" : "8%",
+        right: isWidescreen ? undefined : "8%",
+        transform: isWidescreen ? "translateX(-50%)" : undefined,
+        width: isWidescreen ? "min(350px, calc(100% * 9 / 16 * 0.94))" : undefined,
+        bottom: isWidescreen ? "3%" : "22%",
         /* Solid base so nothing behind bleeds through */
         background: "#0a1020",
-        borderTop: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: isWidescreen ? "16px" : undefined,
+        borderTop: "1px solid rgba(255,255,255,0.08)",
         boxShadow: "0 -24px 48px 16px #0a1020",
       }}
     >

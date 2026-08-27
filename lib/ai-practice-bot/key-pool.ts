@@ -92,6 +92,10 @@ type OpenAiChatConfig = {
 async function fetchOpenAiCompatible(
   config: OpenAiChatConfig,
 ): Promise<{ ok: boolean; status: number; bodyText: string; json?: unknown; res: Response }> {
+  // Reasoning models (like openai/gpt-oss-20b and gpt-oss-120b) use internal reasoning tokens
+  // that count against max_tokens. Ensure at least 384 tokens so JSON is never truncated.
+  const maxTokens = Math.max(config.maxOutputTokens || 0, 384);
+
   const res = await fetch(config.endpoint, {
     method: "POST",
     headers: {
@@ -101,7 +105,7 @@ async function fetchOpenAiCompatible(
     body: JSON.stringify({
       model: config.model,
       temperature: config.temperature,
-      max_tokens: config.maxOutputTokens,
+      max_tokens: maxTokens,
       response_format: { type: "json_object" },
       messages: [{ role: "system", content: config.systemPrompt }, ...config.history],
     }),
@@ -138,7 +142,7 @@ function modelFor(provider: ApiKeyProvider): string {
   if (provider === "cerebras") {
     return process.env.CEREBRAS_CHAT_MODEL?.trim() || "gpt-oss-120b";
   }
-  return process.env.GROQ_CHAT_MODEL?.trim() || "llama-3.1-8b-instant";
+  return process.env.GROQ_CHAT_MODEL?.trim() || "openai/gpt-oss-20b";
 }
 
 function endpointFor(provider: ApiKeyProvider): string {

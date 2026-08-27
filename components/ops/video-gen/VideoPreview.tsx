@@ -21,7 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { VideoScript } from "@/lib/ops/video-generator-types";
+import type { VideoScript, VideoAspectRatio } from "@/lib/ops/video-generator-types";
 import { buildTimeline } from "@/lib/ops/video-generator-types";
 import { VideoTemplate } from "./VideoTemplate";
 import { ChoicesOverlay, type ChoicePhase } from "./ChoicesOverlay";
@@ -52,10 +52,11 @@ interface Props {
   instantTransitions?: boolean;
   /** Multiplies all animation durations — use >1 to slow down for export */
   slowFactor?: number;
+  aspectRatio?: VideoAspectRatio;
 }
 
 export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
-  function VideoPreview({ script, onEnd, playbackRate = 1, instantTransitions = false, slowFactor = 1 }, ref) {
+  function VideoPreview({ script, onEnd, playbackRate = 1, instantTransitions = false, slowFactor = 1, aspectRatio = "9:16" }, ref) {
     const timeline = buildTimeline(script);
     const [elapsedMs, setElapsedMs] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -265,6 +266,7 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           instantTransitions={instantTransitions}
           slowFactor={slowFactor}
           typingKey={`typing-${nextStrangerIdx}`}
+          aspectRatio={aspectRatio}
         />
 
         <VFXLayer
@@ -274,6 +276,7 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           messageCount={allMessages.length}
           instantTransitions={instantTransitions}
           slowFactor={slowFactor}
+          aspectRatio={aspectRatio}
         />
 
         <ChoicesOverlay
@@ -281,6 +284,7 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           phase={choicePhase}
           instantTransitions={instantTransitions}
           slowFactor={slowFactor}
+          aspectRatio={aspectRatio}
         />
 
         <CTAScreen
@@ -290,6 +294,7 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           instantTransitions={instantTransitions}
           slowFactor={slowFactor}
           exportOpacity={ctaExportOpacity}
+          aspectRatio={aspectRatio}
         />
       </div>
     );

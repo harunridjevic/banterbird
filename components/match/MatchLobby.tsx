@@ -321,7 +321,7 @@ export function MatchLobby() {
           return { data: null, error: { message: "Your access has been restricted. Contact support if you think this is a mistake." } };
         }
         if (res.status === 429 && j.reason === "daily_gender_limit") {
-          return { data: null, error: null };
+          return { data: null, error: { message: j.error ?? "You've reached today's limit for gender-filtered matches. Upgrade to PRO or match with anyone." } };
         }
         return { data: null, error: { message: j.error ?? "Couldn't find a match right now. Try again." } };
       }
@@ -479,8 +479,12 @@ export function MatchLobby() {
     if (matchedRoomIdRef.current || navigatedRef.current) return;
 
     let alive = true;
-    const delayMin = globalBotSettings.aiMatchDelayMinMs;
-    const delayMax = globalBotSettings.aiMatchDelayMaxMs;
+    const isGenderFiltered = activeWantsGender !== "any";
+    const baseMin = globalBotSettings.aiMatchDelayMinMs;
+    const baseMax = globalBotSettings.aiMatchDelayMaxMs;
+    // When filtering by gender, give human matchmaking sufficient time before falling back to AI
+    const delayMin = isGenderFiltered ? Math.max(12000, baseMin * 2.5) : baseMin;
+    const delayMax = isGenderFiltered ? Math.max(18000, baseMax * 3) : baseMax;
     const span = Math.max(0, delayMax - delayMin);
     const delayMs = delayMin + Math.floor(Math.random() * (span + 1));
     const t = window.setTimeout(async () => {

@@ -335,8 +335,14 @@ export default function VideoGeneratorPage() {
 
   function handleExport() {
     if (isExporting) return;
-    void startExport({ script: template.script, filename: template.name });
+    void startExport({
+      script: template.script,
+      filename: template.name,
+      aspectRatio: template.aspectRatio ?? "9:16",
+    });
   }
+
+  const isWidescreen = template.aspectRatio === "16:9";
 
   return (
     <div className="min-h-screen bg-[#0c121c] px-4 py-10 text-navy-100">
@@ -359,17 +365,45 @@ export default function VideoGeneratorPage() {
               Export as MP4.
             </p>
           </div>
-          <input
-            type="text"
-            value={template.name}
-            onChange={(e) => setTemplate((t) => ({ ...t, name: e.target.value }))}
-            placeholder="Template name…"
-            className="w-56 rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-white outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 transition"
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Aspect Ratio Switcher */}
+            <div className="flex items-center rounded-xl border border-white/10 bg-black/30 p-1">
+              <button
+                type="button"
+                onClick={() => setTemplate((t) => ({ ...t, aspectRatio: "9:16" }))}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  !isWidescreen
+                    ? "bg-violet-600 text-white shadow"
+                    : "text-navy-400 hover:text-white"
+                }`}
+              >
+                9:16 Reel
+              </button>
+              <button
+                type="button"
+                onClick={() => setTemplate((t) => ({ ...t, aspectRatio: "16:9" }))}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  isWidescreen
+                    ? "bg-violet-600 text-white shadow"
+                    : "text-navy-400 hover:text-white"
+                }`}
+              >
+                16:9 Widescreen
+              </button>
+            </div>
+
+            <input
+              type="text"
+              value={template.name}
+              onChange={(e) => setTemplate((t) => ({ ...t, name: e.target.value }))}
+              placeholder="Template name…"
+              className="w-52 rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-white outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 transition"
+            />
+          </div>
         </div>
 
         {/* Layout */}
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
+        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_420px]">
 
           {/* ── Left: editor ── */}
           <div className="flex flex-col gap-4">
@@ -434,18 +468,30 @@ export default function VideoGeneratorPage() {
 
               {/* Preview */}
               <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-navy-500">
-                  Live preview · 9:16
-                </p>
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-navy-400">
+                    Live preview · {isWidescreen ? "16:9 Widescreen" : "9:16 Reel"}
+                  </p>
+                  <span className="rounded bg-violet-600/20 px-2 py-0.5 text-[10px] font-medium text-violet-300">
+                    {isWidescreen ? "1920×1080" : "1080×1920"}
+                  </span>
+                </div>
                 <div className="relative w-full">
                   <div className="relative w-full h-full flex items-center justify-center">
                     <div
                       className="relative overflow-hidden rounded-xl"
-                      style={{ aspectRatio: "9/16", maxHeight: "100%", maxWidth: "100%", background: "#0c121c" }}
+                      style={{
+                        aspectRatio: isWidescreen ? "16/9" : "9/16",
+                        width: "100%",
+                        maxHeight: "100%",
+                        maxWidth: "100%",
+                        background: "#0c121c",
+                      }}
                     >
                       <VideoPreview
                         ref={setPreviewRef}
                         script={template.script}
+                        aspectRatio={template.aspectRatio ?? "9:16"}
                         onEnd={() => { setIsPlaying(false); setProgress(1); }}
                       />
 
@@ -499,7 +545,7 @@ export default function VideoGeneratorPage() {
                 >
                   {isExporting
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Exporting…</>
-                    : <><Download className="h-4 w-4" /> Export MP4</>}
+                    : <><Download className="h-4 w-4" /> Export MP4 ({isWidescreen ? "16:9" : "9:16"})</>}
                 </button>
 
                 <ExportStatusBar
@@ -509,7 +555,7 @@ export default function VideoGeneratorPage() {
                 />
 
                 <p className="mt-3 text-[11px] leading-relaxed text-navy-600">
-                  Renders every frame off-screen at 1080×1920 then encodes to
+                  Renders every frame off-screen at {isWidescreen ? "1920×1080 (16:9)" : "1080×1920 (9:16)"} then encodes to
                   MP4 (H.264, 8 Mbps). Export takes longer than the video duration.
                   Keep the tab visible while exporting.
                 </p>

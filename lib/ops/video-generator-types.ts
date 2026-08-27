@@ -53,11 +53,15 @@ export interface VideoScript {
   ctaConfig: CTAConfig;
 }
 
+export type VideoAspectRatio = "9:16" | "16:9";
+
 /** The full video template config, serialisable to JSON */
 export interface VideoTemplate {
   id: string;
   name: string;
   script: VideoScript;
+  /** Aspect ratio - "9:16" (portrait reel) or "16:9" (widescreen) */
+  aspectRatio?: VideoAspectRatio;
   /** Target video dimensions */
   width: number;
   height: number;
@@ -73,6 +77,7 @@ export function createDefaultTemplate(): VideoTemplate {
   return {
     id: uid(),
     name: "Untitled reel",
+    aspectRatio: "9:16",
     width: 1080,
     height: 1920,
     script: {
