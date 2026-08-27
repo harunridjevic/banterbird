@@ -219,6 +219,19 @@ async function captureFrame(
     windowWidth:     renderW,
     windowHeight:    renderH,
     imageTimeout:    0,
+    ignoreElements: (element) => {
+      if (element.tagName === "LINK") {
+        const href = (element as HTMLLinkElement).href;
+        if (
+          href &&
+          (href.startsWith("http://") || href.startsWith("https://")) &&
+          !href.startsWith(window.location.origin)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    },
     onclone: (clonedDoc) => {
       // 1. Remove external cross-origin font/stylesheet links from cloned iframe
       const links = clonedDoc.querySelectorAll('link[rel="stylesheet"], link[as="font"], link[as="style"]');
@@ -233,7 +246,15 @@ async function captureFrame(
         }
       });
 
-      // 2. Ensure all images in the cloned DOM use base64 data URIs
+      // 2. Ensure all SVG elements have xmlns
+      const svgs = clonedDoc.querySelectorAll("svg");
+      svgs.forEach((svg) => {
+        if (!svg.getAttribute("xmlns")) {
+          svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        }
+      });
+
+      // 3. Ensure all images in the cloned DOM use base64 data URIs
       const imgs = clonedDoc.querySelectorAll("img");
       imgs.forEach((img) => {
         if (!img.src || !img.src.startsWith("data:")) {

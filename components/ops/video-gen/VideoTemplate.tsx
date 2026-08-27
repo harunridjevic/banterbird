@@ -47,7 +47,7 @@ const WIDESCREEN_SPARKLES = [
 
 function SparkleStar({ size, color }: { size: number; color: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none">
       <path
         d="M12 0C12 6.627 6.627 12 0 12C6.627 12 12 17.373 12 24C12 17.373 17.373 12 24 12C17.373 12 12 6.627 12 0Z"
         fill={color}
@@ -172,9 +172,8 @@ export function VideoTemplate({
           className="relative flex h-full w-full flex-col overflow-hidden"
           style={{
             borderRadius: isWidescreen ? "0px" : "28px",
-            border: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.14)",
-            borderLeft: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.14)",
-            borderRight: isWidescreen ? "1.5px solid rgba(255,255,255,0.14)" : "1.5px solid rgba(255,255,255,0.14)",
+            borderLeft: "1.5px solid rgba(255,255,255,0.14)",
+            borderRight: "1.5px solid rgba(255,255,255,0.14)",
             borderTop: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.14)",
             borderBottom: isWidescreen ? "none" : "1.5px solid rgba(255,255,255,0.14)",
             boxShadow: isWidescreen
@@ -203,13 +202,13 @@ export function VideoTemplate({
         <div className="relative flex shrink-0 items-center justify-between px-6 pt-3 pb-1">
           <span className="text-[11px] font-bold tabular-nums text-[#cbd5e1]">9:41</span>
           <div className="flex items-center gap-1.5">
-            <svg width="17" height="12" viewBox="0 0 17 12" fill="none" aria-hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="12" viewBox="0 0 17 12" fill="none" aria-hidden>
               {[0, 1, 2, 3].map((i) => (
                 <rect key={i} x={i * 4.5} y={12 - (i + 1) * 3} width="3" height={(i + 1) * 3} rx="0.5"
                   fill={i < 3 ? "#38bdf8" : "#1e293b"} />
               ))}
             </svg>
-            <svg width="22" height="12" viewBox="0 0 22 12" fill="none" aria-hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="12" viewBox="0 0 22 12" fill="none" aria-hidden>
               <rect x="0.5" y="0.5" width="18" height="11" rx="2.5" stroke="#38bdf8" />
               <rect x="19.5" y="3.5" width="2" height="5" rx="1" fill="#38bdf8" />
               <rect x="1.5" y="1.5" width="12" height="9" rx="1.5" fill="#38bdf8" />
@@ -233,7 +232,7 @@ export function VideoTemplate({
               animate={instantTransitions ? {} : { scale: [1, 1.35, 1], opacity: [0.9, 0, 0.9] }}
               transition={instantTransitions ? { duration: 0 } : { duration: 2 * s, repeat: Infinity, ease: "easeOut" }}
             />
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
               <circle cx="12" cy="8" r="4" fill="#94a3b8" />
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -403,7 +402,7 @@ export function VideoTemplate({
             }}
             transition={instantTransitions ? { duration: 0 } : { duration: 2 * s, repeat: Infinity, ease: "easeInOut" }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path d="M22 2L11 13" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
               <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
