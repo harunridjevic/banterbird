@@ -31,10 +31,16 @@ import { useSFX } from "@/lib/ops/use-sfx";
 import type { ChatMessage } from "@/lib/ops/video-generator-types";
 
 export interface VideoPreviewHandle {
-  /** Start / restart playback from t=0 */
+  /** Start / resume playback */
   play: () => void;
   /** Pause at current frame */
   pause: () => void;
+  /** Reset playback to t=0 and play immediately */
+  restart: () => void;
+  /** Reset playback to t=0 and remain paused */
+  reset: () => void;
+  /** Seek to specific timestamp in ms */
+  seek: (ms: number) => void;
   /** Whether playback is currently running */
   isPlaying: boolean;
   /** 0..1 progress ratio */
@@ -182,6 +188,44 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
       setIsPlaying(false);
     }, [elapsedMs]);
 
+    const reset = useCallback(() => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      startWallRef.current = null;
+      startElapsedRef.current = 0;
+      endFiredRef.current = false;
+      setElapsedMs(0);
+      setIsPlaying(false);
+    }, []);
+
+    const restart = useCallback(() => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      startWallRef.current = null;
+      startElapsedRef.current = 0;
+      endFiredRef.current = false;
+      setElapsedMs(0);
+      setIsPlaying(true);
+      rafRef.current = requestAnimationFrame(tick);
+    }, [tick]);
+
+    const seek = useCallback((ms: number) => {
+      const clamped = Math.max(0, Math.min(timeline.totalDuration, ms));
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      startWallRef.current = null;
+      startElapsedRef.current = clamped;
+      endFiredRef.current = clamped >= timeline.totalDuration;
+      setElapsedMs(clamped);
+      setIsPlaying(false);
+    }, [timeline.totalDuration]);
+
     // Cleanup on unmount
     useEffect(() => {
       return () => {
@@ -241,23 +285,28 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
       () => ({
         play,
         pause,
+        restart,
+        reset,
+        seek,
         isPlaying,
         progress:
           timeline.totalDuration > 0 ? elapsedMs / timeline.totalDuration : 0,
         elapsedMs,
         totalMs: timeline.totalDuration,
       }),
-      [play, pause, isPlaying, elapsedMs, timeline.totalDuration]
+      [play, pause, restart, reset, seek, isPlaying, elapsedMs, timeline.totalDuration]
     );
 
     // ── Render ────────────────────────────────────────────────────────────
+
+    const isWidescreen = aspectRatio === "16:9";
 
     return (
       <div
         ref={frameElRef2}
         data-video-frame
-        className="relative h-full w-full overflow-hidden"
-        style={{ background: "#0c121c" }}
+        className="relative h-full w-full overflow-hidden flex items-center justify-center"
+        style={{ background: "#070b14" }}
       >
         <VideoTemplate
           visibleMessages={allMessages}
@@ -269,33 +318,50 @@ export const VideoPreview = forwardRef<VideoPreviewHandle, Props>(
           aspectRatio={aspectRatio}
         />
 
-        <VFXLayer
-          elapsedMs={elapsedMs}
-          timeline={timeline}
-          choicePhase={choicePhase}
-          messageCount={allMessages.length}
-          instantTransitions={instantTransitions}
-          slowFactor={slowFactor}
-          aspectRatio={aspectRatio}
-        />
+        {/* Overlays bounded directly to the center mobile app card */}
+        <div
+          className="pointer-events-none absolute inset-y-0 overflow-hidden flex flex-col items-center justify-center"
+          style={{
+            width: isWidescreen ? "min(285px, calc(100% * 9 / 20))" : "100%",
+            maxWidth: "100%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            padding: isWidescreen ? "1.5% 0 3.5% 0" : "8% 8% 22% 8%",
+          }}
+        >
+          <div
+            className="relative h-full w-full overflow-hidden"
+            style={{ borderRadius: isWidescreen ? "20px" : "2.5%" }}
+          >
+            <VFXLayer
+              elapsedMs={elapsedMs}
+              timeline={timeline}
+              choicePhase={choicePhase}
+              messageCount={allMessages.length}
+              instantTransitions={instantTransitions}
+              slowFactor={slowFactor}
+              aspectRatio={aspectRatio}
+            />
 
-        <ChoicesOverlay
-          choices={script.choiceConfig.choices}
-          phase={choicePhase}
-          instantTransitions={instantTransitions}
-          slowFactor={slowFactor}
-          aspectRatio={aspectRatio}
-        />
+            <ChoicesOverlay
+              choices={script.choiceConfig.choices}
+              phase={choicePhase}
+              instantTransitions={instantTransitions}
+              slowFactor={slowFactor}
+              aspectRatio={aspectRatio}
+            />
 
-        <CTAScreen
-          headline={script.ctaConfig.headline}
-          subline={script.ctaConfig.subline}
-          visible={ctaVisible}
-          instantTransitions={instantTransitions}
-          slowFactor={slowFactor}
-          exportOpacity={ctaExportOpacity}
-          aspectRatio={aspectRatio}
-        />
+            <CTAScreen
+              headline={script.ctaConfig.headline}
+              subline={script.ctaConfig.subline}
+              visible={ctaVisible}
+              instantTransitions={instantTransitions}
+              slowFactor={slowFactor}
+              exportOpacity={ctaExportOpacity}
+              aspectRatio={aspectRatio}
+            />
+          </div>
+        </div>
       </div>
     );
   }

@@ -135,21 +135,47 @@ function ExportStatusBar({
 // ─── Playback controls ────────────────────────────────────────────────────────
 
 function PlaybackControls({
-  isPlaying, progress, elapsedMs, totalMs, onPlay, onPause, onRestart,
+  isPlaying,
+  progress,
+  elapsedMs,
+  totalMs,
+  onPlay,
+  onPause,
+  onRestart,
+  onReset,
+  onSeek,
 }: {
-  isPlaying: boolean; progress: number; elapsedMs: number; totalMs: number;
-  onPlay: () => void; onPause: () => void; onRestart: () => void;
+  isPlaying: boolean;
+  progress: number;
+  elapsedMs: number;
+  totalMs: number;
+  onPlay: () => void;
+  onPause: () => void;
+  onRestart: () => void;
+  onReset: () => void;
+  onSeek: (ms: number) => void;
 }) {
+  const handleScrubberClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    onSeek(frac * totalMs);
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-navy-500">
           {fmtMs(elapsedMs)}
         </span>
-        <div className="relative flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+        <div
+          onClick={handleScrubberClick}
+          className="group relative flex-1 h-2 rounded-full bg-white/10 overflow-hidden cursor-pointer hover:h-2.5 transition-all"
+          title="Click timeline to seek"
+        >
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-violet-500 transition-none"
-            style={{ width: `${progress * 100}%` }}
+            className="absolute inset-y-0 left-0 rounded-full bg-violet-500 transition-none group-hover:bg-violet-400"
+            style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
           />
         </div>
         <span className="w-10 shrink-0 text-[11px] tabular-nums text-navy-500">
@@ -158,20 +184,30 @@ function PlaybackControls({
       </div>
       <div className="flex items-center justify-center gap-3">
         <button
-          type="button" onClick={onRestart}
-          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-navy-300 hover:bg-white/10 hover:text-white transition"
-          aria-label="Restart preview"
+          type="button"
+          onClick={onReset}
+          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-navy-300 hover:bg-white/10 hover:text-white transition"
+          title="Reset to beginning (paused)"
         >
-          <RotateCcw className="h-4 w-4" /> Restart
+          <RotateCcw className="h-4 w-4" /> Reset
         </button>
         <button
-          type="button" onClick={isPlaying ? onPause : onPlay}
+          type="button"
+          onClick={isPlaying ? onPause : onPlay}
           className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-500 transition"
           aria-label={isPlaying ? "Pause" : "Play"}
         >
           {isPlaying
             ? <><Pause className="h-4 w-4" /> Pause</>
             : <><Play  className="h-4 w-4" /> Play</>}
+        </button>
+        <button
+          type="button"
+          onClick={onRestart}
+          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-navy-300 hover:bg-white/10 hover:text-white transition"
+          title="Replay from start"
+        >
+          <RotateCcw className="h-4 w-4" /> Replay
         </button>
       </div>
     </div>
@@ -328,10 +364,9 @@ export default function VideoGeneratorPage() {
 
   function handlePlay()    { previewRef.current?.play(); }
   function handlePause()   { previewRef.current?.pause(); }
-  function handleRestart() {
-    previewRef.current?.pause();
-    setTimeout(() => { previewRef.current?.play(); }, 50);
-  }
+  function handleRestart() { previewRef.current?.restart(); }
+  function handleReset()   { previewRef.current?.reset(); }
+  function handleSeek(ms: number) { previewRef.current?.seek(ms); }
 
   function handleExport() {
     if (isExporting) return;
@@ -403,7 +438,7 @@ export default function VideoGeneratorPage() {
         </div>
 
         {/* Layout */}
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_420px]">
+        <div className={`mt-8 grid gap-8 ${isWidescreen ? "lg:grid-cols-[1fr_580px]" : "lg:grid-cols-[1fr_420px]"}`}>
 
           {/* ── Left: editor ── */}
           <div className="flex flex-col gap-4">
@@ -522,6 +557,8 @@ export default function VideoGeneratorPage() {
                   onPlay={handlePlay}
                   onPause={handlePause}
                   onRestart={handleRestart}
+                  onReset={handleReset}
+                  onSeek={handleSeek}
                 />
               </div>
 

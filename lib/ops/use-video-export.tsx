@@ -60,18 +60,18 @@ export interface UseVideoExportReturn {
 
 export function getExportDimensions(aspectRatio: VideoAspectRatio = "9:16") {
   if (aspectRatio === "16:9") {
-    const renderW = 676;
-    const renderH = 380;
+    const renderH = 676;
+    const renderW = Math.round(renderH * (16 / 9)); // 1202
     const outW = 1920;
     const outH = 1080;
-    const captureScale = outW / renderW;
+    const captureScale = outW / renderW; // 1920 / 1202 ≈ 1.5973
     return { renderW, renderH, outW, outH, captureScale };
   }
   const renderW = 380;
   const renderH = 676;
   const outW = 1080;
   const outH = 1920;
-  const captureScale = outW / renderW;
+  const captureScale = outW / renderW; // 1080 / 380 ≈ 2.842
   return { renderW, renderH, outW, outH, captureScale };
 }
 

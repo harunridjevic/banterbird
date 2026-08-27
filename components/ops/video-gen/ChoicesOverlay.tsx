@@ -35,8 +35,8 @@ const SLOT = {
 function isWinner(phase: ChoicePhase, slot: "A" | "B") { return phase === `winner-${slot.toLowerCase()}`; }
 function isPulse (phase: ChoicePhase, slot: "A" | "B") { return phase === `pulse-${slot.toLowerCase()}`; }
 
-function ChoiceButton({ choice, phase, instant, slow, index }: {
-  choice: Choice; phase: ChoicePhase; instant: boolean; slow: number; index: number;
+function ChoiceButton({ choice, phase, instant, slow, index, isWidescreen }: {
+  choice: Choice; phase: ChoicePhase; instant: boolean; slow: number; index: number; isWidescreen?: boolean;
 }) {
   const slot  = choice.slot;
   const c     = SLOT[slot];
@@ -57,10 +57,12 @@ function ChoiceButton({ choice, phase, instant, slow, index }: {
         ? sp(200, 18)
         : { ...sp(220, 20), delay: index * 0.1 * slow }
       }
-      className="relative overflow-hidden rounded-2xl px-5 py-4"
+      className={`relative overflow-hidden ${
+        isWidescreen ? "rounded-xl px-3 py-2" : "rounded-2xl px-5 py-4"
+      }`}
       style={{
         background: c.idle.bg,
-        border: `2px solid ${c.idle.border}`,
+        border: `${isWidescreen ? "1.5px" : "2px"} solid ${c.idle.border}`,
         boxShadow: "0 4px 20px rgba(0,0,0,0.45)",
       }}
     >
@@ -73,10 +75,10 @@ function ChoiceButton({ choice, phase, instant, slow, index }: {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={instant ? { duration: 0 } : { type: "tween", duration: 0.4 * slow, ease: "easeOut" }}
-            className="pointer-events-none absolute inset-0 rounded-2xl"
+            className={`pointer-events-none absolute inset-0 ${isWidescreen ? "rounded-xl" : "rounded-2xl"}`}
             style={{
               background: `linear-gradient(135deg, ${c.winner.bg} 0%, ${c.idle.bg} 100%)`,
-              border: `2px solid ${c.winner.border}`,
+              border: `${isWidescreen ? "1.5px" : "2px"} solid ${c.winner.border}`,
               boxShadow: c.winner.shadow,
             }}
           />
@@ -92,8 +94,8 @@ function ChoiceButton({ choice, phase, instant, slow, index }: {
             animate={{ opacity: [0, 1, 0] }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8 * slow, ease: "easeInOut" }}
-            className="pointer-events-none absolute inset-0 rounded-2xl"
-            style={{ boxShadow: `0 0 30px 8px ${c.idle.glow}`, border: `2px solid ${c.idle.border}` }}
+            className={`pointer-events-none absolute inset-0 ${isWidescreen ? "rounded-xl" : "rounded-2xl"}`}
+            style={{ boxShadow: `0 0 30px 8px ${c.idle.glow}`, border: `${isWidescreen ? "1.5px" : "2px"} solid ${c.idle.border}` }}
           />
         )}
       </AnimatePresence>
@@ -103,7 +105,7 @@ function ChoiceButton({ choice, phase, instant, slow, index }: {
         {pulse && !instant && (
           <motion.div
             key="shimmer"
-            className="pointer-events-none absolute inset-0 rounded-2xl"
+            className={`pointer-events-none absolute inset-0 ${isWidescreen ? "rounded-xl" : "rounded-2xl"}`}
             initial={{ x: "-110%" }}
             animate={{ x: "160%" }}
             exit={{ opacity: 0 }}
@@ -115,22 +117,28 @@ function ChoiceButton({ choice, phase, instant, slow, index }: {
 
       {/* Content */}
       <div className="relative z-10">
-        <div className="mb-2 flex items-center gap-2">
+        <div className={`flex items-center ${isWidescreen ? "mb-1 gap-1.5" : "mb-2 gap-2"}`}>
           <motion.span
-            className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black"
+            className={`flex items-center justify-center rounded-full font-black ${
+              isWidescreen ? "h-4 w-4 text-[8.5px]" : "h-5 w-5 text-[10px]"
+            }`}
             style={{ background: win ? c.winner.border : c.idle.border, color: "#0c121c" }}
             animate={win && !instant ? { scale: [1, 1.25, 1] } : {}}
             transition={{ duration: 0.5 * slow, repeat: Infinity, repeatDelay: 0.8 * slow }}
           >
             {slot}
           </motion.span>
-          <span className="text-[11px] font-black uppercase tracking-[0.18em]"
-            style={{ color: win ? c.winner.label : c.idle.label }}>
+          <span
+            className={`${isWidescreen ? "text-[9.5px]" : "text-[11px]"} font-black uppercase tracking-[0.18em]`}
+            style={{ color: win ? c.winner.label : c.idle.label }}
+          >
             Option {slot}
           </span>
         </div>
-        <p className="text-[17px] font-bold leading-snug"
-          style={{ color: win ? c.winner.text : "#d1d9e6" }}>
+        <p
+          className={`${isWidescreen ? "text-[12px]" : "text-[17px]"} font-bold leading-snug`}
+          style={{ color: win ? c.winner.text : "#d1d9e6" }}
+        >
           {choice.label}
         </p>
       </div>
@@ -148,15 +156,23 @@ function ChoiceButton({ choice, phase, instant, slow, index }: {
               stiffness: Math.max(80, 450 / slow),
               damping: Math.max(8, 18 / slow),
             }}
-            className="absolute right-4 top-1/2 z-10 -translate-y-1/2"
+            className={`absolute ${isWidescreen ? "right-2.5" : "right-4"} top-1/2 z-10 -translate-y-1/2`}
           >
             <motion.div
-              className="flex h-10 w-10 items-center justify-center rounded-full"
+              className={`flex items-center justify-center rounded-full ${
+                isWidescreen ? "h-7 w-7" : "h-10 w-10"
+              }`}
               style={{ background: c.winner.border }}
               animate={instant ? {} : { scale: [1, 1.12, 1] }}
               transition={{ duration: 1.2 * slow, repeat: Infinity, ease: "easeInOut" }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <svg
+                width={isWidescreen ? "14" : "20"}
+                height={isWidescreen ? "14" : "20"}
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden
+              >
                 <path d="M5 12L10 17L19 7" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </motion.div>
@@ -187,28 +203,28 @@ export function ChoicesOverlay({
         ? { type: "tween", duration: 0.35 * s, ease: "easeIn" }
         : sp(160, 24)
       )}
-      className="absolute z-20 px-4 pb-4 pt-3"
+      className={`absolute z-20 ${isWidescreen ? "px-2.5 pb-2.5 pt-2" : "px-4 pb-4 pt-3"}`}
       style={{
-        left: isWidescreen ? "50%" : "8%",
-        right: isWidescreen ? undefined : "8%",
-        transform: isWidescreen ? "translateX(-50%)" : undefined,
-        width: isWidescreen ? "min(350px, calc(100% * 9 / 16 * 0.94))" : undefined,
-        bottom: isWidescreen ? "3%" : "22%",
+        left: isWidescreen ? "0" : "8%",
+        right: isWidescreen ? "0" : "8%",
+        bottom: isWidescreen ? "0" : "22%",
         /* Solid base so nothing behind bleeds through */
         background: "#0a1020",
-        borderRadius: isWidescreen ? "16px" : undefined,
+        borderRadius: isWidescreen ? "0 0 20px 20px" : undefined,
         borderTop: "1px solid rgba(255,255,255,0.08)",
         boxShadow: "0 -24px 48px 16px #0a1020",
       }}
     >
       {/* Header */}
       <motion.div
-        className="mb-4 text-center"
+        className={`${isWidescreen ? "mb-2" : "mb-4"} text-center`}
         animate={instantTransitions ? {} : { y: [0, -3, 0] }}
         transition={{ duration: 2 * s, repeat: Infinity, ease: "easeInOut" }}
       >
         <span
-          className="rounded-full px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.22em]"
+          className={`rounded-full font-black uppercase tracking-[0.22em] ${
+            isWidescreen ? "px-2.5 py-0.5 text-[9px]" : "px-4 py-1.5 text-[11px]"
+          }`}
           style={{ color: "#c4b5fd", background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.35)" }}
         >
           ✨ What would you do?
@@ -216,20 +232,28 @@ export function ChoicesOverlay({
       </motion.div>
 
       {/* Buttons */}
-      <div className="flex flex-col gap-3">
+      <div className={`flex flex-col ${isWidescreen ? "gap-2" : "gap-3"}`}>
         {choices.map((choice, i) => (
-          <ChoiceButton key={choice.id} choice={choice} phase={phase} instant={instantTransitions} slow={s} index={i} />
+          <ChoiceButton
+            key={choice.id}
+            choice={choice}
+            phase={phase}
+            instant={instantTransitions}
+            slow={s}
+            index={i}
+            isWidescreen={isWidescreen}
+          />
         ))}
       </div>
 
       {/* VS divider */}
       <motion.div
-        className="mt-3 flex items-center justify-center gap-3"
+        className={`flex items-center justify-center ${isWidescreen ? "mt-1.5 gap-2" : "mt-3 gap-3"}`}
         animate={instantTransitions ? {} : { opacity: [0.5, 1, 0.5] }}
         transition={{ duration: 2.2 * s, repeat: Infinity }}
       >
         <div className="h-px flex-1" style={{ background: "linear-gradient(to right, transparent, rgba(167,139,250,0.35))" }} />
-        <span className="text-[13px] font-black" style={{ color: "#8a9bbf" }}>VS</span>
+        <span className={`${isWidescreen ? "text-[10px]" : "text-[13px]"} font-black`} style={{ color: "#8a9bbf" }}>VS</span>
         <div className="h-px flex-1" style={{ background: "linear-gradient(to left, transparent, rgba(45,212,191,0.35))" }} />
       </motion.div>
     </motion.div>
