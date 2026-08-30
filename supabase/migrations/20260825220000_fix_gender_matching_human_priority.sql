@@ -1,7 +1,7 @@
 -- Fix gender matchmaking: prioritize real humans and eliminate AI room zombie lock.
 --
--- 1. try_match must NEVER return an AI room when matching for humans.
---    If an open AI room exists from a previous session, end it and proceed to search match_queue.
+-- 1. try_match must NEVER return a stale AI room when matching for humans.
+--    Fresh AI rooms (created within 45s) are preserved during client navigation.
 -- 2. When a matching human is found in match_queue, atomically pair them and create a human room.
 -- 3. try_match_ai_practice first checks for active human rooms or calls try_match to pair
 --    with waiting humans before creating a bot room.
@@ -27,6 +27,7 @@ declare
   existing_peer_gender text;
   existing_self_gender text;
   existing_is_ai boolean;
+  existing_created_at timestamptz;
   my_gender text := lower(trim(p_self_gender));
   wanted_gender text := lower(trim(p_wants_gender));
 begin
@@ -52,8 +53,9 @@ begin
     case when r.user_a = me then r.user_b else r.user_a end,
     case when r.user_a = me then r.user_b_gender else r.user_a_gender end,
     case when r.user_a = me then r.user_a_gender else r.user_b_gender end,
-    coalesce(r.is_ai_room, false)
-  into existing_id, existing_peer_id, existing_peer_gender, existing_self_gender, existing_is_ai
+    coalesce(r.is_ai_room, false),
+    r.created_at
+  into existing_id, existing_peer_id, existing_peer_gender, existing_self_gender, existing_is_ai, existing_created_at
   from public.rooms r
   where
     (r.user_a = me or r.user_b = me)
@@ -62,8 +64,17 @@ begin
   limit 1;
 
   if existing_id is not null then
-    -- If it's an AI room or has no peer, this is a human match request: end the room and proceed to search match_queue.
-    if existing_is_ai or existing_peer_id is null then
+    -- Fresh AI room: return it (client is navigating or in chat). Older AI rooms (> 45s): end for rematch.
+    if existing_is_ai then
+      if existing_created_at > timezone('utc', now()) - interval '45 seconds' then
+        return existing_id;
+      end if;
+      update public.rooms
+      set ended_at = timezone('utc', now())
+      where id = existing_id
+        and ended_at is null;
+      existing_id := null;
+    elsif existing_peer_id is null then
       update public.rooms
       set ended_at = timezone('utc', now())
       where id = existing_id
@@ -167,6 +178,8 @@ declare
   me uuid := auth.uid();
   rid uuid;
   existing_peer_id uuid;
+  existing_is_ai boolean;
+  existing_created_at timestamptz;
   human_rid uuid;
   my_gender text := lower(trim(p_self_gender));
   wanted_gender text := lower(trim(p_wants_gender));
@@ -210,22 +223,43 @@ begin
     end if;
   end if;
 
-  -- 2. Try to match with any available human waiting in the queue
+  -- 2. If we already have a fresh AI room, keep it (client is navigating / chatting)
+  select
+    r.id,
+    coalesce(r.is_ai_room, false),
+    r.created_at
+  into rid, existing_is_ai, existing_created_at
+  from public.rooms r
+  where
+    (r.user_a = me or r.user_b = me)
+    and r.ended_at is null
+    and (coalesce(r.is_ai_room, false) = true or r.user_b is null)
+  order by r.created_at desc
+  limit 1;
+
+  if rid is not null and existing_is_ai and existing_created_at > timezone('utc', now()) - interval '45 seconds' then
+    return rid;
+  end if;
+
+  -- 3. Only end stale AI / incomplete rooms (> 45s)
+  update public.rooms
+  set ended_at = timezone('utc', now())
+  where (user_a = me or user_b = me)
+    and ended_at is null
+    and (coalesce(is_ai_room, false) = true or user_b is null)
+    and created_at <= timezone('utc', now()) - interval '45 seconds';
+
+  -- 4. Try to match with any available human waiting in the queue
   human_rid := public.try_match(my_gender, wanted_gender, coalesce(p_blocked_user_ids, '{}'));
   if human_rid is not null then
     return human_rid;
   end if;
 
-  -- 3. No human available: clean up queue and any old rooms
+  -- 5. No human available: clean up queue
   delete from public.match_queue
   where user_id = me;
 
-  update public.rooms
-  set ended_at = timezone('utc', now())
-  where (user_a = me or user_b = me)
-    and ended_at is null;
-
-  -- 4. Select bot gender
+  -- 6. Select bot gender
   if wanted_gender = 'any' then
     bot_g := case when random() < 0.5 then 'male' else 'female' end;
   elsif wanted_gender = 'male' then
@@ -234,7 +268,7 @@ begin
     bot_g := 'female';
   end if;
 
-  -- 5. Create new AI room
+  -- 7. Create new AI room
   insert into public.rooms (
     user_a,
     user_b,

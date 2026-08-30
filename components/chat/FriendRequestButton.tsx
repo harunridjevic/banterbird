@@ -40,10 +40,13 @@ export function FriendRequestButton({
   const handleClick = async () => {
     if (isSent || status === "loading") return;
 
+    // Anonymous — show nudge for any friend request attempt
+    if (isAnonymous) {
+      setShowNudge(true);
+      return;
+    }
+
     if (isAiRoom) {
-      // Anonymous users see the sign-in nudge, but we still write system messages
-      // so the chat reflects what happened (same as a named user's experience).
-      if (isAnonymous) setShowNudge(true);
       setStatus("sent");
       // Always dispatch events — ChatRoom injects them into local message state.
       // hideBotUi only hides the "Bot" label; it shouldn't suppress friend-request messages.
@@ -64,12 +67,6 @@ export function FriendRequestButton({
           detail: { excuse },
         }));
       }, delay);
-      return;
-    }
-
-    // Anonymous — show nudge for real friend requests
-    if (isAnonymous) {
-      setShowNudge(true);
       return;
     }
 
