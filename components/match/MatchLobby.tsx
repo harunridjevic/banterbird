@@ -823,6 +823,33 @@ export function MatchLobby() {
         )}
       </motion.div>
 
+      {/* Subtle "Featured on" badge: faded by default, full opacity on hover/focus.
+          Scales from 128px (phones) up to 192px (desktop) while keeping the 256x80 ratio. */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.4, duration: 0.5 }}
+        className="flex w-full justify-center"
+      >
+        <a
+          href="https://launchbuff.com/products/banterbird-ernpww"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Featured on LaunchBuff"
+          className="block rounded-lg opacity-60 transition-opacity duration-200 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-400"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://launchbuff.com/badge-featured-dark.svg"
+            alt="Featured on LaunchBuff"
+            width={256}
+            height={80}
+            loading="lazy"
+            className="h-auto w-32 sm:w-40 md:w-48"
+          />
+        </a>
+      </motion.div>
+
       <UpgradeModal open={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
     </div>
   );
